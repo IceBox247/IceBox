@@ -35,6 +35,6 @@ userRouter.get('/me', async (req, res) => {
       minWithdrawal: config.minWithdrawal,
       botUsername: config.botUsername,
     },
-    referralLink: `https://t.me/${config.botUsername}/wallet?startapp=ref_${user.referralCode}`,
+    referralLink: `https://t.me/${config.botUsername}?startapp=ref_${user.referralCode}`,
   });
 });

@@ -76,7 +76,7 @@ referralsRouter.get('/', async (req, res) => {
   });
 
   res.json({
-    referralLink: `https://t.me/${config.botUsername}/wallet?startapp=ref_${user.referralCode}`,
+    referralLink: `https://t.me/${config.botUsername}?startapp=ref_${user.referralCode}`,
     referralCode: user.referralCode,
     perInvite: config.referralReward,
     stats: {
