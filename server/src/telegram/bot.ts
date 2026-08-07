@@ -21,7 +21,8 @@ export function createBot(): Bot | null {
     const keyboard = new InlineKeyboard()
       .webApp('❄️ Open IceBox Wallet', url)
       .row()
-      .url('📣 Join Channel', 'https://t.me/telegram');
+      .url('📣 Join Channel', 'https://t.me/iceboxAi')
+      .url('💸 Payouts', 'https://t.me/IceBoxPayout');
 
     await ctx.reply(
       [
