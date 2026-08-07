@@ -5,6 +5,7 @@ import { openLink, haptic } from '../telegram';
 import { useStore } from '../store';
 import { useToast } from './Toast';
 import { usdt } from '../lib/format';
+import { ApiError } from '../api';
 
 const iconFor = { telegram: SendIcon, globe: GlobeIcon, play: PlayIcon } as const;
 const iconTint = {
@@ -49,14 +50,22 @@ export function TaskItem({ task }: { task: Task }) {
 
   async function claim() {
     setPhase('claiming');
-    const res = await claimTask(task.id);
-    if (res) {
+    try {
+      const res = await claimTask(task.id);
       haptic('success');
       toast.show(`+${usdt(res.reward)} USD earned!`, 'success');
       setPhase('idle');
-    } else {
+    } catch (e) {
       haptic('error');
-      toast.show('Could not verify. Try again.', 'error');
+      const msg =
+        e instanceof ApiError
+          ? e.code === 'already_completed'
+            ? 'Already claimed ✅'
+            : e.code === 'task_not_found'
+              ? 'Task unavailable'
+              : `Claim failed: ${e.message}`
+          : 'Could not verify. Try again.';
+      toast.show(msg, 'error');
       setPhase('claimable');
     }
   }

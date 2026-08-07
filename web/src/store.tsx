@@ -18,7 +18,7 @@ interface Store {
   refreshAll: () => Promise<void>;
   refreshMe: () => Promise<void>;
   refreshTasks: () => Promise<void>;
-  claimTask: (id: number) => Promise<{ reward: number; completed: boolean } | null>;
+  claimTask: (id: number) => Promise<{ reward: number; completed: boolean }>;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -54,38 +54,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshMe, refreshTasks]);
 
-  const claimTask = useCallback(
-    async (id: number) => {
-      try {
-        const res = await api.claimTask(id);
-        // Optimistically update local state from the authoritative response.
-        setTasks((prev) =>
-          prev.map((t) =>
-            t.id === id ? { ...t, count: res.count, completed: res.completed } : t,
-          ),
-        );
-        setMe((prev) =>
-          prev
-            ? {
-                ...prev,
-                user: { ...prev.user, balance: res.balance, totalEarned: res.totalEarned },
-                overview: {
-                  ...prev.overview,
-                  balance: res.balance,
-                  available: res.balance,
-                  totalEarned: res.totalEarned,
-                  tasksDone: prev.overview.tasksDone + (res.completed ? 1 : 0),
-                },
-              }
-            : prev,
-        );
-        return { reward: res.reward, completed: res.completed };
-      } catch {
-        return null;
-      }
-    },
-    [],
-  );
+  const claimTask = useCallback(async (id: number) => {
+    // Throws ApiError on failure so the caller can surface the real reason.
+    const res = await api.claimTask(id);
+    // Update local state from the authoritative response.
+    setTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, count: res.count, completed: res.completed } : t)),
+    );
+    setMe((prev) =>
+      prev
+        ? {
+            ...prev,
+            user: { ...prev.user, balance: res.balance, totalEarned: res.totalEarned },
+            overview: {
+              ...prev.overview,
+              balance: res.balance,
+              available: res.balance,
+              totalEarned: res.totalEarned,
+              tasksDone: prev.overview.tasksDone + (res.completed ? 1 : 0),
+            },
+          }
+        : prev,
+    );
+    return { reward: res.reward, completed: res.completed };
+  }, []);
 
   useEffect(() => {
     (async () => {

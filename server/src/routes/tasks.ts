@@ -110,6 +110,9 @@ tasksRouter.post('/:id/claim', async (req, res) => {
     res.json({ ok: true, ...result });
   } catch (err) {
     console.error('claim error', err);
-    res.status(500).json({ error: 'claim_failed' });
+    res.status(500).json({
+      error: 'claim_failed',
+      message: err instanceof Error ? err.message : 'Unknown error',
+    });
   }
 });

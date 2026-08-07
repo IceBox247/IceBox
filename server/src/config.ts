@@ -11,15 +11,31 @@ dotenv.config();
 // works whether you set DATABASE_URL/DIRECT_URL by hand OR use Vercel's
 // built-in Postgres/Neon storage (which injects POSTGRES_*/DATABASE_URL_*).
 {
-  const pooled =
-    process.env.DATABASE_URL ||
-    process.env.POSTGRES_PRISMA_URL ||
-    process.env.POSTGRES_URL;
+  const rawDatabaseUrl = process.env.DATABASE_URL;
+
+  // On a pooled (PgBouncer/Neon pooler) connection, Prisma must disable
+  // prepared statements or transactions/writes fail intermittently. Ensure
+  // pgbouncer=true is present on the pooled runtime URL.
+  const ensurePgBouncer = (url?: string): string | undefined => {
+    if (!url) return url;
+    const isPooled = /-pooler\.|pgbouncer/.test(url);
+    if (isPooled && !/[?&]pgbouncer=true/.test(url)) {
+      url += (url.includes('?') ? '&' : '?') + 'pgbouncer=true';
+    }
+    return url;
+  };
+
+  const pooled = ensurePgBouncer(
+    process.env.POSTGRES_PRISMA_URL || rawDatabaseUrl || process.env.POSTGRES_URL,
+  );
+  // Direct (non-pooled) connection for migrations; never the pgbouncer URL.
   const direct =
     process.env.DIRECT_URL ||
     process.env.DATABASE_URL_UNPOOLED ||
     process.env.POSTGRES_URL_NON_POOLING ||
+    rawDatabaseUrl ||
     pooled;
+
   if (pooled) process.env.DATABASE_URL = pooled;
   if (direct) process.env.DIRECT_URL = direct;
 }
