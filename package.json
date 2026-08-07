@@ -14,7 +14,7 @@
     "build": "npm run build --workspace=server && npm run build --workspace=web",
     "build:server": "npm run build --workspace=server",
     "build:web": "npm run build --workspace=web",
-    "vercel-build": "npm run build --workspace=web",
+    "vercel-build": "npm run build --workspace=web && npm run deploy-db --workspace=server",
     "postinstall": "prisma generate --schema=server/prisma/schema.prisma",
     "start": "npm run start --workspace=server",
     "db:setup": "npm run db:setup --workspace=server",

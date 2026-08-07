@@ -10,6 +10,7 @@
     "db:push": "prisma db push",
     "db:setup": "prisma generate && prisma db push",
     "seed": "tsx src/services/seed.ts",
+    "deploy-db": "tsx src/scripts/deploydb.ts",
     "set-webhook": "tsx src/scripts/setWebhook.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },

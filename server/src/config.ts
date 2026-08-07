@@ -7,6 +7,23 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 dotenv.config();
 
+// Accept the database connection under any of the common names so the app
+// works whether you set DATABASE_URL/DIRECT_URL by hand OR use Vercel's
+// built-in Postgres/Neon storage (which injects POSTGRES_*/DATABASE_URL_*).
+{
+  const pooled =
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_PRISMA_URL ||
+    process.env.POSTGRES_URL;
+  const direct =
+    process.env.DIRECT_URL ||
+    process.env.DATABASE_URL_UNPOOLED ||
+    process.env.POSTGRES_URL_NON_POOLING ||
+    pooled;
+  if (pooled) process.env.DATABASE_URL = pooled;
+  if (direct) process.env.DIRECT_URL = direct;
+}
+
 function num(name: string, fallback: number): number {
   const v = process.env[name];
   const n = v == null ? NaN : Number(v);

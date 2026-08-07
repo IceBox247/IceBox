@@ -1,3 +1,6 @@
+// Importing config first ensures dotenv is loaded and the database env vars are
+// normalized (POSTGRES_* → DATABASE_URL/DIRECT_URL) before the client is built.
+import './config';
 import { PrismaClient } from '@prisma/client';
 
 // Single shared Prisma client. Re-used across hot reloads in dev.
