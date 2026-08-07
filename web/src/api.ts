@@ -1,0 +1,57 @@
+import { getInitData } from './telegram';
+import type {
+  MeResponse,
+  Task,
+  ClaimResult,
+  ReferralsResponse,
+  Withdrawal,
+} from './types';
+
+const BASE = import.meta.env.VITE_API_BASE || '';
+
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  data?: any;
+  constructor(status: number, message: string, data?: any) {
+    super(message);
+    this.status = status;
+    this.code = data?.error;
+    this.data = data;
+  }
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const initData = getInitData();
+  const res = await fetch(`${BASE}/api${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      // Telegram Mini App auth: signed initData validated server-side.
+      Authorization: `tma ${initData}`,
+      'X-Telegram-Init-Data': initData,
+      ...(options.headers || {}),
+    },
+  });
+
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!res.ok) {
+    throw new ApiError(res.status, data?.message || data?.error || res.statusText, data);
+  }
+  return data as T;
+}
+
+export const api = {
+  me: () => request<MeResponse>('/me'),
+  tasks: () => request<{ tasks: Task[] }>('/tasks'),
+  claimTask: (id: number) =>
+    request<ClaimResult>(`/tasks/${id}/claim`, { method: 'POST' }),
+  referrals: () => request<ReferralsResponse>('/referrals'),
+  withdrawals: () => request<{ withdrawals: Withdrawal[] }>('/withdrawals'),
+  withdraw: (amount: number, address: string, network: string) =>
+    request<{ ok: boolean; balance: number; withdrawal: Withdrawal }>('/withdrawals', {
+      method: 'POST',
+      body: JSON.stringify({ amount, address, network }),
+    }),
+};

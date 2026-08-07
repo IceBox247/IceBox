@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #05070d;
+  color: #f4f8ff;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+/* Hide scrollbars but keep scrolling */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Frosted hexagon backdrop pattern used behind headers */
+.hex-bg {
+  background-image: radial-gradient(circle at 50% 0%, rgba(51, 194, 255, 0.14), transparent 60%);
+}
+
+@layer components {
+  .card {
+    @apply rounded-3xl bg-night-700/80 border border-white/5 shadow-card backdrop-blur-sm;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl font-bold transition active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100;
+  }
+  .btn-primary {
+    @apply btn bg-gradient-to-b from-ice-300 to-ice-500 text-night-900 shadow-glow;
+  }
+  .btn-ghost {
+    @apply btn bg-white/5 text-white border border-white/10;
+  }
+}

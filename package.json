@@ -1,0 +1,25 @@
+{
+  "name": "icebox",
+  "version": "1.0.0",
+  "private": true,
+  "description": "IceBox — a Telegram Mini App wallet with USDT airdrop, tasks and referrals",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=server & npm run dev --workspace=web",
+    "dev:server": "npm run dev --workspace=server",
+    "dev:web": "npm run dev --workspace=web",
+    "build": "npm run build --workspace=server && npm run build --workspace=web",
+    "build:server": "npm run build --workspace=server",
+    "build:web": "npm run build --workspace=web",
+    "start": "npm run start --workspace=server",
+    "db:setup": "npm run db:setup --workspace=server",
+    "seed": "npm run seed --workspace=server"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

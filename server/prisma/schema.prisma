@@ -1,0 +1,99 @@
+// IceBox — Prisma schema (SQLite for easy local/dev; swap to Postgres for prod)
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            Int      @id @default(autoincrement())
+  telegramId    String   @unique
+  username      String?
+  firstName     String?
+  lastName      String?
+  photoUrl      String?
+
+  // Economy — stored in whole USDT with 2 decimal precision as Float.
+  balance       Float    @default(0) // withdrawable balance
+  totalEarned   Float    @default(0) // lifetime earned
+
+  // Referral graph
+  referralCode  String   @unique
+  referredById  Int?
+  referredBy    User?    @relation("Referrals", fields: [referredById], references: [id])
+  referrals     User[]   @relation("Referrals")
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  taskCompletions TaskCompletion[]
+  withdrawals     Withdrawal[]
+  ledger          LedgerEntry[]
+
+  @@index([referredById])
+}
+
+model Task {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique // stable identifier e.g. "join_channel"
+  title       String
+  subtitle    String
+  reward      Float
+  // action type drives the UI button + verification flow
+  actionType  String   // "join" | "visit" | "watch"
+  actionLabel String   // "Join" | "Visit" | "Watch"
+  url         String?  // channel/website/ad url
+  icon        String   // "telegram" | "globe" | "play"
+  waitSeconds Int      @default(0) // for "visit" tasks
+  maxCount    Int      @default(1) // repeatable tasks (e.g. watch ad 5x)
+  sortOrder   Int      @default(0)
+  active      Boolean  @default(true)
+
+  completions TaskCompletion[]
+}
+
+model TaskCompletion {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  taskId      Int
+  count       Int      @default(1)
+  rewarded    Float    @default(0)
+  completedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  task Task @relation(fields: [taskId], references: [id])
+
+  @@unique([userId, taskId])
+  @@index([userId])
+}
+
+model Withdrawal {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  amount      Float
+  address     String
+  network     String   @default("TON")
+  status      String   @default("pending") // pending | processing | paid | rejected
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+// Immutable audit trail of every balance change.
+model LedgerEntry {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  amount      Float    // positive = credit, negative = debit
+  reason      String   // "signup_bonus" | "task" | "referral" | "withdrawal"
+  meta        String?  // optional JSON string
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
