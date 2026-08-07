@@ -40,7 +40,7 @@ export function HistorySheet({ open, onClose }: { open: boolean; onClose: () => 
           {items.map((w) => (
             <div key={w.id} className="flex items-center justify-between rounded-2xl bg-white/5 p-4">
               <div>
-                <p className="font-bold">{usdt(w.amount)} USDT</p>
+                <p className="font-bold">{usdt(w.amount)} USD</p>
                 <p className="text-xs text-white/45">
                   {w.network} · {shortAddress(w.address)} · {timeAgo(w.createdAt)}
                 </p>

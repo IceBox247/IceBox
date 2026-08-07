@@ -28,10 +28,10 @@ export function createBot(): Bot | null {
       [
         '❄️ *Welcome to IceBox Wallet*',
         '',
-        'The first Telegram *no-fee* USDT wallet.',
+        'The first Telegram *no-fee* USD wallet.',
         '',
-        '• Complete tasks to earn USDT',
-        `• Invite friends — earn *${config.referralReward} USDT* per referral`,
+        '• Complete tasks to earn USD',
+        `• Invite friends — earn *${config.referralReward} USD* per referral`,
         '• Instant withdrawals to your wallet',
         '',
         'Tap below to open the app 👇',
@@ -42,7 +42,7 @@ export function createBot(): Bot | null {
 
   bot.command('invite', async (ctx) => {
     await ctx.reply(
-      `Share your link and earn ${config.referralReward} USDT per friend who joins!`,
+      `Share your link and earn ${config.referralReward} USD per friend who joins!`,
     );
   });
 

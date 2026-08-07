@@ -62,7 +62,7 @@ export function Referrals() {
         <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-ice-400/20 blur-2xl" />
         <p className="text-sm font-semibold uppercase tracking-wide text-white/50">Per Invite</p>
         <p className="mt-1 text-5xl font-extrabold">
-          {usdt(data.perInvite)} <span className="text-2xl text-ice-300">USDT</span>
+          {usdt(data.perInvite)} <span className="text-2xl text-ice-300">USD</span>
         </p>
       </div>
 
@@ -80,7 +80,7 @@ export function Referrals() {
           <button
             onClick={() => {
               haptic('light');
-              shareReferral(data.referralLink, '❄️ Join IceBox Wallet and earn USDT with me!');
+              shareReferral(data.referralLink, '❄️ Join IceBox Wallet and earn USD with me!');
             }}
             className="btn-primary py-3"
           >
@@ -112,7 +112,7 @@ export function Referrals() {
         </div>
 
         <div className="mb-3 flex items-center justify-center gap-2 rounded-2xl border border-ice-400/20 bg-ice-400/10 px-4 py-3 text-sm font-bold text-ice-200">
-          <TrophyIcon width={18} height={18} /> Top 100 referrers win USDT prizes
+          <TrophyIcon width={18} height={18} /> Top 100 referrers win USD prizes
         </div>
 
         <div className="space-y-2">
@@ -146,7 +146,7 @@ export function Referrals() {
               </div>
               <div className="text-right">
                 <p className="font-extrabold text-ice-300">{compact(row.prize)}</p>
-                <p className="text-[10px] font-semibold text-white/40">USDT</p>
+                <p className="text-[10px] font-semibold text-white/40">USD</p>
               </div>
             </div>
           ))}

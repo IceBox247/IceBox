@@ -18,7 +18,7 @@ export function MenuSheet({ open, onClose, onHistory }: Props) {
     {
       icon: RefreshIcon,
       title: 'Refresh balance',
-      subtitle: 'Sync your latest USDT balance',
+      subtitle: 'Sync your latest USD balance',
       onClick: async () => {
         haptic('light');
         await refreshAll();
@@ -40,7 +40,7 @@ export function MenuSheet({ open, onClose, onHistory }: Props) {
       title: 'Invite friends',
       subtitle: 'Share your referral link',
       onClick: () => {
-        if (me) shareReferral(me.referralLink, '❄️ Join IceBox Wallet and earn USDT with me!');
+        if (me) shareReferral(me.referralLink, '❄️ Join IceBox Wallet and earn USD with me!');
         onClose();
       },
     },

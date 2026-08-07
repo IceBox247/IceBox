@@ -80,7 +80,7 @@ model Withdrawal {
   userId      Int
   amount      Float
   address     String
-  network     String   @default("TON")
+  network     String   @default("BEP20")
   status      String   @default("pending") // pending | processing | paid | rejected
   createdAt   DateTime @default(now())
 

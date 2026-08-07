@@ -28,7 +28,7 @@ userRouter.get('/me', async (req, res) => {
       totalReferrals: referralCount,
       activeReferrals: activeReferralCount,
       tasksDone,
-      usdRate: 1, // USDT ≈ 1 USD
+      usdRate: 1, // USD ≈ 1 USD
     },
     config: {
       referralReward: config.referralReward,

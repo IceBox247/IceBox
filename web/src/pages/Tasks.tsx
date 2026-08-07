@@ -16,7 +16,7 @@ export function Tasks() {
             <br />
             Tasks
           </h1>
-          <p className="mt-1 text-white/50">Complete simple tasks and earn USDT</p>
+          <p className="mt-1 text-white/50">Complete simple tasks and earn USD</p>
         </div>
         <Mascot size={110} />
       </div>

@@ -34,7 +34,7 @@ withdrawalsRouter.post('/', async (req, res) => {
   const user = req.user!;
   const amount = money(Number(req.body?.amount));
   const address = String(req.body?.address ?? '').trim();
-  const network = String(req.body?.network ?? 'TON').trim() || 'TON';
+  const network = String(req.body?.network ?? 'BEP20').trim() || 'BEP20';
 
   if (!Number.isFinite(amount) || amount <= 0) {
     return res.status(400).json({ error: 'invalid_amount' });
@@ -43,7 +43,7 @@ withdrawalsRouter.post('/', async (req, res) => {
     return res.status(400).json({
       error: 'below_minimum',
       minWithdrawal: config.minWithdrawal,
-      message: `Minimum withdrawal is ${config.minWithdrawal.toFixed(2)} USDT.`,
+      message: `Minimum withdrawal is ${config.minWithdrawal.toFixed(2)} USD.`,
     });
   }
   if (!address || address.length < 8) {

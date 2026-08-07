@@ -18,7 +18,7 @@ export function WithdrawSheet({
   const { me, refreshMe } = useStore();
   const toast = useToast();
   const [address, setAddress] = useState('');
-  const [network, setNetwork] = useState('TON');
+  const [network, setNetwork] = useState('BEP20');
   const [amount, setAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -54,19 +54,19 @@ export function WithdrawSheet({
   }
 
   return (
-    <Sheet open={open} onClose={onClose} title={enough ? 'Withdraw USDT' : undefined}>
+    <Sheet open={open} onClose={onClose} title={enough ? 'Withdraw USD' : undefined}>
       {!enough ? (
         // "Not Enough Balance" gate — mirrors the reference app.
         <div className="py-4 text-center">
           <div className="mb-3 text-5xl">❄️</div>
           <p className="text-2xl font-extrabold">Not Enough Balance</p>
           <p className="mt-2 text-4xl font-extrabold text-ice-300">
-            {usdt(min)} <span className="text-2xl text-ice-400">USDT</span>
+            {usdt(min)} <span className="text-2xl text-ice-400">USD</span>
           </p>
           <p className="mx-auto mt-3 max-w-xs text-white/55">
-            Minimum withdrawal is <b className="text-white">{usdt(min)} USDT</b>. Keep earning — you
-            need <b className="text-ice-300">{usdt(needed)} USDT</b> more. Your balance:{' '}
-            <b className="text-white">{usdt(balance)} USDT</b>.
+            Minimum withdrawal is <b className="text-white">{usdt(min)} USD</b>. Keep earning — you
+            need <b className="text-ice-300">{usdt(needed)} USD</b> more. Your balance:{' '}
+            <b className="text-white">{usdt(balance)} USD</b>.
           </p>
           <button
             onClick={() => {
@@ -86,14 +86,14 @@ export function WithdrawSheet({
           <div className="rounded-2xl bg-white/5 p-4">
             <div className="flex items-center justify-between text-sm">
               <span className="text-white/50">Available</span>
-              <span className="font-bold">{usdt(balance)} USDT</span>
+              <span className="font-bold">{usdt(balance)} USD</span>
             </div>
           </div>
 
           <label className="block">
             <span className="mb-1 block text-sm text-white/50">Network</span>
             <div className="flex gap-2">
-              {['TON', 'TRC20', 'BEP20'].map((n) => (
+              {['BEP20'].map((n) => (
                 <button
                   key={n}
                   onClick={() => setNetwork(n)}
@@ -101,25 +101,25 @@ export function WithdrawSheet({
                     network === n ? 'bg-ice-400/20 text-ice-200 border border-ice-400/40' : 'bg-white/5 text-white/60'
                   }`}
                 >
-                  {n}
+                  BSC (BEP-20)
                 </button>
               ))}
             </div>
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-sm text-white/50">Wallet address</span>
+            <span className="mb-1 block text-sm text-white/50">BSC wallet address</span>
             <input
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              placeholder="Paste your USDT address"
+              placeholder="Paste your BSC (BEP-20) wallet address — 0x…"
               className="w-full rounded-xl border border-white/10 bg-night-700 px-4 py-3 text-white outline-none focus:border-ice-400"
             />
           </label>
 
           <label className="block">
             <span className="mb-1 block text-sm text-white/50">
-              Amount (min {usdt(min)} USDT)
+              Amount (min {usdt(min)} USD)
             </span>
             <input
               value={amount}

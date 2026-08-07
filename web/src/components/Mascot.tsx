@@ -1,5 +1,5 @@
 /**
- * Lightweight illustrated mascot: a cool penguin holding a USDT coin, on an
+ * Lightweight illustrated mascot: a cool penguin holding a USD coin, on an
  * icy pedestal. Pure SVG so there are no image assets to ship.
  */
 export function Mascot({ size = 150 }: { size?: number }) {
@@ -33,20 +33,20 @@ export function Mascot({ size = 150 }: { size?: number }) {
       <rect x="107" y="61" width="8" height="4" rx="2" fill="#33c2ff" opacity="0.8" />
       {/* beak */}
       <path d="M94 80 h12 l-6 8 z" fill="#ffb020" />
-      {/* USDT coin */}
+      {/* ICE USD coin */}
       <g transform="translate(128 108)">
-        <circle r="26" fill="#26a17b" />
-        <circle r="26" stroke="#1c7d5f" strokeWidth="2" />
+        <circle r="26" fill="#33c2ff" />
+        <circle r="26" stroke="#0a86d6" strokeWidth="2" />
         <text
           x="0"
-          y="8"
+          y="9"
           textAnchor="middle"
           fontSize="26"
           fontWeight="800"
-          fill="#fff"
+          fill="#eaf6ff"
           fontFamily="Inter, sans-serif"
         >
-          ₮
+          $
         </text>
       </g>
       {/* ice pedestal */}

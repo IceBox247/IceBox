@@ -24,7 +24,9 @@ export default {
           600: '#18202f',
           500: '#222c3d',
         },
-        usdt: '#26a17b',
+        // Generic "reward/positive" green (not Tether brand green).
+        coin: '#2eb872',
+        usdt: '#2eb872',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],

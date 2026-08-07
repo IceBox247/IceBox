@@ -7,7 +7,7 @@ import {
   WalletIcon,
   ReferralsIcon,
   TasksIcon,
-  UsdtCoin,
+  IceUsdCoin,
 } from '../components/icons';
 import { usdt } from '../lib/format';
 import type { Tab } from '../components/BottomNav';
@@ -24,10 +24,10 @@ export function Home({ onWithdraw, onHistory, onNavigate }: Props) {
   const { overview } = me;
 
   const stats = [
-    { icon: WalletIcon, label: 'Total Earned', value: `${usdt(overview.totalEarned)}`, unit: 'USDT', tint: 'text-ice-300 bg-ice-400/15' },
+    { icon: WalletIcon, label: 'Total Earned', value: `${usdt(overview.totalEarned)}`, unit: 'USD', tint: 'text-ice-300 bg-ice-400/15' },
     { icon: ReferralsIcon, label: 'Total Referrals', value: `${overview.totalReferrals}`, unit: '', tint: 'text-usdt bg-usdt/15' },
     { icon: TasksIcon, label: 'Tasks Done', value: `${overview.tasksDone}`, unit: '', tint: 'text-violet-300 bg-violet-400/15' },
-    { icon: WalletIcon, label: 'Available', value: `${usdt(overview.available)}`, unit: 'USDT', tint: 'text-sky-300 bg-sky-400/15' },
+    { icon: WalletIcon, label: 'Available', value: `${usdt(overview.available)}`, unit: 'USD', tint: 'text-sky-300 bg-sky-400/15' },
   ];
 
   return (
@@ -43,16 +43,16 @@ export function Home({ onWithdraw, onHistory, onNavigate }: Props) {
           <span className="text-sm font-medium">Total Balance</span>
         </div>
         <div className="mt-2 flex items-center gap-3">
-          <UsdtCoin size={46} />
+          <IceUsdCoin size={46} />
           <div>
             <div className="text-5xl font-extrabold leading-none tracking-tight">
               {usdt(overview.balance)}
             </div>
-            <div className="mt-1 text-sm font-bold tracking-widest text-white/40">USDT</div>
+            <div className="mt-1 text-sm font-bold tracking-widest text-white/40">USD</div>
           </div>
         </div>
         <div className="mt-3 inline-block rounded-full bg-ice-400/10 px-3 py-1 text-sm font-semibold text-ice-200">
-          ≈ ${usdt(overview.balance * overview.usdRate)} USD
+          ICE USD · BSC (BEP-20)
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-3">

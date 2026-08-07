@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Task } from '../types';
-import { SendIcon, GlobeIcon, PlayIcon, CheckIcon, UsdtCoin } from './icons';
+import { SendIcon, GlobeIcon, PlayIcon, CheckIcon, IceUsdCoin } from './icons';
 import { openLink, haptic } from '../telegram';
 import { useStore } from '../store';
 import { useToast } from './Toast';
@@ -52,7 +52,7 @@ export function TaskItem({ task }: { task: Task }) {
     const res = await claimTask(task.id);
     if (res) {
       haptic('success');
-      toast.show(`+${usdt(res.reward)} USDT earned!`, 'success');
+      toast.show(`+${usdt(res.reward)} USD earned!`, 'success');
       setPhase('idle');
     } else {
       haptic('error');
@@ -84,8 +84,8 @@ export function TaskItem({ task }: { task: Task }) {
 
       <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-3">
         <div className="flex items-center gap-2">
-          <UsdtCoin size={20} />
-          <span className="font-bold text-usdt">+{usdt(task.reward)} USDT</span>
+          <IceUsdCoin size={20} />
+          <span className="font-bold text-usdt">+{usdt(task.reward)} USD</span>
           {task.maxCount > 1 && (
             <span className="ml-1 text-xs text-white/40">
               {task.count}/{task.maxCount}

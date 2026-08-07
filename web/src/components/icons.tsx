@@ -140,13 +140,27 @@ export const ChevronRightIcon = (p: P) => (
   </svg>
 );
 
-/** Tether/USDT coin badge. */
-export const UsdtCoin = ({ size = 40 }: { size?: number }) => (
+/** ICE USD coin badge — IceBox's own ice-blue reward coin (not Tether). */
+export const IceUsdCoin = ({ size = 40 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
-    <circle cx="20" cy="20" r="20" fill="#26A17B" />
-    <path
-      d="M22.4 17.2v-2.5h5.7v-3.8H11.9v3.8h5.7v2.5c-4.6.2-8.1 1.1-8.1 2.2 0 1.1 3.5 2 8.1 2.2v8h4.8v-8c4.6-.2 8-1.1 8-2.2 0-1.1-3.4-2-8-2.2Zm0 3.6c-.1 0-.6.1-2.3.1-1.4 0-2.4 0-2.7-.1-4-.2-7-.9-7-1.7 0-.8 3-1.5 7-1.7v2.7c.3 0 1.3.1 2.7.1 1.6 0 2.2-.1 2.3-.1v-2.7c4 .2 7 .9 7 1.7 0 .8-3 1.5-7 1.7Z"
-      fill="#fff"
-    />
+    <defs>
+      <linearGradient id="iceCoin" x1="0" y1="0" x2="40" y2="40">
+        <stop stopColor="#5fd6ff" />
+        <stop offset="1" stopColor="#0a86d6" />
+      </linearGradient>
+    </defs>
+    <circle cx="20" cy="20" r="20" fill="url(#iceCoin)" />
+    <circle cx="20" cy="20" r="16" fill="#0a1628" opacity="0.25" />
+    <text
+      x="20"
+      y="27"
+      textAnchor="middle"
+      fontSize="20"
+      fontWeight="800"
+      fill="#eaf6ff"
+      fontFamily="Inter, sans-serif"
+    >
+      $
+    </text>
   </svg>
 );
