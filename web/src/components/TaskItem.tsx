@@ -68,7 +68,7 @@ export function TaskItem({ task }: { task: Task }) {
                 : e.code === 'task_not_found'
                   ? 'Task unavailable'
                   : `Claim failed: ${e.message}`
-          : 'Could not verify. Try again.';
+          : `Claim error [v6]: ${e instanceof Error ? e.message : 'unknown'}`;
       toast.show(msg, 'error');
       setPhase('claimable');
     }

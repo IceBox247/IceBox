@@ -35,7 +35,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
 
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  let data: any = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    // Non-JSON response (Vercel error page, timeout, HTML). Surface it clearly
+    // instead of throwing an opaque SyntaxError.
+    const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 60);
+    throw new ApiError(res.status, `HTTP ${res.status} — ${snippet || 'no body'}`, {
+      error: 'non_json',
+    });
+  }
   if (!res.ok) {
     throw new ApiError(res.status, data?.message || data?.error || res.statusText, data);
   }
