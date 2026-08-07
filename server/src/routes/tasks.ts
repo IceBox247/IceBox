@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { prisma, money } from '../db';
+import { checkMembership } from '../telegram/verify';
 
 export const tasksRouter = Router();
 
@@ -57,6 +58,24 @@ tasksRouter.post('/:id/claim', async (req, res) => {
 
   const task = await prisma.task.findFirst({ where: { id: taskId, active: true } });
   if (!task) return res.status(404).json({ error: 'task_not_found' });
+
+  // For channel-join tasks, confirm the user actually joined via the bot.
+  if (task.chatId) {
+    const membership = await checkMembership(task.chatId, user.telegramId);
+    if (membership === 'not_member') {
+      return res.status(403).json({
+        error: 'not_joined',
+        message: 'Join the channel first, then tap Claim.',
+      });
+    }
+    if (membership === 'error') {
+      // Bot likely isn't an admin of the channel yet, or the chat is wrong.
+      return res.status(503).json({
+        error: 'verify_unavailable',
+        message: 'Could not verify membership yet. Please try again shortly.',
+      });
+    }
+  }
 
   try {
     const result = await prisma.$transaction(async (tx) => {

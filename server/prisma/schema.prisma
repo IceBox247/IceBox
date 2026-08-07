@@ -51,6 +51,10 @@ model Task {
   actionType  String   // "join" | "visit" | "watch"
   actionLabel String   // "Join" | "Visit" | "Watch"
   url         String?  // channel/website/ad url
+  // Telegram chat to verify membership for "join" tasks, e.g. "@iceboxAi".
+  // When set, the reward is only credited if the bot confirms the user joined.
+  // Requires the bot to be an admin of that channel.
+  chatId      String?
   icon        String   // "telegram" | "globe" | "play"
   waitSeconds Int      @default(0) // for "visit" tasks
   maxCount    Int      @default(1) // repeatable tasks (e.g. watch ad 5x)

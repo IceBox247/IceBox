@@ -59,11 +59,15 @@ export function TaskItem({ task }: { task: Task }) {
       haptic('error');
       const msg =
         e instanceof ApiError
-          ? e.code === 'already_completed'
-            ? 'Already claimed ✅'
-            : e.code === 'task_not_found'
-              ? 'Task unavailable'
-              : `Claim failed: ${e.message}`
+          ? e.code === 'not_joined'
+            ? 'Join the channel first, then tap Claim.'
+            : e.code === 'verify_unavailable'
+              ? 'Verifying… please try again in a moment.'
+              : e.code === 'already_completed'
+                ? 'Already claimed ✅'
+                : e.code === 'task_not_found'
+                  ? 'Task unavailable'
+                  : `Claim failed: ${e.message}`
           : 'Could not verify. Try again.';
       toast.show(msg, 'error');
       setPhase('claimable');
