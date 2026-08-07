@@ -3,6 +3,7 @@ import { RefreshIcon, ClockIcon, ShareIcon } from '../components/icons';
 import { haptic, shareReferral } from '../telegram';
 import { useStore } from '../store';
 import { useToast } from '../components/Toast';
+import { APP_VERSION } from '../brand';
 
 interface Props {
   open: boolean;
@@ -68,6 +69,7 @@ export function MenuSheet({ open, onClose, onHistory }: Props) {
       <button onClick={onClose} className="btn-ghost mt-4 w-full py-4">
         Close
       </button>
+      <p className="mt-3 text-center text-xs text-white/30">IceBox {APP_VERSION}</p>
     </Sheet>
   );
 }
