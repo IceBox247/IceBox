@@ -4,12 +4,15 @@
   "outputDirectory": "web/dist",
   "framework": null,
   "functions": {
-    "api/[...path].ts": {
+    "api/index.ts": {
       "memory": 512,
       "maxDuration": 15
     }
   },
-  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }],
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/",

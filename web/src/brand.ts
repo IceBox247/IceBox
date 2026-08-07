@@ -8,4 +8,4 @@ export const TOKEN = {
 };
 
 // Bump this every deploy so we can confirm which build is actually live.
-export const APP_VERSION = 'v7 · diag';
+export const APP_VERSION = 'v8 · routing';

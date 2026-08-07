@@ -5,10 +5,10 @@ import { createApp } from '../server/src/app';
 const app = createApp();
 
 /**
- * Vercel routes every `/api/*` request to this catch-all function. Vercel's
- * Node runtime passes the original URL (e.g. `/api/me`) as `req.url`, which the
- * Express app already routes on. We defensively re-add the `/api` prefix in the
- * unlikely event the platform strips it.
+ * All `/api/*` requests are rewritten to this function by vercel.json. Vercel
+ * preserves the original URL (e.g. `/api/tasks/1/claim`) as `req.url`, which the
+ * Express app routes on. We defensively re-add the `/api` prefix if the platform
+ * ever strips it.
  */
 export default function handler(req: IncomingMessage, res: ServerResponse) {
   if (req.url && !req.url.startsWith('/api')) {
