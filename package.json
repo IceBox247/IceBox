@@ -14,9 +14,13 @@
     "build": "npm run build --workspace=server && npm run build --workspace=web",
     "build:server": "npm run build --workspace=server",
     "build:web": "npm run build --workspace=web",
+    "vercel-build": "npm run build --workspace=web",
+    "postinstall": "prisma generate --schema=server/prisma/schema.prisma",
     "start": "npm run start --workspace=server",
     "db:setup": "npm run db:setup --workspace=server",
-    "seed": "npm run seed --workspace=server"
+    "db:push": "prisma db push --schema=server/prisma/schema.prisma",
+    "seed": "npm run seed --workspace=server",
+    "set-webhook": "npm run set-webhook --workspace=server"
   },
   "engines": {
     "node": ">=18"

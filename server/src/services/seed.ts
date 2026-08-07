@@ -1,4 +1,4 @@
-import { prisma } from '../db.js';
+import { prisma } from '../db';
 
 /**
  * Seed the default task list (mirrors the reference app's Tasks screen).
@@ -135,8 +135,7 @@ export async function seedTasks() {
 }
 
 // Allow running directly: `tsx src/services/seed.ts`
-const isMain = import.meta.url === `file://${process.argv[1]}`;
-if (isMain) {
+if (require.main === module) {
   seedTasks()
     .then(() => prisma.$disconnect())
     .then(() => process.exit(0))

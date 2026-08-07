@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { prisma, money } from '../db.js';
-import { config } from '../config.js';
+import { prisma, money } from '../db';
+import { config } from '../config';
 
 export const withdrawalsRouter = Router();
 

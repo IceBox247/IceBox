@@ -1,11 +1,11 @@
 import dotenv from 'dotenv';
-import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-// Load .env from the repo root (one level above /server) and local .env.
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
-dotenv.config(); // also load server/.env if present (overrides not required)
+// Load .env from the repo root and the local cwd. On Vercel there is no .env
+// file (env vars come from the dashboard) — dotenv simply no-ops then.
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
+dotenv.config();
 
 function num(name: string, fallback: number): number {
   const v = process.env[name];
@@ -17,6 +17,15 @@ export const config = {
   botToken: process.env.BOT_TOKEN ?? '',
   botUsername: process.env.BOT_USERNAME ?? 'myIceBoxBot',
   webAppUrl: process.env.WEBAPP_URL ?? 'http://localhost:5173',
+  // Public base URL of the deployment (e.g. https://icebox.vercel.app).
+  publicUrl: process.env.PUBLIC_URL ?? process.env.WEBAPP_URL ?? '',
+  // Shared secret Telegram sends back in the X-Telegram-Bot-Api-Secret-Token
+  // header on each webhook call; guards the /api/bot endpoint.
+  webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET ?? '',
+  // "webhook" on serverless (Vercel), "polling" for a long-running local server.
+  botMode: (process.env.BOT_MODE ?? (process.env.VERCEL ? 'webhook' : 'polling')) as
+    | 'webhook'
+    | 'polling',
   port: num('PORT', 3000),
   corsOrigins: (process.env.CORS_ORIGIN ?? 'http://localhost:5173')
     .split(',')

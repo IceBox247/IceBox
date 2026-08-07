@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { prisma, money } from '../db.js';
-import { config } from '../config.js';
-import { publicUser } from '../services/users.js';
+import { prisma, money } from '../db';
+import { config } from '../config';
+import { publicUser } from '../services/users';
 
 export const userRouter = Router();
 

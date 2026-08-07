@@ -2,14 +2,15 @@
   "name": "@icebox/server",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "prisma generate && tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "db:push": "prisma db push",
     "db:setup": "prisma generate && prisma db push",
     "seed": "tsx src/services/seed.ts",
+    "set-webhook": "tsx src/scripts/setWebhook.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "prisma": {

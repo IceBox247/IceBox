@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { prisma, money } from '../db.js';
+import { prisma, money } from '../db';
 
 export const tasksRouter = Router();
 

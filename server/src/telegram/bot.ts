@@ -1,5 +1,5 @@
 import { Bot, InlineKeyboard } from 'grammy';
-import { config, hasBot } from '../config.js';
+import { config, hasBot } from '../config';
 
 /**
  * Telegram bot: greets users, deep-links referral codes, and opens the Mini App.

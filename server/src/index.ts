@@ -1,56 +1,19 @@
-import express from 'express';
-import cors from 'cors';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import fs from 'node:fs';
+import { config, hasBot } from './config';
+import { prisma } from './db';
+import { createApp } from './app';
+import { createBot } from './telegram/bot';
+import { seedTasks } from './services/seed';
 
-import { config, hasBot } from './config.js';
-import { prisma } from './db.js';
-import { authenticate } from './middleware/auth.js';
-import { userRouter } from './routes/user.js';
-import { tasksRouter } from './routes/tasks.js';
-import { referralsRouter } from './routes/referrals.js';
-import { withdrawalsRouter } from './routes/withdrawals.js';
-import { createBot } from './telegram/bot.js';
-import { seedTasks } from './services/seed.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
+/**
+ * Local / long-running server entry point.
+ * Seeds tasks, starts Express, and runs the bot via long polling.
+ * (On Vercel the app is served from `api/index.ts` and the bot uses webhooks —
+ * this file is not used there.)
+ */
 async function main() {
   await seedTasks();
 
-  const app = express();
-  app.use(express.json());
-  app.use(
-    cors({
-      origin(origin, cb) {
-        // Allow same-origin/no-origin (mobile webviews) and configured origins.
-        if (!origin || config.corsOrigins.includes(origin)) return cb(null, true);
-        return cb(null, config.corsOrigins.length === 0);
-      },
-      credentials: true,
-    }),
-  );
-
-  app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, bot: hasBot, time: new Date().toISOString() });
-  });
-
-  // All /api routes below require a valid Telegram user.
-  app.use('/api', authenticate);
-  app.use('/api', userRouter);
-  app.use('/api/tasks', tasksRouter);
-  app.use('/api/referrals', referralsRouter);
-  app.use('/api/withdrawals', withdrawalsRouter);
-
-  // Serve the built web app in production if it exists.
-  const webDist = path.resolve(__dirname, '../../web/dist');
-  if (fs.existsSync(webDist)) {
-    app.use(express.static(webDist));
-    app.get('*', (_req, res) => res.sendFile(path.join(webDist, 'index.html')));
-    console.log('[server] serving web app from', webDist);
-  }
-
+  const app = createApp();
   app.listen(config.port, () => {
     console.log(`[server] listening on http://localhost:${config.port}`);
     if (config.devAllowUnsigned) {
@@ -58,10 +21,13 @@ async function main() {
     }
   });
 
-  // Start the Telegram bot (long polling). For production, prefer webhooks.
-  const bot = createBot();
-  if (bot) {
-    bot.start({ onStart: (me) => console.log(`[bot] @${me.username} started`) });
+  if (hasBot && config.botMode === 'polling') {
+    const bot = createBot();
+    if (bot) {
+      // Ensure no webhook is set when we long-poll.
+      await bot.api.deleteWebhook().catch(() => undefined);
+      bot.start({ onStart: (me) => console.log(`[bot] @${me.username} polling`) });
+    }
   }
 }
 

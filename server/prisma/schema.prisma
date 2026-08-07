@@ -1,11 +1,16 @@
-// IceBox — Prisma schema (SQLite for easy local/dev; swap to Postgres for prod)
+// IceBox — Prisma schema (PostgreSQL; works locally and on Vercel serverless).
 generator client {
   provider = "prisma-client-js"
+  // native = local dev; rhel targets = Vercel/AWS Lambda runtimes.
+  binaryTargets = ["native", "rhel-openssl-1.0.x", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Pooled connection (e.g. Neon pooler / pgbouncer) used at runtime.
+  url       = env("DATABASE_URL")
+  // Direct connection used by `prisma migrate` / `db push`.
+  directUrl = env("DIRECT_URL")
 }
 
 model User {

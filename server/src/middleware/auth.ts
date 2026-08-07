@@ -1,8 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { User } from '@prisma/client';
-import { config } from '../config.js';
-import { validateInitData, parseInitData } from '../telegram/initData.js';
-import { findOrCreateUser } from '../services/users.js';
+import { config } from '../config';
+import { validateInitData, parseInitData } from '../telegram/initData';
+import { findOrCreateUser } from '../services/users';
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace

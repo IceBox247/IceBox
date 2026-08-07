@@ -26,10 +26,13 @@ reference, rebuilt with the **IceBox** ice-blue brand.
 | --------- | ---------------------------------------------------------- |
 | Frontend  | React 18, Vite, TypeScript, Tailwind CSS, Telegram WebApp  |
 | Backend   | Node.js, Express, Prisma ORM                               |
-| Database  | SQLite (dev) — swap `datasource` to Postgres for prod      |
-| Bot       | grammY                                                      |
+| Database  | PostgreSQL (Neon-friendly, pooled connection)              |
+| Bot       | grammY (long polling locally, webhook on Vercel)           |
+| Hosting   | **Vercel** — static web + serverless API in one project    |
 
-Monorepo with npm workspaces: [`web/`](web) (mini app) and [`server/`](server) (API + bot).
+Monorepo with npm workspaces: [`web/`](web) (mini app), [`server/`](server)
+(API + bot), and [`api/`](api) (the Vercel serverless entry that mounts the
+Express app). **Deploys entirely to Vercel** — see [DEPLOY.md](DEPLOY.md).
 
 ## 🚀 Quick start
 
@@ -39,11 +42,12 @@ npm install
 
 # 2. Configure environment
 cp .env.example .env
+#   → set DATABASE_URL + DIRECT_URL (a free Neon Postgres works great)
 #   → set BOT_TOKEN (from @BotFather) and BOT_USERNAME
 #   → for browser testing without Telegram, set DEV_ALLOW_UNSIGNED=true
 
 # 3. Create the database + seed tasks
-npm run db:setup   # prisma db push
+npm run db:setup   # prisma generate + db push
 npm run seed       # load the default task list
 
 # 4. Run both apps (server :3000, web :5173)
@@ -54,16 +58,18 @@ Open http://localhost:5173. With `DEV_ALLOW_UNSIGNED=true` a mock "Dev" user is
 created so you can click through the UI outside Telegram. Add `?ref=<code>` to
 simulate a referral.
 
-## 🔌 Connecting to Telegram
+## ☁️ Deploy to Vercel
 
-1. Create a bot with [@BotFather](https://t.me/BotFather) → get `BOT_TOKEN`.
-2. `/newapp` (or **Bot Settings → Mini App**) → set the Mini App URL to your
-   deployed `web` URL (e.g. `https://your-app.example.com`).
-3. Set `WEBAPP_URL` and `BOT_USERNAME` in `.env`.
-4. Deploy the server (it also serves the built web app from `web/dist` if present)
-   and start it — the bot runs via long polling by default.
+The whole app — static frontend **and** the API + Telegram bot — deploys to a
+single Vercel project. Full step-by-step (Neon Postgres, env vars, webhook) is
+in **[DEPLOY.md](DEPLOY.md)**. In short:
 
-Referral links look like:
+1. Create a Neon Postgres DB → grab the pooled + direct URLs.
+2. Import the repo at <https://vercel.com/new> and add the env vars.
+3. Deploy → `npm run db:push && npm run seed` (once) → `npm run set-webhook`.
+
+On Vercel the bot runs via **webhook** (`/api/bot`); locally it uses long
+polling. Referral links look like:
 `https://t.me/<BOT_USERNAME>/wallet?startapp=ref_<code>`
 
 ## 📡 API

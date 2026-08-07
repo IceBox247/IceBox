@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
 import type { User } from '@prisma/client';
-import { prisma, money } from '../db.js';
-import { config } from '../config.js';
-import type { TelegramUser } from '../telegram/initData.js';
+import { prisma, money } from '../db';
+import { config } from '../config';
+import type { TelegramUser } from '../telegram/initData';
 
 /** Generate a short, URL-safe referral code. */
 function generateReferralCode(): string {
