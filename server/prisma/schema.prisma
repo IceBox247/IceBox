@@ -93,6 +93,25 @@ model Withdrawal {
   @@index([userId])
 }
 
+// Registry of tokens launched through the IceBox creator (any chain).
+model CreatedToken {
+  id        Int      @id @default(autoincrement())
+  chainId   Int
+  address   String
+  creator   String // lowercased wallet that created it
+  name      String
+  symbol    String
+  decimals  Int      @default(18)
+  supply    String   @default("0") // whole tokens, stored as string (can be huge)
+  taxed     Boolean  @default(false)
+  txHash    String?
+  logoUrl   String?
+  createdAt DateTime @default(now())
+
+  @@unique([chainId, address])
+  @@index([creator])
+}
+
 // Immutable audit trail of every balance change.
 model LedgerEntry {
   id          Int      @id @default(autoincrement())

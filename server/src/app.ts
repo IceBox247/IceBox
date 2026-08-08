@@ -10,6 +10,7 @@ import { userRouter } from './routes/user';
 import { tasksRouter } from './routes/tasks';
 import { referralsRouter } from './routes/referrals';
 import { withdrawalsRouter } from './routes/withdrawals';
+import { tokensRouter } from './routes/tokens';
 import { createBot } from './telegram/bot';
 
 /**
@@ -52,6 +53,9 @@ export function createApp(): Express {
       );
     }
   }
+
+  // Public token registry (used by the wallet-browser creator pages — no Telegram).
+  app.use('/api/tokens', tokensRouter);
 
   // Everything below requires a valid Telegram Mini App user.
   app.use('/api', authenticate);
