@@ -11,7 +11,24 @@ gas** (~$1 is plenty).
 > misleading them. Distribute it honestly (real liquidity, or clearly as reward
 > points).
 
-## Option A — Remix (easiest, no local setup)
+## Option A — One-tap page (best on mobile) ⭐
+
+A self-contained deploy page ships with the app at **`/deploy-token.html`**
+(e.g. `https://ice-box-server-k5qx.vercel.app/deploy-token.html`). It has the
+compiled contract + ethers baked in, so no Remix and no desktop needed.
+
+1. Open **MetaMask** → **☰ menu → Browser** (Trust Wallet also has a DApp browser).
+2. Go to `https://<your-vercel-domain>/deploy-token.html`.
+3. Tap **Connect Wallet** — it switches you to BNB Smart Chain automatically
+   (make sure the account has a little **BNB** for gas).
+4. Set the **total supply** (default 1,000,000,000) and tap **Deploy Token**.
+5. Confirm in the wallet → copy the **contract address** it shows, and open the
+   BscScan link.
+
+Then paste that address into `web/src/brand.ts` (`TOKEN.contract`) and use it
+when we wire the on-chain payout.
+
+## Option B — Remix (desktop)
 
 1. Open <https://remix.ethereum.org>.
 2. Create a new file `IceUsd.sol` and paste the contents of this repo's
