@@ -9,7 +9,6 @@ import { Referrals } from './pages/Referrals';
 import { MenuSheet } from './sheets/MenuSheet';
 import { WithdrawSheet } from './sheets/WithdrawSheet';
 import { HistorySheet } from './sheets/HistorySheet';
-import { APP_VERSION } from './brand';
 
 export default function App() {
   const { loading, error, me, refreshAll } = useStore();
@@ -64,11 +63,6 @@ export default function App() {
         }}
       />
       <HistorySheet open={historyOpen} onClose={() => setHistoryOpen(false)} />
-
-      {/* Build marker — lets us confirm which version is actually live. */}
-      <div className="pointer-events-none fixed left-2 top-1 z-[70] rounded bg-black/40 px-1.5 py-0.5 text-[10px] font-semibold text-ice-300/80">
-        {APP_VERSION}
-      </div>
     </div>
   );
 }
