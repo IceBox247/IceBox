@@ -1,0 +1,29 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<title>IceBox Tools</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#05070d;color:#f4f8ff;font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:520px;margin:0 auto;padding:26px 18px 60px}
+.logo{text-align:center;font-weight:900;font-size:28px}.logo b{color:#33c2ff}
+.sub{text-align:center;color:#7c8aa0;font-size:13px;margin:2px 0 22px}
+a.tile{display:flex;align-items:center;gap:14px;text-decoration:none;color:#fff;background:#101827;border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:16px 16px;margin-bottom:12px;box-shadow:0 8px 30px -12px rgba(0,0,0,.6)}
+a.tile:active{transform:scale(.99)}
+.ic{width:46px;height:46px;flex:0 0 46px;border-radius:13px;display:grid;place-items:center;font-size:22px;background:rgba(51,194,255,.14)}
+.t{font-weight:800;font-size:17px}.d{color:#7c8aa0;font-size:13px;margin-top:2px}
+.step{color:#33c2ff;font-weight:800;font-size:12px;margin:18px 0 8px;letter-spacing:.06em}
+.note{background:rgba(255,176,32,.08);border:1px solid rgba(255,176,32,.25);color:#ffd591;border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.5;margin-top:14px}
+</style></head><body><div class="wrap">
+<div class="logo">ICE<b>BOX</b> · Tools</div>
+<div class="sub">Open this page in your wallet's browser (MetaMask → Browser)</div>
+
+<div class="step">LAUNCH A TOKEN</div>
+<a class="tile" href="/create-token.html"><span class="ic">🪙</span><span><span class="t">Create Token</span><span class="d">Standard or tax token (max 20% tax)</span></span></a>
+<a class="tile" href="/add-liquidity.html"><span class="ic">💧</span><span><span class="t">Add Liquidity</span><span class="d">Pair your token with BNB on PancakeSwap</span></span></a>
+<a class="tile" href="/set-pair.html"><span class="ic">⚡</span><span><span class="t">Activate Tax (Set Pair)</span><span class="d">Turn on buy/sell tax after liquidity</span></span></a>
+
+<div class="step">ADMIN</div>
+<a class="tile" href="/deploy-factory.html"><span class="ic">🏭</span><span><span class="t">Deploy Factory</span><span class="d">One-time setup (already done)</span></span></a>
+<a class="tile" href="/deploy-token.html"><span class="ic">❄️</span><span><span class="t">Deploy ICE USD</span><span class="d">Deploy the IceBox reward token</span></span></a>
+
+<div class="note">Order for a <b>tax token</b>: 1) Create → 2) Add Liquidity → 3) Set Pair. The tax only activates after the pair is set.</div>
+</div></body></html>
