@@ -4,7 +4,7 @@ export const TOKEN = {
   name: 'ICE USD',
   symbol: 'USD',
   network: 'BSC (BEP-20)',
-  contract: '0xCe6dB0f7c5B4D9fd75C2CbD65D71Ca65cAD88888',
+  contract: '0xb433b5263774d4b713BB78CfFaBE832c26C9ca9d',
 };
 
 // Bump this every deploy so we can confirm which build is actually live.
