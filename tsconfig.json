@@ -1,0 +1,25 @@
+{
+  // Used by Vercel's Node builder when it compiles `api/index.ts` into a
+  // serverless function. That entry point imports `../server/src/app`, so the
+  // options here must match `server/tsconfig.json` — in particular
+  // `esModuleInterop`, which the server's default-style imports
+  // (`import express from 'express'`, `import fs from 'node:fs'`) require.
+  // Without this file the builder falls back to its own defaults and the
+  // deploy fails with TS1259 / TS1192.
+  //
+  // The web app is excluded: it is a separate workspace built by Vite with its
+  // own `web/tsconfig.json`.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "types": ["node"]
+  },
+  "include": ["api/**/*.ts", "server/src/**/*.ts"],
+  "exclude": ["node_modules", "web", "server/dist"]
+}
