@@ -1,13 +1,19 @@
 # 🚀 Deploying IceBox to Vercel (all-in-one)
 
 IceBox runs entirely on Vercel: the **web app** as static output and the
-**API + Telegram bot** as a single serverless function (`api/[...path].ts`).
+**API + Telegram bot** as a single serverless function (`api/index.ts`).
 The database is **PostgreSQL** (Neon works great and has a free tier).
+
+> **The Vercel project's Root Directory must be the repository root.** This is
+> an npm-workspaces monorepo: the `vercel-build` script and `vercel.json` both
+> live at the root. Pointing Root Directory at `server/` (or any subfolder)
+> fails the build with `Missing script: "vercel-build"` and silently ignores
+> `vercel.json`. See Troubleshooting.
 
 ```
 Browser / Telegram ──▶ Vercel
                         ├─ /            → static web app (web/dist)
-                        ├─ /api/*       → serverless Express (api/[...path].ts)
+                        ├─ /api/*       → serverless Express (api/index.ts)
                         └─ /api/bot     → Telegram webhook (same function)
                                    │
                                    ▼
@@ -43,6 +49,7 @@ import it.
 
 1. <https://vercel.com/new> → **Import** your GitHub repo.
 2. Framework preset: **Other** (the included `vercel.json` handles the build).
+   - **Root Directory: leave empty / `./`** — not `server`, not `web`.
    - Build command / output dir are already set (`web/dist`).
 3. Add **Environment Variables** (Production + Preview):
 
@@ -131,6 +138,9 @@ is needed.
 
 | Symptom | Fix |
 | ------- | --- |
+| Build fails in seconds with `Missing script: "vercel-build"` and `location /vercel/path0/server` | The project's **Root Directory** is set to a subfolder. Settings → Build and Deployment → Root Directory → clear it (`./`) → Save → redeploy. `vercel-build` only exists in the root `package.json`. |
+| Build succeeds but the site is blank / 404s | Same cause: with a subfolder Root Directory, Vercel never reads the root `vercel.json`, so `outputDirectory` and the rewrites are ignored. Set Root Directory to `./`. |
+| Function build fails with `TS1259 … esModuleInterop` / `TS1192 … has no default export` | The root `tsconfig.json` is missing. Vercel compiles `api/index.ts` with its own defaults; that file must be present so the server's default-style imports resolve. |
 | `/api/*` returns 500 with a Prisma error | `DATABASE_URL`/`DIRECT_URL` env vars missing or wrong; must be the Neon strings. Re-run `npm run db:push`. |
 | Prisma engine "not found" on Vercel | Ensure the deploy ran `postinstall` (it's in root `package.json`). The schema already targets `rhel-openssl-*`. Redeploy. |
 | Bot doesn't respond | Re-run `npm run set-webhook`; check `getWebhookInfo` output and that `TELEGRAM_WEBHOOK_SECRET` matches the Vercel env var. |
