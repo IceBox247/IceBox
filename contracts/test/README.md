@@ -1,13 +1,13 @@
 # Contract tests
 
-Verifies the ICE USD launch sell lock. Not wired into the app build — the
+Verifies the ICE USD launch sell lock and the decaying sell tax. Not wired into the app build — the
 toolchain (solc, ganache) is heavy and only needed when the contract changes.
 
 ```bash
 cd contracts/test
 npm init -y && npm install solc@0.8.26 ganache ethers@6
 node compile.js      # writes abi.json + bytecode.txt
-node test-lock.js    # 18 assertions, exits non-zero on failure
+node test-lock.js    # 30 assertions, exits non-zero on failure
 ```
 
 ## What is asserted
@@ -25,6 +25,14 @@ node test-lock.js    # 18 assertions, exits non-zero on failure
 - Selling into the pair reverts while the window is open.
 - Buying from the pair, wallet-to-wallet transfers and holding are unaffected.
 - The owner is lock-exempt so liquidity can be seeded.
+
+**The decaying sell tax**
+
+- `sellTaxSchedule()` reports 90/80/70/60/50/40/30/20/10/5 %, then 5% forever.
+- The tax actually charged is walked day by day for 11 days and compared
+  against the declared curve, including the amount delivered to the pair.
+- No setter exists for any rate, so the curve cannot be raised after deploy.
+- Buys, wallet-to-wallet transfers and the owner are never taxed.
 
 **It expires on its own**
 

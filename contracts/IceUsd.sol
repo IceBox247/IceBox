@@ -11,7 +11,26 @@ pragma solidity ^0.8.20;
  * makes NO claim about being worth $1 or being a stablecoin.
  *
  * ---------------------------------------------------------------------------
- * LAUNCH SELL LOCK
+ * DECAYING LAUNCH SELL TAX (optional)
+ * ---------------------------------------------------------------------------
+ * Optionally, sells into the DEX pair carry a tax that steps down every day
+ * after launch and then settles permanently:
+ *
+ *   day 1  90%   day 4  60%   day 7  30%   day 10+  5% forever
+ *   day 2  80%   day 5  50%   day 8  20%
+ *   day 3  70%   day 6  40%   day 9  10%
+ *
+ * The schedule is HARD-CODED and IMMUTABLE. There is no setter — not for the
+ * owner, not for anyone. It cannot be raised, paused or extended, and it
+ * reaches its 5% floor on its own with no transaction required. Callers can
+ * read the entire curve up front via `sellTaxBpsAt()` and `currentSellTaxBps()`.
+ *
+ * Note that a tax above ~50% exceeds the slippage tolerance most DEX front-ends
+ * allow, so during the first days sells will fail outright rather than execute
+ * at a loss.
+ *
+ * ---------------------------------------------------------------------------
+ * LAUNCH SELL LOCK (optional, independent of the tax)
  * ---------------------------------------------------------------------------
  * Optionally, selling into the DEX pair can be blocked for a short window after
  * deployment, so airdrop recipients hold while liquidity is being built up.
@@ -56,9 +75,23 @@ contract IceUsd {
     /// @notice Set by `unlockSellsEarly()`. One-way: sells can never be re-locked.
     bool public sellsUnlockedEarly;
 
-    /// @notice Addresses allowed to move tokens during the lock (owner, liquidity
-    /// helper contracts). Cannot be used to block anyone — only to permit.
-    mapping(address => bool) public isLockExempt;
+    /// @notice Addresses exempt from the launch lock and the sell tax (owner,
+    /// liquidity helpers). Cannot be used to block or tax anyone — only to
+    /// exempt, so it can never be turned into a blacklist.
+    mapping(address => bool) public isExempt;
+
+    // --- decaying sell tax (immutable schedule; no setter exists) ---
+
+    /// @notice Whether the decaying sell tax applies at all. Fixed at deploy.
+    bool public immutable sellTaxEnabled;
+    /// @notice Timestamp the schedule is measured from. Fixed at deploy.
+    uint256 public immutable launchedAt;
+    /// @notice Day-1 rate — the highest this token can ever tax a sell.
+    uint16 public constant MAX_SELL_TAX_BPS = 9000; // 90.00%
+    /// @notice The permanent rate from day 10 onward.
+    uint16 public constant FINAL_SELL_TAX_BPS = 500; // 5.00%
+    /// @notice Where sell tax is sent (e.g. the liquidity wallet).
+    address public taxWallet;
 
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
@@ -68,7 +101,9 @@ contract IceUsd {
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event PairSet(address indexed pair);
     event SellsUnlockedEarly(uint256 at);
-    event LockExemptSet(address indexed account, bool exempt);
+    event ExemptSet(address indexed account, bool exempt);
+    event TaxWalletUpdated(address indexed wallet);
+    event SellTaxCollected(address indexed from, uint256 amount, uint16 bps);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "not owner");
@@ -80,15 +115,50 @@ contract IceUsd {
      * @param sellLockSeconds how long sells stay blocked, in seconds. Pass 0 for
      *        no lock at all. Must be <= MAX_SELL_LOCK (7 days).
      */
-    constructor(uint256 initialSupplyWholeTokens, uint256 sellLockSeconds) {
+    constructor(
+        uint256 initialSupplyWholeTokens,
+        uint256 sellLockSeconds,
+        bool enableSellTax,
+        address taxWallet_
+    ) {
         require(sellLockSeconds <= MAX_SELL_LOCK, "lock exceeds 7 days");
+        require(!enableSellTax || taxWallet_ != address(0), "zero tax wallet");
         sellLockUntil = sellLockSeconds == 0 ? 0 : block.timestamp + sellLockSeconds;
+        sellTaxEnabled = enableSellTax;
+        launchedAt = block.timestamp;
+        taxWallet = taxWallet_;
 
         owner = msg.sender;
-        isLockExempt[msg.sender] = true;
+        isExempt[msg.sender] = true;
+        if (taxWallet_ != address(0)) isExempt[taxWallet_] = true;
         emit OwnershipTransferred(address(0), msg.sender);
-        emit LockExemptSet(msg.sender, true);
+        emit ExemptSet(msg.sender, true);
         _mint(msg.sender, initialSupplyWholeTokens * 10 ** uint256(decimals));
+    }
+
+    // --- sell tax schedule (pure/view; no setter exists anywhere) ---
+
+    /// @notice Sell tax in basis points at a given timestamp.
+    /// Day 1 is 90%, stepping down 10 points a day, then 5% from day 10 on.
+    function sellTaxBpsAt(uint256 ts) public view returns (uint16) {
+        if (!sellTaxEnabled) return 0;
+        if (ts <= launchedAt) return MAX_SELL_TAX_BPS;
+        uint256 dayIndex = (ts - launchedAt) / 1 days; // 0 on day 1
+        if (dayIndex >= 9) return FINAL_SELL_TAX_BPS;
+        return uint16(MAX_SELL_TAX_BPS - dayIndex * 1000);
+    }
+
+    /// @notice Sell tax in basis points right now.
+    function currentSellTaxBps() public view returns (uint16) {
+        return sellTaxBpsAt(block.timestamp);
+    }
+
+    /// @notice The full schedule, one entry per day for the first 10 days.
+    /// Lets buyers read the entire curve before touching the token.
+    function sellTaxSchedule() external view returns (uint16[10] memory out) {
+        for (uint256 i = 0; i < 10; i++) {
+            out[i] = sellTaxBpsAt(launchedAt + i * 1 days + 1);
+        }
     }
 
     /// @notice True while sells into the pair are still blocked.
@@ -148,11 +218,19 @@ contract IceUsd {
         emit SellsUnlockedEarly(block.timestamp);
     }
 
-    /// @notice Permit an address to sell during the lock (e.g. a router used to
-    /// seed liquidity). Only grants permission; it can never block a transfer.
-    function setLockExempt(address account, bool exempt) external onlyOwner {
-        isLockExempt[account] = exempt;
-        emit LockExemptSet(account, exempt);
+    /// @notice Exempt an address from the lock and the sell tax (e.g. a router
+    /// used to seed liquidity). Only grants exemption; it can never block or
+    /// tax a transfer, so it cannot become a blacklist.
+    function setExempt(address account, bool exempt) external onlyOwner {
+        isExempt[account] = exempt;
+        emit ExemptSet(account, exempt);
+    }
+
+    /// @notice Redirect where sell tax is sent. Cannot change any tax rate.
+    function setTaxWallet(address w) external onlyOwner {
+        require(w != address(0), "zero");
+        taxWallet = w;
+        emit TaxWalletUpdated(w);
     }
 
     function transferOwnership(address newOwner) external onlyOwner {
@@ -171,12 +249,9 @@ contract IceUsd {
         // The only restriction: selling into the pair during the launch window.
         // Buying, holding and wallet-to-wallet transfers are never blocked, and
         // this branch is dead code forever once the window closes.
-        if (
-            pair != address(0) &&
-            to == pair &&
-            sellLockActive() &&
-            !isLockExempt[from]
-        ) {
+        bool isSell = pair != address(0) && to == pair && !isExempt[from];
+
+        if (isSell && sellLockActive()) {
             revert("sells locked until launch window ends");
         }
 
@@ -185,8 +260,25 @@ contract IceUsd {
         unchecked {
             balanceOf[from] = bal - value;
         }
-        balanceOf[to] += value;
-        emit Transfer(from, to, value);
+
+        // Decaying launch tax, sells only. Buys and wallet-to-wallet transfers
+        // are never taxed, and the rate is fixed by an immutable schedule.
+        uint256 net = value;
+        if (isSell && sellTaxEnabled) {
+            uint16 bps = currentSellTaxBps();
+            if (bps > 0) {
+                uint256 fee = (value * bps) / 10000;
+                if (fee > 0) {
+                    net = value - fee;
+                    balanceOf[taxWallet] += fee;
+                    emit Transfer(from, taxWallet, fee);
+                    emit SellTaxCollected(from, fee, bps);
+                }
+            }
+        }
+
+        balanceOf[to] += net;
+        emit Transfer(from, to, net);
     }
 
     function _mint(address to, uint256 value) internal {
