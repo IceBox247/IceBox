@@ -4,6 +4,9 @@ import { config } from '../config';
 
 export const withdrawalsRouter = Router();
 
+/** A BEP-20 payout address: 0x followed by 40 hex characters. */
+const EVM_ADDRESS = /^0x[a-fA-F0-9]{40}$/;
+
 /** GET /api/withdrawals — the user's payout history, newest first. */
 withdrawalsRouter.get('/', async (req, res) => {
   const user = req.user!;
@@ -46,8 +49,25 @@ withdrawalsRouter.post('/', async (req, res) => {
       message: `Minimum withdrawal is ${config.minWithdrawal.toFixed(2)} USD.`,
     });
   }
-  if (!address || address.length < 8) {
-    return res.status(400).json({ error: 'invalid_address' });
+  // A BEP-20 payout address must be a well-formed EVM address. A loose length
+  // check would accept typos, and tokens sent to a bad address are unrecoverable.
+  if (!EVM_ADDRESS.test(address)) {
+    return res.status(400).json({
+      error: 'invalid_address',
+      message: 'Enter a valid BSC (BEP-20) address — 0x followed by 40 characters.',
+    });
+  }
+  if (/^0x0{40}$/i.test(address)) {
+    return res.status(400).json({
+      error: 'invalid_address',
+      message: 'That is the zero address — funds sent there are burned.',
+    });
+  }
+  if (network !== 'BEP20') {
+    return res.status(400).json({
+      error: 'unsupported_network',
+      message: 'Only BSC (BEP-20) withdrawals are supported.',
+    });
   }
 
   try {

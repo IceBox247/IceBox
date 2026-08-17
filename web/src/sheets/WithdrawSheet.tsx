@@ -31,13 +31,23 @@ export function WithdrawSheet({
 
   async function submit() {
     const amt = Number(amount || min);
-    if (!address || address.length < 8) {
-      toast.show('Enter a valid wallet address', 'error');
+    const addr = address.trim();
+    // Must be a real EVM address — a payout to a typo is unrecoverable.
+    if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) {
+      toast.show('Enter a valid BSC address — 0x followed by 40 characters', 'error');
+      return;
+    }
+    if (!Number.isFinite(amt) || amt < min) {
+      toast.show(`Minimum withdrawal is ${usdt(min)} USD`, 'error');
+      return;
+    }
+    if (amt > balance) {
+      toast.show(`You only have ${usdt(balance)} USD available`, 'error');
       return;
     }
     setSubmitting(true);
     try {
-      await api.withdraw(amt, address.trim(), network);
+      await api.withdraw(amt, addr, network);
       haptic('success');
       toast.show('Withdrawal requested 🎉', 'success');
       await refreshMe();
