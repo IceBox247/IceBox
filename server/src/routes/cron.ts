@@ -22,12 +22,20 @@ function authorized(req: { headers: Record<string, unknown>; query: Record<strin
   return bearer === expected || query === expected;
 }
 
-/** GET /api/cron/payouts — send queued withdrawals. */
+/**
+ * GET /api/cron/payouts — the single safety-net job (Hobby allows few crons).
+ * Deposits and withdrawals are processed instantly at request time; this run is
+ * only a backstop that (a) sends any withdrawals the instant path left pending
+ * (e.g. treasury was briefly out of gas), (b) confirms in-flight Dextopus
+ * deliveries, and (c) drains the legacy direct-token payout queue.
+ */
 cronRouter.get('/payouts', async (req, res) => {
   if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
   try {
-    const result = await runPayouts();
-    res.json({ ok: true, ...result });
+    const legacy = await runPayouts();
+    const dextopus = await runDextopusPayouts();
+    const poll = await pollDextopusWithdrawals();
+    res.json({ ok: true, legacy, dextopus, poll });
   } catch (e) {
     console.error('[cron] payout run failed', e);
     res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });

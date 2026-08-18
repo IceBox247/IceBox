@@ -52,10 +52,6 @@
     {
       "path": "/api/cron/payouts",
       "schedule": "0 0 * * *"
-    },
-    {
-      "path": "/api/cron/dextopus-payouts",
-      "schedule": "0 1 * * *"
     }
   ]
 }
