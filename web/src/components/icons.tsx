@@ -139,6 +139,20 @@ export const ChevronRightIcon = (p: P) => (
     <path d="m9 6 6 6-6 6" />
   </svg>
 );
+/** Stacked coins — the Stake tab / staking sections. */
+export const StakeIcon = (p: P) => (
+  <svg {...base(p)}>
+    <ellipse cx="12" cy="6" rx="7" ry="3" />
+    <path d="M5 6v6c0 1.66 3.13 3 7 3s7-1.34 7-3V6" />
+    <path d="M5 12v6c0 1.66 3.13 3 7 3s7-1.34 7-3v-6" />
+  </svg>
+);
+export const LockIcon = (p: P) => (
+  <svg {...base(p)}>
+    <rect x="4" y="11" width="16" height="10" rx="2" />
+    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+  </svg>
+);
 
 /** ICE USD coin badge — IceBox's own ice-blue reward coin (not Tether). */
 export const IceUsdCoin = ({ size = 40 }: { size?: number }) => (

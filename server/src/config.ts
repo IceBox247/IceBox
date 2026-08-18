@@ -46,6 +46,48 @@ function num(name: string, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function str(name: string, fallback: string): string {
+  const v = process.env[name];
+  return v != null && v.trim() !== '' ? v : fallback;
+}
+
+/**
+ * A stake-to-earn section. Users pick the section whose amount range covers the
+ * amount they want to stake. Every spec — the amount range, headline APY, the
+ * daily reward rate that actually accrues, and the lock duration — is read from
+ * the environment so the operator can tune them from the Vercel dashboard
+ * without a code change. Values here are only fallbacks.
+ */
+export interface StakeTier {
+  key: string;
+  name: string;
+  blurb: string;
+  minStake: number; // inclusive lower bound of the range, in whole USD
+  maxStake: number; // inclusive upper bound
+  apy: number; // headline APY %, shown in the UI
+  dailyRate: number; // % per day — drives reward accrual
+  durationDays: number; // lock/earn window in days
+  accent: string; // UI accent token (Tailwind color family)
+}
+
+/** Build one section from `STAKE_<prefix>_*` env vars, falling back to defaults. */
+function stakeTier(
+  prefix: string,
+  defaults: Omit<StakeTier, 'accent'> & { accent: string },
+): StakeTier {
+  return {
+    key: defaults.key,
+    accent: defaults.accent,
+    name: str(`STAKE_${prefix}_NAME`, defaults.name),
+    blurb: str(`STAKE_${prefix}_BLURB`, defaults.blurb),
+    minStake: num(`STAKE_${prefix}_MIN`, defaults.minStake),
+    maxStake: num(`STAKE_${prefix}_MAX`, defaults.maxStake),
+    apy: num(`STAKE_${prefix}_APY`, defaults.apy),
+    dailyRate: num(`STAKE_${prefix}_DAILY`, defaults.dailyRate),
+    durationDays: num(`STAKE_${prefix}_DURATION`, defaults.durationDays),
+  };
+}
+
 export const config = {
   botToken: process.env.BOT_TOKEN ?? '',
   botUsername: process.env.BOT_USERNAME ?? 'myIceBoxBot',
@@ -69,6 +111,63 @@ export const config = {
   referralReward: num('REFERRAL_REWARD', 2),
   minWithdrawal: num('MIN_WITHDRAWAL', 18),
   signupBonus: num('SIGNUP_BONUS', 0.3),
+
+  staking: {
+    // Master switch. Staking is on by default; set STAKING_ENABLED=false to hide
+    // the feature and refuse new stakes (existing positions can still be
+    // claimed/unstaked).
+    enabled: process.env.STAKING_ENABLED !== 'false',
+    // Four amount-range sections. Tune every number from the Vercel env —
+    // STAKE_S1_APY, STAKE_S1_DAILY, STAKE_S1_DURATION, STAKE_S1_MIN, STAKE_S1_MAX,
+    // and likewise S2/S3/S4. `dailyRate` (% per day) is what actually accrues;
+    // `apy` is the headline figure shown in the UI.
+    tiers: [
+      stakeTier('S1', {
+        key: 's1',
+        name: 'Starter',
+        blurb: 'Get started — stake any amount up to $500.',
+        minStake: 1,
+        maxStake: 500,
+        apy: 18,
+        dailyRate: 0.05,
+        durationDays: 30,
+        accent: 'sky',
+      }),
+      stakeTier('S2', {
+        key: 's2',
+        name: 'Silver',
+        blurb: 'Step up your position from $501 to $2,000.',
+        minStake: 501,
+        maxStake: 2000,
+        apy: 30,
+        dailyRate: 0.08,
+        durationDays: 45,
+        accent: 'ice',
+      }),
+      stakeTier('S3', {
+        key: 's3',
+        name: 'Gold',
+        blurb: 'Serious stakers — $2,001 to $5,000.',
+        minStake: 2001,
+        maxStake: 5000,
+        apy: 45,
+        dailyRate: 0.12,
+        durationDays: 60,
+        accent: 'amber',
+      }),
+      stakeTier('S4', {
+        key: 's4',
+        name: 'Diamond',
+        blurb: 'Top tier — $5,001 to $10,000 for our best yield.',
+        minStake: 5001,
+        maxStake: 10000,
+        apy: 60,
+        dailyRate: 0.16,
+        durationDays: 90,
+        accent: 'violet',
+      }),
+    ] as StakeTier[],
+  },
 
   payout: {
     // Master switch. Payouts stay off until this is explicitly "true", so a

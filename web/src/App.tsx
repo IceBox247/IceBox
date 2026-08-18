@@ -5,6 +5,7 @@ import { Header } from './components/Header';
 import { BottomNav, type Tab } from './components/BottomNav';
 import { Home } from './pages/Home';
 import { Tasks } from './pages/Tasks';
+import { StakePage } from './pages/Stake';
 import { Referrals } from './pages/Referrals';
 import { MenuSheet } from './sheets/MenuSheet';
 import { WithdrawSheet } from './sheets/WithdrawSheet';
@@ -44,6 +45,7 @@ export default function App() {
           />
         )}
         {tab === 'tasks' && <Tasks />}
+        {tab === 'stake' && <StakePage />}
         {tab === 'referrals' && <Referrals />}
       </main>
 

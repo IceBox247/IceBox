@@ -13,10 +13,14 @@ export const userRouter = Router();
 userRouter.get('/me', async (req, res) => {
   const user = req.user!;
 
-  const [referralCount, activeReferralCount, tasksDone] = await Promise.all([
+  const [referralCount, activeReferralCount, tasksDone, staked] = await Promise.all([
     prisma.user.count({ where: { referredById: user.id } }),
     prisma.user.count({ where: { referredById: user.id, totalEarned: { gt: 0 } } }),
     prisma.taskCompletion.count({ where: { userId: user.id } }),
+    prisma.stake.aggregate({
+      where: { userId: user.id, status: 'active' },
+      _sum: { principal: true },
+    }),
   ]);
 
   res.json({
@@ -28,12 +32,14 @@ userRouter.get('/me', async (req, res) => {
       totalReferrals: referralCount,
       activeReferrals: activeReferralCount,
       tasksDone,
+      totalStaked: money(staked._sum.principal ?? 0),
       usdRate: 1, // USD ≈ 1 USD
     },
     config: {
       referralReward: config.referralReward,
       minWithdrawal: config.minWithdrawal,
       botUsername: config.botUsername,
+      stakingEnabled: config.staking.enabled,
     },
     referralLink: `https://t.me/${config.botUsername}?startapp=ref_${user.referralCode}`,
   });

@@ -14,6 +14,10 @@ reference, rebuilt with the **IceBox** ice-blue brand.
   (repeatable), each crediting USDT. Server is the source of truth.
 - **Referrals** — per-invite reward, shareable deep link, live stats and a
   **Top 100 leaderboard** with a prize table.
+- **Stake to Earn** — lock ICE USD into one of four amount-range sections
+  ($1–500, $501–2k, $2k–5k, $5k–10k), earn a daily reward, claim anytime and
+  unstake at maturity. Every spec (APY, daily rate, lock duration, ranges) is
+  set from the Vercel env — see **Configuration** below.
 - **Withdraw flow** — minimum-withdrawal gate ("Not Enough Balance → Earn More")
   and multi-network payout requests (TON / TRC20 / BEP20).
 - **Menu & History sheets** — refresh balance, withdrawal history, invite friends.
@@ -85,11 +89,16 @@ All `/api/*` routes require the header `Authorization: tma <initData>`.
 | GET    | `/api/referrals`          | Link, stats, referrals, leaderboard   |
 | GET    | `/api/withdrawals`        | Payout history                        |
 | POST   | `/api/withdrawals`        | Request a withdrawal (min-gated)      |
+| GET    | `/api/staking`            | Sections, positions, staking summary  |
+| POST   | `/api/staking/stake`      | Open a position (`{ tier, amount }`)  |
+| POST   | `/api/staking/:id/claim`  | Sweep accrued rewards to balance      |
+| POST   | `/api/staking/:id/unstake`| Return principal after maturity       |
 
 ## 🗄️ Data model
 
 `User` (balance, totalEarned, referral graph) · `Task` / `TaskCompletion` ·
-`Withdrawal` · `LedgerEntry` (immutable audit trail of every balance change).
+`Withdrawal` · `Stake` (locked stake-to-earn position) · `LedgerEntry`
+(immutable audit trail of every balance change).
 See [`server/prisma/schema.prisma`](server/prisma/schema.prisma).
 
 ## ⚙️ Configuration (`.env`)
@@ -102,7 +111,28 @@ See [`server/prisma/schema.prisma`](server/prisma/schema.prisma).
 | `REFERRAL_REWARD`    | USDT paid per referral (default 2)                 |
 | `MIN_WITHDRAWAL`     | Minimum withdrawal in USDT (default 18)            |
 | `SIGNUP_BONUS`       | Welcome credit for new users (default 0.30)        |
+| `STAKING_ENABLED`    | Master switch for Stake to Earn (default on)       |
+| `STAKE_S1..S4_*`     | Per-section specs — see below                      |
 | `DEV_ALLOW_UNSIGNED` | Bypass initData for browser testing (**dev only**) |
+
+### Stake to Earn sections
+
+Each of the four sections is tuned entirely from the environment, so you can
+change the economics on Vercel without a redeploy of code. Set any subset —
+anything you omit falls back to the built-in default.
+
+| Var (`N` = 1–4)     | Meaning                                             |
+| ------------------- | --------------------------------------------------- |
+| `STAKE_SN_MIN/MAX`  | Inclusive USD range the section accepts             |
+| `STAKE_SN_APY`      | Headline APY shown in the UI (display only)         |
+| `STAKE_SN_DAILY`    | **% reward per day — this is what actually accrues** |
+| `STAKE_SN_DURATION` | Lock length in days (rewards accrue over this window)|
+| `STAKE_SN_NAME`     | Section label (e.g. "Gold")                         |
+| `STAKE_SN_BLURB`    | One-line pitch shown under the section              |
+
+Specs are snapshot onto each position when it's opened, so re-tuning a section
+never re-prices stakes that are already running. Full list with defaults is in
+[`.env.example`](.env.example).
 
 ## 🔐 Security notes
 

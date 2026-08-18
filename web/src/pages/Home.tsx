@@ -7,6 +7,7 @@ import {
   WalletIcon,
   ReferralsIcon,
   TasksIcon,
+  StakeIcon,
   IceUsdCoin,
 } from '../components/icons';
 import { usdt } from '../lib/format';
@@ -93,6 +94,27 @@ export function Home({ onWithdraw, onHistory, onNavigate }: Props) {
           </div>
         )}
       </div>
+
+      {/* Stake to Earn CTA */}
+      {me.config.stakingEnabled && (
+        <button
+          onClick={() => onNavigate('stake')}
+          className="card flex w-full items-center gap-4 border border-ice-400/20 p-4 text-left"
+        >
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-ice-400/15 text-ice-300">
+            <StakeIcon width={22} height={22} />
+          </span>
+          <div className="flex-1">
+            <h3 className="text-lg font-extrabold leading-tight">Stake to Earn</h3>
+            <p className="text-sm text-white/50">
+              {overview.totalStaked > 0
+                ? `${usdt(overview.totalStaked)} USD staked · earning daily`
+                : 'Lock ICE USD and earn daily rewards'}
+            </p>
+          </div>
+          <ChevronRightIcon width={18} height={18} />
+        </button>
+      )}
 
       {/* Overview */}
       <div>

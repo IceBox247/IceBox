@@ -37,6 +37,7 @@ model User {
   taskCompletions TaskCompletion[]
   withdrawals     Withdrawal[]
   ledger          LedgerEntry[]
+  stakes          Stake[]
 
   @@index([referredById])
 }
@@ -120,12 +121,44 @@ model CreatedToken {
   @@index([creator])
 }
 
+// A stake-to-earn position. The user moves withdrawable `balance` into a
+// locked `Stake`; rewards accrue at the tier's daily rate for the lock window
+// and can be claimed to `balance` anytime, while the principal stays locked
+// until `maturesAt`.
+//
+// The rate figures and lock length are SNAPSHOT onto the row at stake time, so
+// re-tuning the tier specs (in the Vercel env) later never re-prices positions
+// that are already open.
+model Stake {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  tier        String   // section key, e.g. "s1" | "s2" | "s3" | "s4"
+  principal   Float    // amount staked, in whole USD
+  apy         Float    // headline APY snapshot, for display (e.g. 15 = 15%)
+  dailyRate   Float    // % per day at stake time — this is what actually accrues
+  lockDays    Int      // lock/earn window at stake time, in days
+  status      String   @default("active") // active | unstaked
+  claimed     Float    @default(0) // lifetime rewards already paid out from this stake
+
+  startedAt   DateTime @default(now())
+  // Accrual anchor: rewards accrue from here. Reset to `now` on every claim so a
+  // claimed reward is never paid twice.
+  lastClaimAt DateTime @default(now())
+  maturesAt   DateTime // startedAt + lockDays; accrual stops and principal unlocks here
+  unstakedAt  DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+}
+
 // Immutable audit trail of every balance change.
 model LedgerEntry {
   id          Int      @id @default(autoincrement())
   userId      Int
   amount      Float    // positive = credit, negative = debit
-  reason      String   // "signup_bonus" | "task" | "referral" | "withdrawal"
+  reason      String   // "signup_bonus" | "task" | "referral" | "withdrawal" | "stake" | "stake_reward" | "unstake"
   meta        String?  // optional JSON string
   createdAt   DateTime @default(now())
 

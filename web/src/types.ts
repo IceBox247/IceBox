@@ -17,6 +17,7 @@ export interface Overview {
   totalReferrals: number;
   activeReferrals: number;
   tasksDone: number;
+  totalStaked: number;
   usdRate: number;
 }
 
@@ -24,6 +25,7 @@ export interface AppConfig {
   referralReward: number;
   minWithdrawal: number;
   botUsername: string;
+  stakingEnabled: boolean;
 }
 
 export interface MeResponse {
@@ -97,4 +99,47 @@ export interface Withdrawal {
   network: string;
   status: string;
   createdAt: string;
+}
+
+export interface StakeTier {
+  key: string;
+  name: string;
+  blurb: string;
+  minStake: number;
+  maxStake: number;
+  apy: number;
+  dailyRate: number;
+  durationDays: number;
+  accent: string;
+}
+
+export interface Stake {
+  id: number;
+  tier: string;
+  principal: number;
+  apy: number;
+  dailyRate: number;
+  lockDays: number;
+  status: 'active' | 'unstaked';
+  claimed: number;
+  pending: number;
+  startedAt: string;
+  maturesAt: string;
+  unstakedAt: string | null;
+  matured: boolean;
+}
+
+export interface StakingSummary {
+  totalStaked: number;
+  totalPending: number;
+  totalClaimed: number;
+  activeCount: number;
+}
+
+export interface StakingResponse {
+  enabled: boolean;
+  balance: number;
+  tiers: StakeTier[];
+  stakes: Stake[];
+  summary: StakingSummary;
 }

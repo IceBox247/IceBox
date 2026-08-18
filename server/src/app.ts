@@ -10,6 +10,7 @@ import { userRouter } from './routes/user';
 import { tasksRouter } from './routes/tasks';
 import { referralsRouter } from './routes/referrals';
 import { withdrawalsRouter } from './routes/withdrawals';
+import { stakingRouter } from './routes/staking';
 import { tokensRouter } from './routes/tokens';
 import { cronRouter } from './routes/cron';
 import { createBot } from './telegram/bot';
@@ -68,6 +69,7 @@ export function createApp(): Express {
   app.use('/api/tasks', tasksRouter);
   app.use('/api/referrals', referralsRouter);
   app.use('/api/withdrawals', withdrawalsRouter);
+  app.use('/api/staking', stakingRouter);
 
   // Serve the built web app when co-located (local prod). On Vercel the static
   // frontend is served by the platform, so this directory won't exist there.
