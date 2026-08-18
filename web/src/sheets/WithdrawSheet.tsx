@@ -64,7 +64,7 @@ export function WithdrawSheet({
   }
 
   return (
-    <Sheet open={open} onClose={onClose} title={enough ? 'Withdraw USD' : undefined}>
+    <Sheet open={open} onClose={onClose} title={enough ? 'Withdraw to USDT' : undefined}>
       {!enough ? (
         // "Not Enough Balance" gate — mirrors the reference app.
         <div className="py-4 text-center">
@@ -93,10 +93,14 @@ export function WithdrawSheet({
         </div>
       ) : (
         <div className="space-y-4">
+          <div className="rounded-2xl bg-ice-400/10 p-3 text-center text-xs text-white/60">
+            Your <b className="text-ice-200">ICE USD</b> is converted to{' '}
+            <b className="text-ice-200">USDT</b> (1:1) and delivered to your external wallet.
+          </div>
           <div className="rounded-2xl bg-white/5 p-4">
             <div className="flex items-center justify-between text-sm">
               <span className="text-white/50">Available</span>
-              <span className="font-bold">{usdt(balance)} USD</span>
+              <span className="font-bold">{usdt(balance)} ICE USD</span>
             </div>
           </div>
 

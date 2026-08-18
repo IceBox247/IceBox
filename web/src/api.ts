@@ -7,6 +7,8 @@ import type {
   Withdrawal,
   Stake,
   StakingResponse,
+  DepositInfo,
+  DepositRow,
 } from './types';
 
 const BASE = import.meta.env.VITE_API_BASE || '';
@@ -87,4 +89,7 @@ export const api = {
       totalEarned: number;
       stake: Stake;
     }>(`/staking/${id}/unstake`, { method: 'POST' }),
+  deposits: () => request<DepositInfo>('/deposits'),
+  refreshDeposits: () =>
+    request<{ ok: boolean; deposits: DepositRow[] }>('/deposits/refresh', { method: 'POST' }),
 };

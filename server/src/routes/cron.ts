@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { config } from '../config';
 import { runPayouts, payoutStatus } from '../services/payout';
+import { runDextopusPayouts, pollDextopusWithdrawals } from '../services/dextopusPayout';
 
 export const cronRouter = Router();
 
@@ -29,6 +30,22 @@ cronRouter.get('/payouts', async (req, res) => {
     res.json({ ok: true, ...result });
   } catch (e) {
     console.error('[cron] payout run failed', e);
+    res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+/**
+ * GET /api/cron/dextopus-payouts — off-ramp: fund Dextopus quotes for pending
+ * withdrawals, then confirm delivery of ones already in flight.
+ */
+cronRouter.get('/dextopus-payouts', async (req, res) => {
+  if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
+  try {
+    const run = await runDextopusPayouts();
+    const poll = await pollDextopusWithdrawals();
+    res.json({ ok: true, run, poll });
+  } catch (e) {
+    console.error('[cron] dextopus payout run failed', e);
     res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
   }
 });

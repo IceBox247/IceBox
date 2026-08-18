@@ -11,6 +11,8 @@ import { tasksRouter } from './routes/tasks';
 import { referralsRouter } from './routes/referrals';
 import { withdrawalsRouter } from './routes/withdrawals';
 import { stakingRouter } from './routes/staking';
+import { depositsRouter } from './routes/deposits';
+import { dextopusWebhookHandler } from './routes/webhooks';
 import { tokensRouter } from './routes/tokens';
 import { cronRouter } from './routes/cron';
 import { createBot } from './telegram/bot';
@@ -26,6 +28,11 @@ import { createBot } from './telegram/bot';
  */
 export function createApp(): Express {
   const app = express();
+
+  // Dextopus deposit webhook — mounted BEFORE the JSON parser with a raw body
+  // parser so HMAC-SHA256 can run over the exact bytes Dextopus signed.
+  app.all('/api/webhooks/dextopus', express.raw({ type: '*/*' }), dextopusWebhookHandler);
+
   app.use(express.json({ limit: '1mb' })); // room for small logo data URLs
   app.use(
     cors({
@@ -70,6 +77,7 @@ export function createApp(): Express {
   app.use('/api/referrals', referralsRouter);
   app.use('/api/withdrawals', withdrawalsRouter);
   app.use('/api/staking', stakingRouter);
+  app.use('/api/deposits', depositsRouter);
 
   // Serve the built web app when co-located (local prod). On Vercel the static
   // frontend is served by the platform, so this directory won't exist there.

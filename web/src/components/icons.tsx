@@ -52,6 +52,12 @@ export const UpArrowIcon = (p: P) => (
     <path d="m5 12 7-7 7 7" />
   </svg>
 );
+export const DownArrowIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M12 5v14" />
+    <path d="m19 12-7 7-7-7" />
+  </svg>
+);
 export const ClockIcon = (p: P) => (
   <svg {...base(p)}>
     <circle cx="12" cy="12" r="9" />

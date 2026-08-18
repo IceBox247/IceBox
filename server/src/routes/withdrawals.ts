@@ -83,7 +83,17 @@ withdrawalsRouter.post('/', async (req, res) => {
       });
 
       const withdrawal = await tx.withdrawal.create({
-        data: { userId: user.id, amount, address, network, status: 'pending' },
+        data: {
+          userId: user.id,
+          amount,
+          address,
+          network,
+          status: 'pending',
+          // Destination for the Dextopus off-ramp (ICE USD -> USDT). Defaults to
+          // USDT on BSC; the cron worker funds the Dextopus quote from here.
+          destChainId: config.dextopus.withdrawDestChainId,
+          destAsset: config.dextopus.withdrawDestAsset,
+        },
       });
 
       await tx.ledgerEntry.create({

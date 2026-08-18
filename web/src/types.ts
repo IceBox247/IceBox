@@ -26,6 +26,9 @@ export interface AppConfig {
   minWithdrawal: number;
   botUsername: string;
   stakingEnabled: boolean;
+  depositEnabled: boolean;
+  minDeposit: number;
+  withdrawEnabled: boolean;
 }
 
 export interface MeResponse {
@@ -142,4 +145,26 @@ export interface StakingResponse {
   tiers: StakeTier[];
   stakes: Stake[];
   summary: StakingSummary;
+}
+
+export interface DepositRow {
+  id: number;
+  status: string;
+  credited: boolean;
+  amount: number;
+  originAsset: string | null;
+  originTxHash: string | null;
+  createdAt: string;
+}
+
+export interface DepositInfo {
+  enabled: boolean;
+  address?: string;
+  originAsset?: string;
+  originChainId?: number;
+  minDeposit?: number;
+  rate?: number;
+  note?: string;
+  message?: string;
+  deposits: DepositRow[];
 }

@@ -38,6 +38,8 @@ model User {
   withdrawals     Withdrawal[]
   ledger          LedgerEntry[]
   stakes          Stake[]
+  deposits        Deposit[]
+  depositAddress  DepositAddress?
 
   @@index([referredById])
 }
@@ -96,9 +98,68 @@ model Withdrawal {
   processedAt DateTime?
   error       String?
 
+  // Dextopus off-ramp. When a withdrawal converts ICE USD -> the user's chosen
+  // token, these capture where it goes and the Dextopus request the treasury
+  // funds. `dextopusRequestId` is polled to confirm final delivery.
+  destChainId            Int?
+  destAsset              String?
+  dextopusRequestId      String?
+  dextopusDepositAddress String?
+
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
+  @@index([status])
+}
+
+// Maps a user's static Dextopus deposit address back to the user, so an
+// incoming deposit webhook (which only carries the address) credits the right
+// account. One stable address per user (Dextopus mints it deterministically
+// per origin/settlement tuple); stored lowercased.
+model DepositAddress {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @unique
+  address    String   @unique
+  dextopusId String?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([address])
+}
+
+// A Dextopus-powered on-ramp deposit. The user is given a per-user static
+// deposit address; they send USDT to it and Dextopus settles it (1 USDT = 1 ICE
+// USD) to the platform treasury. A completed deposit credits the user's
+// withdrawable `balance` exactly once, anchored on `dextopusId` for idempotency
+// (the same deposit can arrive via both the webhook and status polling).
+model Deposit {
+  id             Int      @id @default(autoincrement())
+  userId         Int
+  // Dextopus deposit/settlement identifiers. `depositAddress` is where the user
+  // sends funds; `dextopusId` is Dextopus's own deposit id, unique so a deposit
+  // is credited only once no matter how many times we see it.
+  depositAddress String
+  dextopusId     String?  @unique
+  status         String   @default("awaiting") // awaiting | pending | completed | failed | refunded
+  credited       Boolean  @default(false)
+
+  // What the user sent, and what settled to the treasury (USD == ICE USD 1:1).
+  originAsset       String?
+  originChainId     Int?
+  originAmount      Float?
+  originTxHash      String?
+  settlementAmount  Float?
+  settlementTxHash  String?
+  creditedAmount    Float    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([depositAddress])
   @@index([status])
 }
 
@@ -158,7 +219,7 @@ model LedgerEntry {
   id          Int      @id @default(autoincrement())
   userId      Int
   amount      Float    // positive = credit, negative = debit
-  reason      String   // "signup_bonus" | "task" | "referral" | "withdrawal" | "stake" | "stake_reward" | "unstake"
+  reason      String   // "signup_bonus" | "task" | "referral" | "deposit" | "withdrawal" | "withdrawal_refund" | "stake" | "stake_reward" | "unstake"
   meta        String?  // optional JSON string
   createdAt   DateTime @default(now())
 

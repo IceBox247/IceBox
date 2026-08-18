@@ -14,10 +14,15 @@ reference, rebuilt with the **IceBox** ice-blue brand.
   (repeatable), each crediting USDT. Server is the source of truth.
 - **Referrals** — per-invite reward, shareable deep link, live stats and a
   **Top 100 leaderboard** with a prize table.
+- **Deposit & withdraw (Dextopus)** — users deposit **USDT** to a per-user
+  address and it's credited as **ICE USD** 1:1; withdrawals convert ICE USD back
+  to USDT and deliver it to the user's external wallet, all routed through the
+  [Dextopus](https://dextopus.gitbook.io/dextopus-docs) cross-chain rail.
 - **Stake to Earn** — lock ICE USD into one of four amount-range sections
   ($1–500, $501–2k, $2k–5k, $5k–10k), earn a daily reward, claim anytime and
-  unstake at maturity. Every spec (APY, daily rate, lock duration, ranges) is
-  set from the Vercel env — see **Configuration** below.
+  unstake at maturity. Earnings and matured principal land in the withdrawable
+  ICE USD balance. Every spec (APY, daily rate, lock duration, ranges) is set
+  from the Vercel env — see **Configuration** below.
 - **Withdraw flow** — minimum-withdrawal gate ("Not Enough Balance → Earn More")
   and multi-network payout requests (TON / TRC20 / BEP20).
 - **Menu & History sheets** — refresh balance, withdrawal history, invite friends.
@@ -93,13 +98,16 @@ All `/api/*` routes require the header `Authorization: tma <initData>`.
 | POST   | `/api/staking/stake`      | Open a position (`{ tier, amount }`)  |
 | POST   | `/api/staking/:id/claim`  | Sweep accrued rewards to balance      |
 | POST   | `/api/staking/:id/unstake`| Return principal after maturity       |
+| GET    | `/api/deposits`           | Dextopus deposit address + history    |
+| POST   | `/api/deposits/refresh`   | Reconcile deposits with Dextopus      |
+| POST   | `/api/webhooks/dextopus`  | Dextopus deposit webhook (HMAC, no auth) |
 
 ## 🗄️ Data model
 
 `User` (balance, totalEarned, referral graph) · `Task` / `TaskCompletion` ·
-`Withdrawal` · `Stake` (locked stake-to-earn position) · `LedgerEntry`
-(immutable audit trail of every balance change).
-See [`server/prisma/schema.prisma`](server/prisma/schema.prisma).
+`Withdrawal` · `Stake` (locked stake-to-earn position) · `Deposit` /
+`DepositAddress` (Dextopus on-ramp) · `LedgerEntry` (immutable audit trail of
+every balance change). See [`server/prisma/schema.prisma`](server/prisma/schema.prisma).
 
 ## ⚙️ Configuration (`.env`)
 
@@ -113,6 +121,7 @@ See [`server/prisma/schema.prisma`](server/prisma/schema.prisma).
 | `SIGNUP_BONUS`       | Welcome credit for new users (default 0.30)        |
 | `STAKING_ENABLED`    | Master switch for Stake to Earn (default on)       |
 | `STAKE_S1..S4_*`     | Per-section specs — see below                      |
+| `DEXTOPUS_*`         | USDT ↔ ICE USD deposits/withdrawals — see below     |
 | `DEV_ALLOW_UNSIGNED` | Bypass initData for browser testing (**dev only**) |
 
 ### Stake to Earn sections
@@ -133,6 +142,28 @@ anything you omit falls back to the built-in default.
 Specs are snapshot onto each position when it's opened, so re-tuning a section
 never re-prices stakes that are already running. Full list with defaults is in
 [`.env.example`](.env.example).
+
+### Dextopus deposits & withdrawals
+
+The on/off-ramp is powered by [Dextopus](https://dextopus.gitbook.io/dextopus-docs).
+
+**Deposits (on-ramp).** Set `DEXTOPUS_ENABLED=true`, `DEXTOPUS_API_KEY`,
+`TREASURY_ADDRESS` and point a Dextopus webhook at `/api/webhooks/dextopus`
+(signed with `DEXTOPUS_WEBHOOK_SECRET`). Each user gets a stable deposit address
+(`POST /api/deposit/static/addresses`); USDT sent to it settles to the treasury
+and credits the user's ICE USD balance 1:1. Completed deposits are credited
+exactly once (idempotent on the Dextopus deposit id), via the webhook or a poll
+reconcile when the Deposit sheet opens.
+
+**Withdrawals (off-ramp).** Set `DEXTOPUS_WITHDRAW_ENABLED=true` and fund the
+treasury signer (`PAYOUT_PRIVATE_KEY`) with USDT + gas. The
+`/api/cron/dextopus-payouts` job creates a Dextopus quote
+(`POST /api/deposit/quote`, `recipient` = the user's wallet), sends USDT from the
+treasury to the returned address, then polls `/api/deposit/status` and marks the
+withdrawal paid once Dextopus confirms delivery. It reuses the direct-payout
+safety model (atomic claim, hash recorded before confirm, no auto-retry of
+in-flight rows). Leave it off until the treasury is funded and tested. Full env
+list is in [`.env.example`](.env.example).
 
 ## 🔐 Security notes
 

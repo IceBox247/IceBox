@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma, money } from '../db';
-import { config } from '../config';
+import { config, dextopusReady } from '../config';
 import { publicUser } from '../services/users';
 
 export const userRouter = Router();
@@ -40,6 +40,9 @@ userRouter.get('/me', async (req, res) => {
       minWithdrawal: config.minWithdrawal,
       botUsername: config.botUsername,
       stakingEnabled: config.staking.enabled,
+      depositEnabled: dextopusReady,
+      minDeposit: config.dextopus.minDeposit,
+      withdrawEnabled: config.dextopus.withdrawEnabled,
     },
     referralLink: `https://t.me/${config.botUsername}?startapp=ref_${user.referralCode}`,
   });

@@ -2,6 +2,7 @@ import { useStore } from '../store';
 import { Mascot } from '../components/Mascot';
 import {
   UpArrowIcon,
+  DownArrowIcon,
   ClockIcon,
   ChevronRightIcon,
   WalletIcon,
@@ -16,10 +17,11 @@ import type { Tab } from '../components/BottomNav';
 interface Props {
   onWithdraw: () => void;
   onHistory: () => void;
+  onDeposit: () => void;
   onNavigate: (t: Tab) => void;
 }
 
-export function Home({ onWithdraw, onHistory, onNavigate }: Props) {
+export function Home({ onWithdraw, onHistory, onDeposit, onNavigate }: Props) {
   const { me } = useStore();
   if (!me) return null;
   const { overview } = me;
@@ -61,13 +63,24 @@ export function Home({ onWithdraw, onHistory, onNavigate }: Props) {
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-3">
-          <button onClick={onWithdraw} className="btn-primary py-4">
-            <UpArrowIcon width={20} height={20} /> Withdraw
-          </button>
+          {me.config.depositEnabled ? (
+            <button onClick={onDeposit} className="btn-primary py-4">
+              <DownArrowIcon width={20} height={20} /> Deposit
+            </button>
+          ) : (
+            <button onClick={onWithdraw} className="btn-primary py-4">
+              <UpArrowIcon width={20} height={20} /> Withdraw
+            </button>
+          )}
           <button onClick={onHistory} className="btn-ghost py-4">
             <ClockIcon width={20} height={20} /> History
           </button>
         </div>
+        {me.config.depositEnabled && (
+          <button onClick={onWithdraw} className="btn-ghost mt-3 w-full py-4">
+            <UpArrowIcon width={20} height={20} /> Withdraw to USDT
+          </button>
+        )}
 
         {/* Progress toward the withdrawal minimum, so the gate is never a surprise. */}
         {canWithdraw ? (
