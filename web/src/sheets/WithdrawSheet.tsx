@@ -47,9 +47,14 @@ export function WithdrawSheet({
     }
     setSubmitting(true);
     try {
-      await api.withdraw(amt, addr, network);
+      const res = await api.withdraw(amt, addr, network);
       haptic('success');
-      toast.show('Withdrawal requested 🎉', 'success');
+      toast.show(
+        res.withdrawal?.status === 'processing'
+          ? 'Withdrawal sent — arriving shortly 🚀'
+          : 'Withdrawal requested 🎉',
+        'success',
+      );
       await refreshMe();
       setAddress('');
       setAmount('');

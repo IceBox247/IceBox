@@ -26,8 +26,17 @@ export function DepositSheet({ open, onClose }: { open: boolean; onClose: () => 
         if (!cancelled) setLoading(false);
       }
     })();
+
+    // Auto-detect the incoming deposit while the sheet is open: each poll runs a
+    // Dextopus reconcile server-side, so a sent USDT is credited within seconds
+    // without the user tapping anything.
+    const timer = setInterval(() => {
+      refreshDeposit().catch(() => {});
+    }, 7000);
+
     return () => {
       cancelled = true;
+      clearInterval(timer);
     };
   }, [open, refreshDeposit]);
 

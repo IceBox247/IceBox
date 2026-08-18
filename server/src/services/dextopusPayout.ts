@@ -168,6 +168,103 @@ export async function runDextopusPayouts(): Promise<DextopusPayoutResult> {
 }
 
 /**
+ * Process ONE withdrawal immediately, at request time, so withdrawals are
+ * instant instead of waiting for the cron. Claims the row, creates a Dextopus
+ * quote, and BROADCASTS the treasury's USDT transfer — returning as soon as the
+ * tx is submitted (no confirmation wait, to stay inside the function budget).
+ * Delivery is finalised by `pollDextopusWithdrawals` (run on view + daily cron).
+ *
+ * Reuses the same safety guards as the batch worker. Returns a compact result
+ * the withdrawal route can hand straight back to the client.
+ */
+export async function processWithdrawalInstant(withdrawalId: number): Promise<{
+  ok: boolean;
+  status: string;
+  txHash?: string;
+  requestId?: string;
+  reason?: string;
+}> {
+  if (!dextopusWithdrawReady) return { ok: false, status: 'pending', reason: 'not_configured' };
+
+  const w = await prisma.withdrawal.findUnique({ where: { id: withdrawalId } });
+  if (!w) return { ok: false, status: 'missing', reason: 'not_found' };
+  if (w.status !== 'pending') return { ok: false, status: w.status, reason: 'not_pending' };
+  if (w.amount > config.payout.maxPerWithdrawal) {
+    return { ok: false, status: 'pending', reason: 'over_auto_limit' };
+  }
+
+  // Atomic claim so the cron and this call can never both send the same row.
+  const claim = await prisma.withdrawal.updateMany({
+    where: { id: w.id, status: 'pending' },
+    data: { status: 'processing' },
+  });
+  if (claim.count !== 1) return { ok: false, status: 'processing', reason: 'claimed_elsewhere' };
+
+  const provider = new ethers.JsonRpcProvider(config.payout.rpcUrl);
+  const wallet = new ethers.Wallet(config.payout.privateKey, provider);
+  const usdt = new ethers.Contract(config.dextopus.usdtAddress, ERC20_ABI, wallet);
+
+  try {
+    const decimals = Number(await usdt.decimals());
+    const amountUnits = ethers.parseUnits(w.amount.toFixed(decimals), decimals);
+
+    const [bal, gas] = await Promise.all([
+      usdt.balanceOf(wallet.address) as Promise<bigint>,
+      provider.getBalance(wallet.address),
+    ]);
+    // No gas or no float: release the claim back to `pending` (nothing was sent)
+    // so a later run can pay it once the treasury is topped up.
+    if (gas === 0n) {
+      await prisma.withdrawal.update({ where: { id: w.id }, data: { status: 'pending' } });
+      return { ok: false, status: 'pending', reason: 'treasury_no_gas' };
+    }
+    if (bal < amountUnits) {
+      await refund(w.id, w.userId, w.amount, 'treasury is out of USDT — please top it up');
+      return { ok: false, status: 'rejected', reason: 'insufficient_float' };
+    }
+
+    const quote = await createWithdrawalQuote({
+      originChainId: config.dextopus.withdrawOriginChainId,
+      originAsset: config.dextopus.withdrawOriginAsset,
+      destinationChainId: w.destChainId ?? config.dextopus.withdrawDestChainId,
+      destinationAsset: w.destAsset ?? config.dextopus.withdrawDestAsset,
+      amount: amountUnits.toString(),
+      recipient: w.address,
+      refundTo: config.dextopus.refundAddress,
+    });
+    await prisma.withdrawal.update({
+      where: { id: w.id },
+      data: { dextopusRequestId: quote.depositRequestId, dextopusDepositAddress: quote.depositAddress },
+    });
+
+    const nonce = await provider.getTransactionCount(wallet.address, 'pending');
+    // transfer() resolves once the tx is broadcast — fast enough to return now.
+    const tx = await usdt.transfer(quote.depositAddress, amountUnits, { nonce });
+    await prisma.withdrawal.update({ where: { id: w.id }, data: { txHash: tx.hash } });
+
+    return {
+      ok: true,
+      status: 'processing',
+      txHash: tx.hash,
+      requestId: quote.depositRequestId ?? undefined,
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const current = await prisma.withdrawal.findUnique({ where: { id: w.id } });
+    if (current?.txHash) {
+      // Funds may be in flight — never refund. Leave for the poll to confirm.
+      await prisma.withdrawal.update({
+        where: { id: w.id },
+        data: { error: `unconfirmed: ${msg}`.slice(0, 500) },
+      });
+      return { ok: true, status: 'processing', txHash: current.txHash };
+    }
+    await refund(w.id, w.userId, w.amount, msg);
+    return { ok: false, status: 'rejected', reason: msg };
+  }
+}
+
+/**
  * Confirm delivery for `processing` withdrawals that carry a Dextopus request
  * id, marking them `paid` once Dextopus reports completion. Failures are left
  * `processing` with an error note for a human, rather than auto-refunded (the
