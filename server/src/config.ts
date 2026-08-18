@@ -69,6 +69,34 @@ export const config = {
   referralReward: num('REFERRAL_REWARD', 2),
   minWithdrawal: num('MIN_WITHDRAWAL', 18),
   signupBonus: num('SIGNUP_BONUS', 0.3),
+
+  payout: {
+    // Master switch. Payouts stay off until this is explicitly "true", so a
+    // half-configured deployment can never start sending tokens.
+    enabled: process.env.PAYOUT_ENABLED === 'true',
+    // ICE USD token contract on BSC.
+    tokenAddress: process.env.TOKEN_ADDRESS ?? '',
+    // Hot wallet that holds the float and signs transfers. Keep it topped up
+    // with only a few days of payouts — anyone with dashboard access can read
+    // this value.
+    privateKey: process.env.PAYOUT_PRIVATE_KEY ?? '',
+    rpcUrl: process.env.BSC_RPC_URL ?? 'https://bsc-dataseed.binance.org',
+    // How many tokens one unit of app balance is worth.
+    tokensPerUnit: num('TOKENS_PER_UNIT', 1),
+    // Ceiling on a single automated payout; anything larger is left pending
+    // for manual review rather than sent unattended.
+    maxPerWithdrawal: num('MAX_AUTO_PAYOUT', 500),
+    // Rows handled per cron run, to stay inside the function time limit.
+    batchSize: num('PAYOUT_BATCH_SIZE', 5),
+    // Shared secret Vercel Cron presents to /api/cron/payouts.
+    cronSecret: process.env.CRON_SECRET ?? '',
+  },
 };
+
+/** Payouts only run when every required piece is present. */
+export const payoutReady =
+  config.payout.enabled &&
+  /^0x[a-fA-F0-9]{40}$/.test(config.payout.tokenAddress) &&
+  config.payout.privateKey.length > 0;
 
 export const hasBot = config.botToken.length > 0;

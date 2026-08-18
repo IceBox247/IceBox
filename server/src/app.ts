@@ -11,6 +11,7 @@ import { tasksRouter } from './routes/tasks';
 import { referralsRouter } from './routes/referrals';
 import { withdrawalsRouter } from './routes/withdrawals';
 import { tokensRouter } from './routes/tokens';
+import { cronRouter } from './routes/cron';
 import { createBot } from './telegram/bot';
 
 /**
@@ -56,6 +57,10 @@ export function createApp(): Express {
 
   // Public token registry (used by the wallet-browser creator pages — no Telegram).
   app.use('/api/tokens', tokensRouter);
+
+  // Vercel Cron / operator endpoints — before auth, since neither caller has
+  // Mini App initData. Guarded by CRON_SECRET instead.
+  app.use('/api/cron', cronRouter);
 
   // Everything below requires a valid Telegram Mini App user.
   app.use('/api', authenticate);

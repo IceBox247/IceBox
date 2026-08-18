@@ -88,9 +88,17 @@ model Withdrawal {
   status      String   @default("pending") // pending | processing | paid | rejected
   createdAt   DateTime @default(now())
 
+  // Payout bookkeeping. `txHash` is the on-chain proof and the idempotency
+  // anchor: a row that reaches `processing` is never auto-retried, because a
+  // crash between broadcasting and recording could otherwise pay twice.
+  txHash      String?
+  processedAt DateTime?
+  error       String?
+
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
+  @@index([status])
 }
 
 // Registry of tokens launched through the IceBox creator (any chain).
