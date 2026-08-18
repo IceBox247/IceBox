@@ -1,11 +1,12 @@
-import { HomeIcon, TasksIcon, ReferralsIcon } from './icons';
+import { HomeIcon, TasksIcon, ReferralsIcon, StakeIcon } from './icons';
 import { haptic } from '../telegram';
 
-export type Tab = 'home' | 'tasks' | 'referrals';
+export type Tab = 'home' | 'tasks' | 'stake' | 'referrals';
 
 const items: { key: Tab; label: string; Icon: typeof HomeIcon }[] = [
   { key: 'home', label: 'Home', Icon: HomeIcon },
   { key: 'tasks', label: 'Tasks', Icon: TasksIcon },
+  { key: 'stake', label: 'Stake', Icon: StakeIcon },
   { key: 'referrals', label: 'Referrals', Icon: ReferralsIcon },
 ];
 
@@ -27,7 +28,7 @@ export function BottomNav({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => v
               }`}
             >
               <span
-                className={`grid place-items-center rounded-xl px-5 py-1.5 transition ${
+                className={`grid place-items-center rounded-xl px-4 py-1.5 transition ${
                   active ? 'bg-ice-400/15 shadow-glow' : ''
                 }`}
               >

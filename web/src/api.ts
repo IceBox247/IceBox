@@ -5,6 +5,12 @@ import type {
   ClaimResult,
   ReferralsResponse,
   Withdrawal,
+  Stake,
+  StakingResponse,
+  DepositInfo,
+  DepositRow,
+  DepositCatalog,
+  DepositAddressInfo,
 } from './types';
 
 const BASE = import.meta.env.VITE_API_BASE || '';
@@ -64,4 +70,34 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ amount, address, network }),
     }),
+  staking: () => request<StakingResponse>('/staking'),
+  stake: (tier: string, amount: number) =>
+    request<{ ok: boolean; balance: number; stake: Stake }>('/staking/stake', {
+      method: 'POST',
+      body: JSON.stringify({ tier, amount }),
+    }),
+  claimStake: (id: number) =>
+    request<{ ok: boolean; reward: number; balance: number; totalEarned: number; stake: Stake }>(
+      `/staking/${id}/claim`,
+      { method: 'POST' },
+    ),
+  unstake: (id: number) =>
+    request<{
+      ok: boolean;
+      principal: number;
+      reward: number;
+      payout: number;
+      balance: number;
+      totalEarned: number;
+      stake: Stake;
+    }>(`/staking/${id}/unstake`, { method: 'POST' }),
+  deposits: () => request<DepositInfo>('/deposits'),
+  depositTokens: () => request<DepositCatalog>('/deposits/tokens'),
+  depositAddress: (chainId: number, asset: string) =>
+    request<DepositAddressInfo>('/deposits/address', {
+      method: 'POST',
+      body: JSON.stringify({ chainId, asset }),
+    }),
+  refreshDeposits: () =>
+    request<{ ok: boolean; deposits: DepositRow[] }>('/deposits/refresh', { method: 'POST' }),
 };

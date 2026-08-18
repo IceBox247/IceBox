@@ -8,17 +8,24 @@ import {
   type ReactNode,
 } from 'react';
 import { api, ApiError } from './api';
-import type { MeResponse, Task } from './types';
+import type { MeResponse, Task, StakingResponse, DepositInfo } from './types';
 
 interface Store {
   loading: boolean;
   error: string | null;
   me: MeResponse | null;
   tasks: Task[];
+  staking: StakingResponse | null;
+  deposit: DepositInfo | null;
   refreshAll: () => Promise<void>;
   refreshMe: () => Promise<void>;
   refreshTasks: () => Promise<void>;
+  refreshStaking: () => Promise<void>;
+  refreshDeposit: () => Promise<void>;
   claimTask: (id: number) => Promise<{ reward: number; completed: boolean }>;
+  stake: (tier: string, amount: number) => Promise<void>;
+  claimStake: (id: number) => Promise<{ reward: number }>;
+  unstake: (id: number) => Promise<{ payout: number; reward: number }>;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -28,6 +35,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [me, setMe] = useState<MeResponse | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [staking, setStaking] = useState<StakingResponse | null>(null);
+  const [deposit, setDeposit] = useState<DepositInfo | null>(null);
 
   const refreshMe = useCallback(async () => {
     const res = await api.me();
@@ -39,10 +48,51 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setTasks(res.tasks);
   }, []);
 
+  const refreshStaking = useCallback(async () => {
+    const res = await api.staking();
+    setStaking(res);
+  }, []);
+
+  // Fetched on demand (opening the Deposit sheet) — it triggers a Dextopus
+  // reconcile, so we keep it off the initial load. Also refreshes `me` so a
+  // just-credited deposit shows up in the balance.
+  const refreshDeposit = useCallback(async () => {
+    const res = await api.deposits();
+    setDeposit(res);
+    try {
+      const me = await api.me();
+      setMe(me);
+    } catch {
+      /* balance refresh is best-effort */
+    }
+  }, []);
+
+  /** Patch the cached balance/totalEarned into `me` after a staking action. */
+  const patchBalance = useCallback((balance: number, totalEarned?: number) => {
+    setMe((prev) =>
+      prev
+        ? {
+            ...prev,
+            user: {
+              ...prev.user,
+              balance,
+              totalEarned: totalEarned ?? prev.user.totalEarned,
+            },
+            overview: {
+              ...prev.overview,
+              balance,
+              available: balance,
+              totalEarned: totalEarned ?? prev.overview.totalEarned,
+            },
+          }
+        : prev,
+    );
+  }, []);
+
   const refreshAll = useCallback(async () => {
     try {
       setError(null);
-      await Promise.all([refreshMe(), refreshTasks()]);
+      await Promise.all([refreshMe(), refreshTasks(), refreshStaking()]);
     } catch (e) {
       const msg =
         e instanceof ApiError
@@ -79,6 +129,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return { reward: res.reward, completed: res.completed };
   }, []);
 
+  const stake = useCallback(
+    async (tier: string, amount: number) => {
+      const res = await api.stake(tier, amount);
+      patchBalance(res.balance);
+      await refreshStaking();
+    },
+    [patchBalance, refreshStaking],
+  );
+
+  const claimStake = useCallback(
+    async (id: number) => {
+      const res = await api.claimStake(id);
+      patchBalance(res.balance, res.totalEarned);
+      await refreshStaking();
+      return { reward: res.reward };
+    },
+    [patchBalance, refreshStaking],
+  );
+
+  const unstake = useCallback(
+    async (id: number) => {
+      const res = await api.unstake(id);
+      patchBalance(res.balance, res.totalEarned);
+      await refreshStaking();
+      return { payout: res.payout, reward: res.reward };
+    },
+    [patchBalance, refreshStaking],
+  );
+
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -88,8 +167,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [refreshAll]);
 
   const value = useMemo<Store>(
-    () => ({ loading, error, me, tasks, refreshAll, refreshMe, refreshTasks, claimTask }),
-    [loading, error, me, tasks, refreshAll, refreshMe, refreshTasks, claimTask],
+    () => ({
+      loading,
+      error,
+      me,
+      tasks,
+      staking,
+      deposit,
+      refreshAll,
+      refreshMe,
+      refreshTasks,
+      refreshStaking,
+      refreshDeposit,
+      claimTask,
+      stake,
+      claimStake,
+      unstake,
+    }),
+    [
+      loading,
+      error,
+      me,
+      tasks,
+      staking,
+      deposit,
+      refreshAll,
+      refreshMe,
+      refreshTasks,
+      refreshStaking,
+      refreshDeposit,
+      claimTask,
+      stake,
+      claimStake,
+      unstake,
+    ],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

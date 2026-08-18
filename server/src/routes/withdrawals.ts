@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma, money } from '../db';
-import { config } from '../config';
+import { config, dextopusWithdrawReady } from '../config';
+import { processWithdrawalInstant, pollDextopusWithdrawals } from '../services/dextopusPayout';
 
 export const withdrawalsRouter = Router();
 
@@ -10,6 +11,17 @@ const EVM_ADDRESS = /^0x[a-fA-F0-9]{40}$/;
 /** GET /api/withdrawals — the user's payout history, newest first. */
 withdrawalsRouter.get('/', async (req, res) => {
   const user = req.user!;
+
+  // Confirm any in-flight Dextopus withdrawals right away, so a user who just
+  // withdrew sees it flip from "processing" to "paid" without waiting for cron.
+  if (dextopusWithdrawReady) {
+    try {
+      await pollDextopusWithdrawals();
+    } catch {
+      /* best-effort */
+    }
+  }
+
   const withdrawals = await prisma.withdrawal.findMany({
     where: { userId: user.id },
     orderBy: { createdAt: 'desc' },
@@ -83,7 +95,17 @@ withdrawalsRouter.post('/', async (req, res) => {
       });
 
       const withdrawal = await tx.withdrawal.create({
-        data: { userId: user.id, amount, address, network, status: 'pending' },
+        data: {
+          userId: user.id,
+          amount,
+          address,
+          network,
+          status: 'pending',
+          // Destination for the Dextopus off-ramp (ICE USD -> USDT). Defaults to
+          // USDT on BSC; the cron worker funds the Dextopus quote from here.
+          destChainId: config.dextopus.withdrawDestChainId,
+          destAsset: config.dextopus.withdrawDestAsset,
+        },
       });
 
       await tx.ledgerEntry.create({
@@ -110,15 +132,46 @@ withdrawalsRouter.post('/', async (req, res) => {
       });
     }
 
+    // Instant payout: process this withdrawal now instead of queuing for cron.
+    // If the treasury can't cover it the helper refunds the balance and marks
+    // the row rejected; surface that to the user rather than a silent pending.
+    let status = result.withdrawal.status;
+    let txHash: string | null = null;
+    let balance = result.balance;
+    if (dextopusWithdrawReady) {
+      try {
+        const instant = await processWithdrawalInstant(result.withdrawal.id);
+        status = instant.status;
+        txHash = instant.txHash ?? null;
+        if (instant.status === 'rejected') {
+          const fresh = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+          balance = money(fresh.balance);
+          return res.status(502).json({
+            error: 'payout_failed',
+            balance,
+            message:
+              instant.reason === 'insufficient_float'
+                ? 'Payouts are temporarily paused. Your balance was not deducted.'
+                : 'Withdrawal could not be sent right now. Your balance was refunded.',
+          });
+        }
+      } catch (e) {
+        // Leave the row for the cron/poll to reconcile; don't fail the request.
+        console.error('instant withdrawal error', e);
+      }
+    }
+
     res.json({
       ok: true,
-      balance: result.balance,
+      balance,
+      instant: dextopusWithdrawReady,
       withdrawal: {
         id: result.withdrawal.id,
         amount: money(result.withdrawal.amount),
         address: result.withdrawal.address,
         network: result.withdrawal.network,
-        status: result.withdrawal.status,
+        status,
+        txHash,
         createdAt: result.withdrawal.createdAt,
       },
     });

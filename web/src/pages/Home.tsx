@@ -2,11 +2,13 @@ import { useStore } from '../store';
 import { Mascot } from '../components/Mascot';
 import {
   UpArrowIcon,
+  DownArrowIcon,
   ClockIcon,
   ChevronRightIcon,
   WalletIcon,
   ReferralsIcon,
   TasksIcon,
+  StakeIcon,
   IceUsdCoin,
 } from '../components/icons';
 import { usdt } from '../lib/format';
@@ -15,10 +17,11 @@ import type { Tab } from '../components/BottomNav';
 interface Props {
   onWithdraw: () => void;
   onHistory: () => void;
+  onDeposit: () => void;
   onNavigate: (t: Tab) => void;
 }
 
-export function Home({ onWithdraw, onHistory, onNavigate }: Props) {
+export function Home({ onWithdraw, onHistory, onDeposit, onNavigate }: Props) {
   const { me } = useStore();
   if (!me) return null;
   const { overview } = me;
@@ -60,13 +63,24 @@ export function Home({ onWithdraw, onHistory, onNavigate }: Props) {
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-3">
-          <button onClick={onWithdraw} className="btn-primary py-4">
-            <UpArrowIcon width={20} height={20} /> Withdraw
-          </button>
+          {me.config.depositEnabled ? (
+            <button onClick={onDeposit} className="btn-primary py-4">
+              <DownArrowIcon width={20} height={20} /> Deposit
+            </button>
+          ) : (
+            <button onClick={onWithdraw} className="btn-primary py-4">
+              <UpArrowIcon width={20} height={20} /> Withdraw
+            </button>
+          )}
           <button onClick={onHistory} className="btn-ghost py-4">
             <ClockIcon width={20} height={20} /> History
           </button>
         </div>
+        {me.config.depositEnabled && (
+          <button onClick={onWithdraw} className="btn-ghost mt-3 w-full py-4">
+            <UpArrowIcon width={20} height={20} /> Withdraw to USDT
+          </button>
+        )}
 
         {/* Progress toward the withdrawal minimum, so the gate is never a surprise. */}
         {canWithdraw ? (
@@ -93,6 +107,27 @@ export function Home({ onWithdraw, onHistory, onNavigate }: Props) {
           </div>
         )}
       </div>
+
+      {/* Stake to Earn CTA */}
+      {me.config.stakingEnabled && (
+        <button
+          onClick={() => onNavigate('stake')}
+          className="card flex w-full items-center gap-4 border border-ice-400/20 p-4 text-left"
+        >
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-ice-400/15 text-ice-300">
+            <StakeIcon width={22} height={22} />
+          </span>
+          <div className="flex-1">
+            <h3 className="text-lg font-extrabold leading-tight">Stake to Earn</h3>
+            <p className="text-sm text-white/50">
+              {overview.totalStaked > 0
+                ? `${usdt(overview.totalStaked)} USD staked · earning daily`
+                : 'Lock ICE USD and earn daily rewards'}
+            </p>
+          </div>
+          <ChevronRightIcon width={18} height={18} />
+        </button>
+      )}
 
       {/* Overview */}
       <div>

@@ -37,6 +37,9 @@ model User {
   taskCompletions TaskCompletion[]
   withdrawals     Withdrawal[]
   ledger          LedgerEntry[]
+  stakes          Stake[]
+  deposits        Deposit[]
+  depositAddresses DepositAddress[]
 
   @@index([referredById])
 }
@@ -88,9 +91,81 @@ model Withdrawal {
   status      String   @default("pending") // pending | processing | paid | rejected
   createdAt   DateTime @default(now())
 
+  // Payout bookkeeping. `txHash` is the on-chain proof and the idempotency
+  // anchor: a row that reaches `processing` is never auto-retried, because a
+  // crash between broadcasting and recording could otherwise pay twice.
+  txHash      String?
+  processedAt DateTime?
+  error       String?
+
+  // Dextopus off-ramp. When a withdrawal converts ICE USD -> the user's chosen
+  // token, these capture where it goes and the Dextopus request the treasury
+  // funds. `dextopusRequestId` is polled to confirm final delivery.
+  destChainId            Int?
+  destAsset              String?
+  dextopusRequestId      String?
+  dextopusDepositAddress String?
+
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
+  @@index([status])
+}
+
+// Maps a user's static Dextopus deposit address back to the user, so an
+// incoming deposit webhook (which only carries the address) credits the right
+// account. Users can deposit any supported crypto, so there is one stable
+// address per (user, origin chain, origin asset) — Dextopus mints it
+// deterministically per origin/settlement tuple. Addresses stored lowercased.
+model DepositAddress {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  chainId    Int      // origin chain the user sends from
+  asset      String   // origin asset symbol/address the user sends
+  address    String   @unique
+  dextopusId String?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, chainId, asset])
+  @@index([userId])
+  @@index([address])
+}
+
+// A Dextopus-powered on-ramp deposit. The user is given a per-user static
+// deposit address; they send USDT to it and Dextopus settles it (1 USDT = 1 ICE
+// USD) to the platform treasury. A completed deposit credits the user's
+// withdrawable `balance` exactly once, anchored on `dextopusId` for idempotency
+// (the same deposit can arrive via both the webhook and status polling).
+model Deposit {
+  id             Int      @id @default(autoincrement())
+  userId         Int
+  // Dextopus deposit/settlement identifiers. `depositAddress` is where the user
+  // sends funds; `dextopusId` is Dextopus's own deposit id, unique so a deposit
+  // is credited only once no matter how many times we see it.
+  depositAddress String
+  dextopusId     String?  @unique
+  status         String   @default("awaiting") // awaiting | pending | completed | failed | refunded
+  credited       Boolean  @default(false)
+
+  // What the user sent, and what settled to the treasury (USD == ICE USD 1:1).
+  originAsset       String?
+  originChainId     Int?
+  originAmount      Float?
+  originTxHash      String?
+  settlementAmount  Float?
+  settlementTxHash  String?
+  creditedAmount    Float    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([depositAddress])
+  @@index([status])
 }
 
 // Registry of tokens launched through the IceBox creator (any chain).
@@ -112,12 +187,44 @@ model CreatedToken {
   @@index([creator])
 }
 
+// A stake-to-earn position. The user moves withdrawable `balance` into a
+// locked `Stake`; rewards accrue at the tier's daily rate for the lock window
+// and can be claimed to `balance` anytime, while the principal stays locked
+// until `maturesAt`.
+//
+// The rate figures and lock length are SNAPSHOT onto the row at stake time, so
+// re-tuning the tier specs (in the Vercel env) later never re-prices positions
+// that are already open.
+model Stake {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  tier        String   // section key, e.g. "s1" | "s2" | "s3" | "s4"
+  principal   Float    // amount staked, in whole USD
+  apy         Float    // headline APY snapshot, for display (e.g. 15 = 15%)
+  dailyRate   Float    // % per day at stake time — this is what actually accrues
+  lockDays    Int      // lock/earn window at stake time, in days
+  status      String   @default("active") // active | unstaked
+  claimed     Float    @default(0) // lifetime rewards already paid out from this stake
+
+  startedAt   DateTime @default(now())
+  // Accrual anchor: rewards accrue from here. Reset to `now` on every claim so a
+  // claimed reward is never paid twice.
+  lastClaimAt DateTime @default(now())
+  maturesAt   DateTime // startedAt + lockDays; accrual stops and principal unlocks here
+  unstakedAt  DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+}
+
 // Immutable audit trail of every balance change.
 model LedgerEntry {
   id          Int      @id @default(autoincrement())
   userId      Int
   amount      Float    // positive = credit, negative = debit
-  reason      String   // "signup_bonus" | "task" | "referral" | "withdrawal"
+  reason      String   // "signup_bonus" | "task" | "referral" | "deposit" | "withdrawal" | "withdrawal_refund" | "stake" | "stake_reward" | "unstake"
   meta        String?  // optional JSON string
   createdAt   DateTime @default(now())
 
