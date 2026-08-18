@@ -159,12 +159,52 @@ export interface DepositRow {
 
 export interface DepositInfo {
   enabled: boolean;
-  address?: string;
-  originAsset?: string;
-  originChainId?: number;
   minDeposit?: number;
   rate?: number;
   note?: string;
   message?: string;
   deposits: DepositRow[];
+}
+
+export interface FeaturedToken {
+  chainId: number;
+  chainName: string;
+  family: string;
+  symbol: string;
+  name: string;
+  asset: string;
+  decimals: number;
+  logoURI: string;
+}
+
+export interface CatalogToken {
+  id: string;
+  symbol: string;
+  name: string;
+  address: string | null;
+  decimals: number;
+  logoURI: string;
+}
+
+export interface CatalogChain {
+  chainId: number;
+  name: string;
+  family: string;
+  supportsStaticAddress: boolean;
+  tokens: CatalogToken[];
+}
+
+export interface DepositCatalog {
+  enabled: boolean;
+  featured: FeaturedToken[];
+  chains: CatalogChain[];
+}
+
+export interface DepositAddressInfo {
+  address: string;
+  originAsset: string;
+  originChainId: number;
+  minDeposit: number;
+  rate: number;
+  note?: string;
 }

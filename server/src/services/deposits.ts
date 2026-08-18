@@ -3,43 +3,112 @@ import { prisma, money } from '../db';
 import { config } from '../config';
 import {
   createDepositAddress,
+  fetchDepositTokens,
   listDeposits,
   normalizeDeposit,
   type NormalizedDeposit,
+  type CatalogChain,
 } from './dextopus';
 
 /**
- * Return the user's stable Dextopus deposit address, minting it once and
- * caching the mapping (address -> user) so incoming webhooks can be credited to
- * the right account.
+ * Return (minting once) the user's stable deposit address for a given origin
+ * chain + asset, and cache the address -> user mapping so an incoming webhook
+ * credits the right account. Defaults to the configured origin (USDT on BSC).
  */
-export async function getOrCreateDepositAddress(user: User): Promise<{
+export async function getOrCreateDepositAddress(
+  user: User,
+  origin?: { chainId: number; asset: string },
+): Promise<{
   address: string;
   originAsset: string;
   originChainId: number;
   minDeposit: number;
   rate: number;
 }> {
-  const meta = {
-    originAsset: config.dextopus.originAsset,
-    originChainId: config.dextopus.originChainId,
-    minDeposit: config.dextopus.minDeposit,
-    rate: config.dextopus.rate,
-  };
+  const chainId = origin?.chainId ?? config.dextopus.originChainId;
+  const asset = origin?.asset ?? config.dextopus.originAsset;
+  const meta = { originAsset: asset, originChainId: chainId, minDeposit: config.dextopus.minDeposit, rate: config.dextopus.rate };
 
-  const existing = await prisma.depositAddress.findUnique({ where: { userId: user.id } });
+  const existing = await prisma.depositAddress.findUnique({
+    where: { userId_chainId_asset: { userId: user.id, chainId, asset } },
+  });
   if (existing) return { address: existing.address, ...meta };
 
-  const { depositAddress, dextopusId } = await createDepositAddress(String(user.id));
+  const { depositAddress, dextopusId } = await createDepositAddress(String(user.id), { chainId, asset });
   const addr = depositAddress.toLowerCase();
 
   // upsert guards the astronomically rare race of two mint calls at once.
   const row = await prisma.depositAddress.upsert({
-    where: { userId: user.id },
-    create: { userId: user.id, address: addr, dextopusId: dextopusId ?? undefined },
+    where: { userId_chainId_asset: { userId: user.id, chainId, asset } },
+    create: { userId: user.id, chainId, asset, address: addr, dextopusId: dextopusId ?? undefined },
     update: {},
   });
   return { address: row.address, ...meta };
+}
+
+// Majors shown at the forefront of the picker, in this order. Matched by symbol.
+const FEATURED_SYMBOLS = ['USDT', 'USDC', 'BTC', 'ETH', 'BNB', 'SOL', 'TRX', 'POL', 'MATIC', 'AVAX', 'DAI'];
+// Chain popularity, to pick the best instance of a featured symbol first.
+const POPULAR_CHAINS = [56, 1, 8453, 42161, 10, 137, 43114, 792703809, 8253038, 728126428];
+
+export interface FeaturedToken {
+  chainId: number;
+  chainName: string;
+  family: string;
+  symbol: string;
+  name: string;
+  asset: string; // what we pass as originAsset (contract address, or symbol)
+  decimals: number;
+  logoURI: string;
+}
+
+/**
+ * The deposit catalog for the picker: a curated "featured majors" list up
+ * front, plus every static-address-capable chain/token so the user can pick
+ * literally any supported crypto.
+ */
+export async function depositCatalog(): Promise<{
+  featured: FeaturedToken[];
+  chains: CatalogChain[];
+}> {
+  const all = await fetchDepositTokens();
+  // Only chains that can hand out a permanent deposit address are usable here.
+  const chains = all.filter((c) => c.supportsStaticAddress && c.tokens.length > 0);
+
+  const featured: FeaturedToken[] = [];
+  const seen = new Set<string>();
+  for (const symbol of FEATURED_SYMBOLS) {
+    const candidates: FeaturedToken[] = [];
+    for (const c of chains) {
+      for (const t of c.tokens) {
+        if (String(t.symbol || '').toUpperCase() !== symbol) continue;
+        candidates.push({
+          chainId: c.chainId,
+          chainName: c.name,
+          family: c.family,
+          symbol: t.symbol,
+          name: t.name,
+          asset: t.address || t.symbol,
+          decimals: t.decimals,
+          logoURI: t.logoURI,
+        });
+      }
+    }
+    candidates.sort((a, b) => {
+      const ai = POPULAR_CHAINS.indexOf(a.chainId);
+      const bi = POPULAR_CHAINS.indexOf(b.chainId);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
+    // Take up to 2 instances of each major (e.g. USDT on BSC + Tron).
+    for (const cand of candidates.slice(0, 2)) {
+      const key = `${cand.chainId}:${cand.symbol}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      featured.push(cand);
+    }
+  }
+
+  return { featured, chains };
 }
 
 /** ICE USD to credit for a settled deposit (1 USDT = rate ICE USD). */

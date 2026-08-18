@@ -39,7 +39,7 @@ model User {
   ledger          LedgerEntry[]
   stakes          Stake[]
   deposits        Deposit[]
-  depositAddress  DepositAddress?
+  depositAddresses DepositAddress[]
 
   @@index([referredById])
 }
@@ -114,17 +114,22 @@ model Withdrawal {
 
 // Maps a user's static Dextopus deposit address back to the user, so an
 // incoming deposit webhook (which only carries the address) credits the right
-// account. One stable address per user (Dextopus mints it deterministically
-// per origin/settlement tuple); stored lowercased.
+// account. Users can deposit any supported crypto, so there is one stable
+// address per (user, origin chain, origin asset) — Dextopus mints it
+// deterministically per origin/settlement tuple. Addresses stored lowercased.
 model DepositAddress {
   id         Int      @id @default(autoincrement())
-  userId     Int      @unique
+  userId     Int
+  chainId    Int      // origin chain the user sends from
+  asset      String   // origin asset symbol/address the user sends
   address    String   @unique
   dextopusId String?
   createdAt  DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
 
+  @@unique([userId, chainId, asset])
+  @@index([userId])
   @@index([address])
 }
 

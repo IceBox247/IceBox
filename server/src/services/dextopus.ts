@@ -60,19 +60,95 @@ export function normalizeDeposit(d: any): NormalizedDeposit {
   };
 }
 
+export interface CatalogToken {
+  id: string;
+  symbol: string;
+  name: string;
+  address: string | null;
+  decimals: number;
+  logoURI: string;
+}
+
+export interface CatalogChain {
+  chainId: number;
+  name: string;
+  family: 'evm' | 'solana' | 'tron' | 'bitcoin';
+  supportsStaticAddress: boolean;
+  tokens: CatalogToken[];
+}
+
+const SOLANA_CHAIN_ID = 792703809;
+const TRON_CHAIN_ID = 728126428;
+const BITCOIN_CHAIN_ID = 8253038;
+
+function classifyFamily(chainId: number, name: string): CatalogChain['family'] {
+  if (chainId === SOLANA_CHAIN_ID) return 'solana';
+  if (chainId === TRON_CHAIN_ID) return 'tron';
+  if (chainId === BITCOIN_CHAIN_ID) return 'bitcoin';
+  const n = String(name || '').toLowerCase();
+  if (n.includes('solana')) return 'solana';
+  if (n.includes('tron')) return 'tron';
+  if (n.includes('bitcoin')) return 'bitcoin';
+  return 'evm';
+}
+
 /**
- * Mint (or fetch) the static deposit address for this user. Dextopus returns
- * the same address for the same (userId, origin, settlement) tuple, so calling
- * this repeatedly is safe and cheap.
+ * The full deposit catalog: every chain + token a user can send from
+ * (GET /api/deposit/tokens). Only chains flagged `supportsStaticAddress` can be
+ * given a permanent per-user deposit address, so those are the ones we offer.
  */
-export async function createDepositAddress(userId: string): Promise<{
-  dextopusId: string | null;
-  depositAddress: string;
-}> {
+export async function fetchDepositTokens(): Promise<CatalogChain[]> {
+  const res = await fetch(`${base()}/api/deposit/tokens`, { headers: headers() });
+  if (!res.ok) throw new Error(`Catalog request failed (${res.status})`);
+  const data: any = await res.json().catch(() => ({}));
+  const rawChains: any[] = Array.isArray(data?.chains) ? data.chains : Array.isArray(data) ? data : [];
+
+  return rawChains
+    .filter((c) => c?.disabled !== true && c?.depositEnabled !== false)
+    .map((raw): CatalogChain => {
+      const chainId = Number(raw.chainId ?? raw.id);
+      const name = raw.name || raw.blockchain || '';
+      // Sister lists carry logos that solverCurrencies may lack.
+      const logoByAddr = new Map<string, string>();
+      for (const t of [...(raw.featuredTokens || []), ...(raw.erc20Currencies || [])]) {
+        const logo = t?.metadata?.logoURI;
+        if (logo && t.address) logoByAddr.set(String(t.address).toLowerCase(), logo);
+      }
+      const tokens: CatalogToken[] = (raw.solverCurrencies || []).map((t: any) => {
+        const addrKey = t.address ? String(t.address).toLowerCase() : null;
+        return {
+          id: t.id || String(t.symbol || '').toLowerCase(),
+          symbol: t.symbol,
+          name: t.name || t.symbol,
+          address: t.address ?? null,
+          decimals: t.decimals ?? 18,
+          logoURI: (addrKey && logoByAddr.get(addrKey)) || t?.metadata?.logoURI || '',
+        };
+      });
+      return {
+        chainId,
+        name,
+        family: classifyFamily(chainId, name),
+        supportsStaticAddress: raw.supportsStaticAddress !== false,
+        tokens,
+      };
+    });
+}
+
+/**
+ * Mint (or fetch) the static deposit address for this user + origin. Dextopus
+ * returns the same address for the same (userId, origin, settlement) tuple, so
+ * calling this repeatedly is safe and cheap. `origin` defaults to the
+ * configured origin (USDT on BSC) when omitted.
+ */
+export async function createDepositAddress(
+  userId: string,
+  origin?: { chainId: number; asset: string },
+): Promise<{ dextopusId: string | null; depositAddress: string }> {
   const payload = {
     userId,
-    originChainId: config.dextopus.originChainId,
-    originAsset: config.dextopus.originAsset,
+    originChainId: origin?.chainId ?? config.dextopus.originChainId,
+    originAsset: origin?.asset ?? config.dextopus.originAsset,
     settlementChainId: config.dextopus.settlementChainId,
     settlementAsset: config.dextopus.settlementAsset,
     settlementAddress: config.dextopus.treasuryAddress,

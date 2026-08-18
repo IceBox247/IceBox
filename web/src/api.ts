@@ -9,6 +9,8 @@ import type {
   StakingResponse,
   DepositInfo,
   DepositRow,
+  DepositCatalog,
+  DepositAddressInfo,
 } from './types';
 
 const BASE = import.meta.env.VITE_API_BASE || '';
@@ -90,6 +92,12 @@ export const api = {
       stake: Stake;
     }>(`/staking/${id}/unstake`, { method: 'POST' }),
   deposits: () => request<DepositInfo>('/deposits'),
+  depositTokens: () => request<DepositCatalog>('/deposits/tokens'),
+  depositAddress: (chainId: number, asset: string) =>
+    request<DepositAddressInfo>('/deposits/address', {
+      method: 'POST',
+      body: JSON.stringify({ chainId, asset }),
+    }),
   refreshDeposits: () =>
     request<{ ok: boolean; deposits: DepositRow[] }>('/deposits/refresh', { method: 'POST' }),
 };
