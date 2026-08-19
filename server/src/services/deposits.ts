@@ -73,8 +73,21 @@ export async function depositCatalog(): Promise<{
   chains: CatalogChain[];
 }> {
   const all = await fetchDepositTokens();
-  // Only chains that can hand out a permanent deposit address are usable here.
-  const chains = all.filter((c) => c.supportsStaticAddress && c.tokens.length > 0);
+  // Dextopus requires a refundTo per origin chain family. Only offer coins on
+  // families we have a refund address configured for, so every listed coin can
+  // actually mint an address (EVM defaults to the treasury; SOL/TRON/BTC need
+  // REFUND_SOL / REFUND_TRON / REFUND_BTC set to appear).
+  const familyHasRefund = (family: string) =>
+    family === 'solana'
+      ? !!config.dextopus.refundSol
+      : family === 'tron'
+        ? !!config.dextopus.refundTron
+        : family === 'bitcoin'
+          ? !!config.dextopus.refundBtc
+          : !!config.dextopus.refundEvm;
+  const chains = all.filter(
+    (c) => c.supportsStaticAddress && c.tokens.length > 0 && familyHasRefund(c.family),
+  );
 
   const featured: FeaturedToken[] = [];
   const seen = new Set<string>();
