@@ -22,7 +22,9 @@ export function createBot(): Bot | null {
       .webApp('❄️ Open IceBox Wallet', url)
       .row()
       .url('📣 Join Channel', 'https://t.me/iceboxAi')
-      .url('💸 Payouts', 'https://t.me/IceBoxPayout');
+      .row()
+      .url('💸 Payouts', 'https://t.me/IceBoxPayout')
+      .url('📥 Deposits', 'https://t.me/IceBoxDeposit');
 
     await ctx.reply(
       [

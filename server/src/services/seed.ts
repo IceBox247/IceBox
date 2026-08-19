@@ -30,6 +30,18 @@ const TASKS = [
     sortOrder: 2,
   },
   {
+    key: 'join_deposit',
+    title: 'Join IceBox Deposit',
+    subtitle: 'Join our deposit channel',
+    reward: 0.5,
+    actionType: 'join',
+    actionLabel: 'Join',
+    url: 'https://t.me/IceBoxDeposit',
+    chatId: '@IceBoxDeposit',
+    icon: 'telegram',
+    sortOrder: 3,
+  },
+  {
     key: 'join_sharkverse',
     title: 'Join SharkVerse',
     subtitle: 'Join our partner channel',
