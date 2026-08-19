@@ -47,6 +47,10 @@ userRouter.get('/me', async (req, res) => {
       depositEnabled: dextopusReady,
       minDeposit: config.dextopus.minDeposit,
       withdrawEnabled: config.dextopus.withdrawEnabled,
+      // Countdown to the ICE token going tradeable on-chain.
+      tokenLaunchAt: config.tokenLaunch.at,
+      tokenLaunchLabel: config.tokenLaunch.label,
+      tokenTradeUrl: config.tokenLaunch.tradeUrl,
     },
     referralLink: `https://t.me/${config.botUsername}?startapp=ref_${user.referralCode}`,
   });

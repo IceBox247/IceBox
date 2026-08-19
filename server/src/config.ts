@@ -347,6 +347,16 @@ export const config = {
   },
   // Block explorer for tx links in alerts (BscScan by default).
   explorerBase: str('EXPLORER_BASE', 'https://bscscan.com'),
+
+  // Countdown to the ICE token going tradeable on-chain. `at` is a fixed ISO
+  // timestamp the app counts down to — set TOKEN_LAUNCH_AT in the Vercel env to
+  // your real launch moment. `tradeUrl` (optional) becomes a "Trade" button once
+  // the countdown hits zero.
+  tokenLaunch: {
+    at: str('TOKEN_LAUNCH_AT', '2026-09-20T12:00:00Z'),
+    label: str('TOKEN_LAUNCH_LABEL', 'ICE Token goes live on-chain'),
+    tradeUrl: process.env.TOKEN_TRADE_URL ?? '',
+  },
 };
 
 /** Payouts only run when every required piece is present. */

@@ -12,6 +12,7 @@ import {
   IceUsdCoin,
 } from '../components/icons';
 import { usdt } from '../lib/format';
+import { useCountdown, CountdownDigits } from '../components/Countdown';
 import type { Tab } from '../components/BottomNav';
 
 interface Props {
@@ -19,11 +20,13 @@ interface Props {
   onHistory: () => void;
   onDeposit: () => void;
   onCheckin: () => void;
+  onLaunch: () => void;
   onNavigate: (t: Tab) => void;
 }
 
-export function Home({ onWithdraw, onHistory, onDeposit, onCheckin, onNavigate }: Props) {
+export function Home({ onWithdraw, onHistory, onDeposit, onCheckin, onLaunch, onNavigate }: Props) {
   const { me, checkin } = useStore();
+  const launch = useCountdown(me?.config.tokenLaunchAt);
   if (!me) return null;
   const { overview } = me;
 
@@ -108,6 +111,25 @@ export function Home({ onWithdraw, onHistory, onDeposit, onCheckin, onNavigate }
           </div>
         )}
       </div>
+
+      {/* ICE token launch countdown */}
+      {launch && (
+        <button
+          onClick={onLaunch}
+          className="card w-full border border-ice-400/25 bg-gradient-to-br from-ice-400/10 to-transparent p-4 text-left"
+        >
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-extrabold leading-tight">❄️ ICE Token Launch</h3>
+              <p className="text-sm text-white/50">
+                {launch.done ? 'Now tradeable on-chain 🎉' : 'Tradeable on-chain in'}
+              </p>
+            </div>
+            <ChevronRightIcon width={18} height={18} />
+          </div>
+          {!launch.done && <CountdownDigits left={launch} size="sm" />}
+        </button>
+      )}
 
       {/* Daily check-in */}
       {checkin?.enabled && (

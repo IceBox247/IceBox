@@ -12,6 +12,7 @@ import { WithdrawSheet } from './sheets/WithdrawSheet';
 import { HistorySheet } from './sheets/HistorySheet';
 import { DepositSheet } from './sheets/DepositSheet';
 import { CheckinSheet } from './sheets/CheckinSheet';
+import { LaunchSheet } from './sheets/LaunchSheet';
 
 export default function App() {
   const { loading, error, me, refreshAll } = useStore();
@@ -21,6 +22,7 @@ export default function App() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [checkinOpen, setCheckinOpen] = useState(false);
+  const [launchOpen, setLaunchOpen] = useState(false);
 
   if (loading) return <LoadingScreen />;
 
@@ -47,6 +49,7 @@ export default function App() {
             onHistory={() => setHistoryOpen(true)}
             onDeposit={() => setDepositOpen(true)}
             onCheckin={() => setCheckinOpen(true)}
+            onLaunch={() => setLaunchOpen(true)}
             onNavigate={setTab}
           />
         )}
@@ -73,6 +76,7 @@ export default function App() {
       <HistorySheet open={historyOpen} onClose={() => setHistoryOpen(false)} />
       <DepositSheet open={depositOpen} onClose={() => setDepositOpen(false)} />
       <CheckinSheet open={checkinOpen} onClose={() => setCheckinOpen(false)} />
+      <LaunchSheet open={launchOpen} onClose={() => setLaunchOpen(false)} />
     </div>
   );
 }

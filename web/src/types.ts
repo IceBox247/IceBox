@@ -46,6 +46,9 @@ export interface AppConfig {
   depositEnabled: boolean;
   minDeposit: number;
   withdrawEnabled: boolean;
+  tokenLaunchAt?: string;
+  tokenLaunchLabel?: string;
+  tokenTradeUrl?: string;
 }
 
 export interface MeResponse {
