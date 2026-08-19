@@ -2,6 +2,7 @@ import type { User } from '@prisma/client';
 import { prisma, money } from '../db';
 import { config } from '../config';
 import {
+  classifyFamily,
   createDepositAddress,
   fetchDepositTokens,
   listDeposits,
@@ -73,24 +74,25 @@ export async function depositCatalog(): Promise<{
   chains: CatalogChain[];
 }> {
   const all = await fetchDepositTokens();
-  // Dextopus requires a refundTo per origin chain family. Only offer coins on
-  // families we have a refund address configured for, so every listed coin can
-  // actually mint an address (EVM defaults to the treasury; SOL/TRON/BTC need
-  // REFUND_SOL / REFUND_TRON / REFUND_BTC set to appear).
-  const familyHasRefund = (family: string) =>
-    // Dashboard defaults cover every family, so don't filter unless the operator
-    // opts into env-only refunds.
+  // Dextopus validates the refundTo against the SETTLEMENT chain family (where
+  // funds land), not the origin. Since every origin settles to our single
+  // treasury on the settlement chain, any origin can mint an address as long as
+  // the settlement family has a refund address — which for the default EVM
+  // treasury is always the case. Dashboard defaults cover this too; only in
+  // env-only mode do we gate on the settlement family's REFUND_* being set.
+  const settlementFamily = classifyFamily(config.dextopus.settlementChainId);
+  const settlementRefundReady =
     config.dextopus.dashboardRefunds ||
-    (family === 'solana'
+    (settlementFamily === 'solana'
       ? !!config.dextopus.refundSol
-      : family === 'tron'
+      : settlementFamily === 'tron'
         ? !!config.dextopus.refundTron
-        : family === 'bitcoin'
+        : settlementFamily === 'bitcoin'
           ? !!config.dextopus.refundBtc
           : !!config.dextopus.refundEvm);
-  const chains = all.filter(
-    (c) => c.supportsStaticAddress && c.tokens.length > 0 && familyHasRefund(c.family),
-  );
+  const chains = settlementRefundReady
+    ? all.filter((c) => c.supportsStaticAddress && c.tokens.length > 0)
+    : [];
 
   const featured: FeaturedToken[] = [];
   const seen = new Set<string>();

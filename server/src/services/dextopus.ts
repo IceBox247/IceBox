@@ -81,7 +81,7 @@ const SOLANA_CHAIN_ID = 792703809;
 const TRON_CHAIN_ID = 728126428;
 const BITCOIN_CHAIN_ID = 8253038;
 
-function classifyFamily(chainId: number, name: string): CatalogChain['family'] {
+export function classifyFamily(chainId: number, name = ''): CatalogChain['family'] {
   if (chainId === SOLANA_CHAIN_ID) return 'solana';
   if (chainId === TRON_CHAIN_ID) return 'tron';
   if (chainId === BITCOIN_CHAIN_ID) return 'bitcoin';
@@ -146,15 +146,20 @@ export async function createDepositAddress(
   origin?: { chainId: number; asset: string },
 ): Promise<{ dextopusId: string | null; depositAddress: string }> {
   const originChainId = origin?.chainId ?? config.dextopus.originChainId;
-  // Dextopus requires a refundTo (where funds return if the swap fails). Pick
-  // the platform address for the ORIGIN chain's family.
-  const family = classifyFamily(originChainId, '');
+  // Dextopus requires a refundTo and validates it against the SETTLEMENT chain
+  // (where funds land), NOT the origin chain. Every deposit settles to our
+  // single treasury on the settlement chain, so the refund address must be
+  // valid on that chain's family for EVERY origin. Using an origin-family
+  // address here (e.g. a Solana address for a Solana-origin deposit that still
+  // settles to BSC/chain 56) is rejected as an "Invalid recipient address …
+  // for chain 56". Pick the platform address for the SETTLEMENT family.
+  const settlementFamily = classifyFamily(config.dextopus.settlementChainId, '');
   const refundTo =
-    family === 'solana'
+    settlementFamily === 'solana'
       ? config.dextopus.refundSol
-      : family === 'tron'
+      : settlementFamily === 'tron'
         ? config.dextopus.refundTron
-        : family === 'bitcoin'
+        : settlementFamily === 'bitcoin'
           ? config.dextopus.refundBtc
           : config.dextopus.refundEvm;
 
