@@ -40,6 +40,7 @@ export interface EarnedTier {
 export interface AppConfig {
   referralReward: number;
   minWithdrawal: number;
+  minWithdrawalUsdt: number;
   botUsername: string;
   stakingEnabled: boolean;
   depositEnabled: boolean;

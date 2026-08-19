@@ -26,7 +26,7 @@ export function WithdrawSheet({
 
   if (!me) return null;
 
-  const min = me.config.minWithdrawal;
+  const min = rail === 'usdt' ? me.config.minWithdrawalUsdt : me.config.minWithdrawal;
   const stakeable = me.overview.stakeable; // USDT-withdrawable (deposited/staked)
   const earned = me.overview.earnedBalance; // ICE-token-withdrawable
   const available = rail === 'usdt' ? stakeable : earned;

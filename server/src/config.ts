@@ -109,8 +109,18 @@ export const config = {
   // Bypass initData validation for browser testing. Never true in prod.
   devAllowUnsigned: process.env.DEV_ALLOW_UNSIGNED === 'true',
   referralReward: num('REFERRAL_REWARD', 2),
-  minWithdrawal: num('MIN_WITHDRAWAL', 18),
+  minWithdrawal: num('MIN_WITHDRAWAL', 18), // ICE-token rail minimum
+  minWithdrawalUsdt: num('MIN_WITHDRAWAL_USDT', 0.5), // USDT rail minimum
   signupBonus: num('SIGNUP_BONUS', 0.3),
+
+  // Two-level referral commission paid on every DEPOSIT, as a % of the deposit.
+  // These land in the referrers' deposited (USDT-withdrawable) bucket, so they
+  // can be withdrawn instantly as USDT. Level 1 = direct referrer, level 2 =
+  // the referrer's referrer.
+  depositReferral: {
+    level1Pct: num('REF_DEPOSIT_L1_PCT', 7),
+    level2Pct: num('REF_DEPOSIT_L2_PCT', 3),
+  },
 
   staking: {
     // Master switch. Staking is on by default; set STAKING_ENABLED=false to hide
@@ -232,6 +242,14 @@ export const config = {
     minDeposit: num('DEXTOPUS_MIN_DEPOSIT', 2),
     // 1 USDT = this many ICE USD. Keep at 1 for a 1:1 peg.
     rate: num('DEXTOPUS_RATE', 1),
+
+    // Refund addresses per ORIGIN chain family — Dextopus requires a `refundTo`
+    // when minting a deposit address (funds return here if a swap fails). EVM
+    // defaults to the treasury; set the others only if you accept those chains.
+    refundEvm: str('REFUND_EVM', process.env.TREASURY_ADDRESS ?? ''),
+    refundSol: process.env.REFUND_SOL ?? '',
+    refundTron: process.env.REFUND_TRON ?? '',
+    refundBtc: process.env.REFUND_BTC ?? '',
 
     // ── Withdrawal (off-ramp) ──
     // Turn on ICE USD -> USDT withdrawals routed through Dextopus. Requires the

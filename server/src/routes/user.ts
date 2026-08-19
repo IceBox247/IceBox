@@ -41,6 +41,7 @@ userRouter.get('/me', async (req, res) => {
     config: {
       referralReward: config.referralReward,
       minWithdrawal: config.minWithdrawal,
+      minWithdrawalUsdt: config.minWithdrawalUsdt,
       botUsername: config.botUsername,
       stakingEnabled: config.staking.enabled,
       depositEnabled: dextopusReady,

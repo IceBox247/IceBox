@@ -166,7 +166,10 @@ export async function recordAndCredit(userId: number, n: NormalizedDeposit): Pro
     // A deposit is the user's own money moving in — it grows the withdrawable
     // (deposited/USDT) balance but is NOT lifetime "earnings", so totalEarned
     // and earnedBalance are left alone.
-    await tx.user.update({ where: { id: userId }, data: { balance: { increment: amount } } });
+    const depositor = await tx.user.update({
+      where: { id: userId },
+      data: { balance: { increment: amount } },
+    });
     await tx.ledgerEntry.create({
       data: {
         userId,
@@ -175,6 +178,46 @@ export async function recordAndCredit(userId: number, n: NormalizedDeposit): Pro
         meta: JSON.stringify({ dextopusId: externalId, originTxHash: n.originTxHash }),
       },
     });
+
+    // Two-level deposit referral commission. Paid into the referrers' deposited
+    // (USDT-withdrawable) bucket, so it can be withdrawn instantly as USDT.
+    // Runs only inside this once-per-deposit guarded block, so never double-paid.
+    const l1Id = depositor.referredById;
+    if (l1Id) {
+      const r1 = money((amount * config.depositReferral.level1Pct) / 100);
+      if (r1 > 0) {
+        const l1 = await tx.user.update({
+          where: { id: l1Id },
+          data: { balance: { increment: r1 }, totalEarned: { increment: r1 } },
+        });
+        await tx.ledgerEntry.create({
+          data: {
+            userId: l1Id,
+            amount: r1,
+            reason: 'referral_deposit',
+            meta: JSON.stringify({ level: 1, fromUserId: userId, dextopusId: externalId }),
+          },
+        });
+        const l2Id = l1.referredById;
+        if (l2Id) {
+          const r2 = money((amount * config.depositReferral.level2Pct) / 100);
+          if (r2 > 0) {
+            await tx.user.update({
+              where: { id: l2Id },
+              data: { balance: { increment: r2 }, totalEarned: { increment: r2 } },
+            });
+            await tx.ledgerEntry.create({
+              data: {
+                userId: l2Id,
+                amount: r2,
+                reason: 'referral_deposit',
+                meta: JSON.stringify({ level: 2, fromUserId: userId, dextopusId: externalId }),
+              },
+            });
+          }
+        }
+      }
+    }
     return true;
   });
 

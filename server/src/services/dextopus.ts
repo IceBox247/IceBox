@@ -145,13 +145,27 @@ export async function createDepositAddress(
   userId: string,
   origin?: { chainId: number; asset: string },
 ): Promise<{ dextopusId: string | null; depositAddress: string }> {
-  const payload = {
+  const originChainId = origin?.chainId ?? config.dextopus.originChainId;
+  // Dextopus requires a refundTo (where funds return if the swap fails). Pick
+  // the platform address for the ORIGIN chain's family.
+  const family = classifyFamily(originChainId, '');
+  const refundTo =
+    family === 'solana'
+      ? config.dextopus.refundSol
+      : family === 'tron'
+        ? config.dextopus.refundTron
+        : family === 'bitcoin'
+          ? config.dextopus.refundBtc
+          : config.dextopus.refundEvm;
+
+  const payload: Record<string, unknown> = {
     userId,
-    originChainId: origin?.chainId ?? config.dextopus.originChainId,
+    originChainId,
     originAsset: origin?.asset ?? config.dextopus.originAsset,
     settlementChainId: config.dextopus.settlementChainId,
     settlementAsset: config.dextopus.settlementAsset,
     settlementAddress: config.dextopus.treasuryAddress,
+    ...(refundTo ? { refundTo } : {}),
   };
 
   const res = await fetch(`${base()}/api/deposit/static/addresses`, {

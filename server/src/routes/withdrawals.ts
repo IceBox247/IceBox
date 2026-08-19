@@ -63,11 +63,12 @@ withdrawalsRouter.post('/', async (req, res) => {
   if (!Number.isFinite(amount) || amount <= 0) {
     return res.status(400).json({ error: 'invalid_amount' });
   }
-  if (amount < config.minWithdrawal) {
+  const minForRail = token === 'usdt' ? config.minWithdrawalUsdt : config.minWithdrawal;
+  if (amount < minForRail) {
     return res.status(400).json({
       error: 'below_minimum',
-      minWithdrawal: config.minWithdrawal,
-      message: `Minimum withdrawal is ${config.minWithdrawal.toFixed(2)} USD.`,
+      minWithdrawal: minForRail,
+      message: `Minimum ${token.toUpperCase()} withdrawal is ${minForRail.toFixed(2)} USD.`,
     });
   }
   if (!EVM_ADDRESS.test(address)) {
