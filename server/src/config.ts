@@ -52,6 +52,20 @@ function str(name: string, fallback: string): string {
 }
 
 /**
+ * Coerce a configured value into a valid https link Telegram will accept as an
+ * inline-button URL. Accepts a full http(s) URL as-is, prefixes a bare "t.me/…",
+ * and turns a bare bot username (with or without @) into a deep link that opens
+ * the Mini App. `fallbackUser` is used when the value is empty.
+ */
+function telegramUrl(raw: string | undefined, fallbackUser: string): string {
+  const v = (raw ?? '').trim();
+  if (/^https?:\/\//i.test(v)) return v;
+  if (/^t\.me\//i.test(v)) return `https://${v}`;
+  const uname = (v || fallbackUser).replace(/^@/, '');
+  return `https://t.me/${uname}?startapp`;
+}
+
+/**
  * A stake-to-earn section. Users pick the section whose amount range covers the
  * amount they want to stake. Every spec — the amount range, headline APY, the
  * daily reward rate that actually accrues, and the lock duration — is read from
@@ -314,7 +328,11 @@ export const config = {
     depositImage: process.env.ALERT_DEPOSIT_IMAGE_URL ?? '',
     payoutImage: process.env.ALERT_PAYOUT_IMAGE_URL ?? '',
     buttonText: str('ALERT_BUTTON_TEXT', '❄️ Open IceBox'),
-    buttonUrl: str('ALERT_BUTTON_URL', `https://t.me/${process.env.BOT_USERNAME ?? 'myIceBoxBot'}?startapp`),
+    // Normalise whatever is configured into a valid https link. Telegram rejects
+    // the whole alert if the inline-button URL is not a proper HTTP URL, so a
+    // bare bot username ("IceBoxbot_bot") or a "t.me/…" value is coerced into
+    // "https://t.me/<username>?startapp".
+    buttonUrl: telegramUrl(process.env.ALERT_BUTTON_URL, process.env.BOT_USERNAME ?? 'myIceBoxBot'),
   },
   // Block explorer for tx links in alerts (BscScan by default).
   explorerBase: str('EXPLORER_BASE', 'https://bscscan.com'),

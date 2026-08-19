@@ -6,11 +6,16 @@ import { config, hasBot } from '../config';
  * an alert failing must not roll back a credited deposit or a sent payout.
  */
 
-/** Inline keyboard with the "Open IceBox" button under every alert. */
-function replyMarkup() {
-  return {
-    inline_keyboard: [[{ text: config.alerts.buttonText, url: config.alerts.buttonUrl }]],
-  };
+/**
+ * Inline keyboard with the "Open IceBox" button under every alert. Only attached
+ * when the URL is a valid http(s) link — Telegram rejects the ENTIRE message if
+ * the button URL is malformed, so a bad URL must degrade to a button-less alert
+ * rather than dropping the alert altogether.
+ */
+function replyMarkup(): { inline_keyboard: Array<Array<{ text: string; url: string }>> } | undefined {
+  const url = config.alerts.buttonUrl;
+  if (!/^https?:\/\//i.test(url)) return undefined;
+  return { inline_keyboard: [[{ text: config.alerts.buttonText, url }]] };
 }
 
 /**
