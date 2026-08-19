@@ -325,8 +325,19 @@ export const config = {
       ((process.env.PUBLIC_URL || process.env.WEBAPP_URL)
         ? `${(process.env.PUBLIC_URL || process.env.WEBAPP_URL)!.replace(/\/$/, '')}/alert.png`
         : ''),
-    depositImage: process.env.ALERT_DEPOSIT_IMAGE_URL ?? '',
-    payoutImage: process.env.ALERT_PAYOUT_IMAGE_URL ?? '',
+    // Deposit alerts get their own "USD DEPOSIT" banner; payout alerts keep the
+    // "USD PAID" one. Both default to images committed in web/public, served
+    // from your own domain, so there's a distinct picture with zero setup.
+    depositImage:
+      process.env.ALERT_DEPOSIT_IMAGE_URL ??
+      ((process.env.PUBLIC_URL || process.env.WEBAPP_URL)
+        ? `${(process.env.PUBLIC_URL || process.env.WEBAPP_URL)!.replace(/\/$/, '')}/deposit.png`
+        : ''),
+    payoutImage:
+      process.env.ALERT_PAYOUT_IMAGE_URL ??
+      ((process.env.PUBLIC_URL || process.env.WEBAPP_URL)
+        ? `${(process.env.PUBLIC_URL || process.env.WEBAPP_URL)!.replace(/\/$/, '')}/alert.png`
+        : ''),
     buttonText: str('ALERT_BUTTON_TEXT', '❄️ Open IceBox'),
     // Normalise whatever is configured into a valid https link. Telegram rejects
     // the whole alert if the inline-button URL is not a proper HTTP URL, so a

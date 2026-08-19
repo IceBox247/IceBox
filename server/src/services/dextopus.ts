@@ -308,11 +308,18 @@ export async function createWithdrawalQuote(params: {
   refundTo: string; // platform-controlled fallback address
   dry?: boolean;
 }): Promise<WithdrawalQuote> {
+  // Resolve symbols -> contract addresses; Dextopus rejects bare symbols on the
+  // quote too ("Invalid input or output currency"), the same as on deposits.
+  const [originAsset, destinationAsset] = await Promise.all([
+    resolveAsset(params.originChainId, params.originAsset),
+    resolveAsset(params.destinationChainId, params.destinationAsset),
+  ]);
+
   const body: Record<string, unknown> = {
     originChainId: params.originChainId,
-    originAsset: params.originAsset,
+    originAsset,
     destinationChainId: params.destinationChainId,
-    destinationAsset: params.destinationAsset,
+    destinationAsset,
     amount: params.amount,
     recipient: params.recipient,
     refundTo: params.refundTo,

@@ -45,6 +45,21 @@ async function sendChannel(channel: string, text: string, image?: string): Promi
       console.error(
         `[notify] ${method} to "${channel}" failed: ${res.status} ${info?.description ?? ''}`.trim(),
       );
+      // If the photo was the problem (bad/blocked image URL), still deliver the
+      // alert as text so the notification is never lost.
+      if (photo) {
+        await fetch(`https://api.telegram.org/bot${config.botToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: channel,
+            text,
+            parse_mode: 'HTML',
+            disable_web_page_preview: true,
+            ...(reply_markup ? { reply_markup } : {}),
+          }),
+        });
+      }
     }
   } catch (e) {
     console.error('[notify] channel post failed', e);
