@@ -292,7 +292,14 @@ export const config = {
   // e.g. https://www.iceboxminiapp.online/paid-alert.jpg). The button opens the
   // Mini App — use a t.me link, not the raw domain.
   alerts: {
-    image: process.env.ALERT_IMAGE_URL ?? '',
+    // Defaults to a branded image served from your own domain (web/public/
+    // alert.png) so alerts have a picture with zero setup. Override with your
+    // own "USD PAID" banner via ALERT_IMAGE_URL.
+    image:
+      process.env.ALERT_IMAGE_URL ??
+      ((process.env.PUBLIC_URL || process.env.WEBAPP_URL)
+        ? `${(process.env.PUBLIC_URL || process.env.WEBAPP_URL)!.replace(/\/$/, '')}/alert.png`
+        : ''),
     depositImage: process.env.ALERT_DEPOSIT_IMAGE_URL ?? '',
     payoutImage: process.env.ALERT_PAYOUT_IMAGE_URL ?? '',
     buttonText: str('ALERT_BUTTON_TEXT', '❄️ Open IceBox'),
