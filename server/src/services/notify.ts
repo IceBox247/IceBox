@@ -22,25 +22,24 @@ async function sendChannel(channel: string, text: string, image?: string): Promi
   if (!hasBot || !channel) return;
   const photo = image || config.alerts.image;
   const reply_markup = replyMarkup();
+  const method = photo ? 'sendPhoto' : 'sendMessage';
+  const body = photo
+    ? { chat_id: channel, photo, caption: text, parse_mode: 'HTML', reply_markup }
+    : { chat_id: channel, text, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup };
   try {
-    if (photo) {
-      await fetch(`https://api.telegram.org/bot${config.botToken}/sendPhoto`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: channel, photo, caption: text, parse_mode: 'HTML', reply_markup }),
-      });
-    } else {
-      await fetch(`https://api.telegram.org/bot${config.botToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: channel,
-          text,
-          parse_mode: 'HTML',
-          disable_web_page_preview: true,
-          reply_markup,
-        }),
-      });
+    const res = await fetch(`https://api.telegram.org/bot${config.botToken}/${method}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    // Telegram answers 400/403 with { ok:false, description } instead of throwing,
+    // so surface the real reason (e.g. "chat not found", "bot is not a member",
+    // "not enough rights to send photos") to the logs — invaluable for debugging.
+    if (!res.ok) {
+      const info: any = await res.json().catch(() => ({}));
+      console.error(
+        `[notify] ${method} to "${channel}" failed: ${res.status} ${info?.description ?? ''}`.trim(),
+      );
     }
   } catch (e) {
     console.error('[notify] channel post failed', e);
