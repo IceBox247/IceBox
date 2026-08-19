@@ -12,7 +12,7 @@ export const referralsRouter = Router();
 referralsRouter.get('/', async (req, res) => {
   const user = req.user!;
 
-  const [myReferrals, referralEarnings, leaderboardRaw] = await Promise.all([
+  const [myReferrals, referralEarnings, depositCommissionRows, leaderboardRaw] = await Promise.all([
     prisma.user.findMany({
       where: { referredById: user.id },
       orderBy: { createdAt: 'desc' },
@@ -30,6 +30,13 @@ referralsRouter.get('/', async (req, res) => {
       where: { userId: user.id, reason: 'referral' },
       _sum: { amount: true },
     }),
+    // Deposit commission (7% L1 / 3% L2) is a distinct, USDT-withdrawable earning
+    // — kept separate from invite/task ICE USD. Split by level via the meta tag.
+    prisma.ledgerEntry.findMany({
+      where: { userId: user.id, reason: 'referral_deposit' },
+      select: { amount: true, meta: true },
+      take: 2000,
+    }),
     // Leaderboard: group referrals by referrer, count them, take the top 100.
     prisma.user.groupBy({
       by: ['referredById'],
@@ -41,6 +48,21 @@ referralsRouter.get('/', async (req, res) => {
   ]);
 
   const activeCount = myReferrals.filter((r) => r.totalEarned > 0).length;
+
+  // Tally deposit commission by level from the ledger meta.
+  let commissionL1 = 0;
+  let commissionL2 = 0;
+  for (const e of depositCommissionRows) {
+    let level = 1;
+    try {
+      level = Number(JSON.parse(e.meta ?? '{}')?.level) === 2 ? 2 : 1;
+    } catch {
+      level = 1;
+    }
+    if (level === 2) commissionL2 += e.amount;
+    else commissionL1 += e.amount;
+  }
+  const commissionTotal = money(commissionL1 + commissionL2);
 
   // Hydrate leaderboard rows with referrer profiles.
   const referrerIds = leaderboardRaw
@@ -83,6 +105,15 @@ referralsRouter.get('/', async (req, res) => {
       totalReferrals: myReferrals.length,
       activeReferrals: activeCount,
       totalEarned: money(referralEarnings._sum.amount ?? 0),
+    },
+    // Two-level deposit commission — real USDT, withdrawable, and shown apart
+    // from invite/task ICE USD rewards.
+    commission: {
+      level1Pct: config.depositReferral.level1Pct,
+      level2Pct: config.depositReferral.level2Pct,
+      level1: money(commissionL1),
+      level2: money(commissionL2),
+      total: commissionTotal,
     },
     referrals: myReferrals.map((r) => ({
       id: r.id,

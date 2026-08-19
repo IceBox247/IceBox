@@ -106,11 +106,20 @@ export interface ReferralRow {
   joinedAt: string;
 }
 
+export interface ReferralCommission {
+  level1Pct: number;
+  level2Pct: number;
+  level1: number;
+  level2: number;
+  total: number;
+}
+
 export interface ReferralsResponse {
   referralLink: string;
   referralCode: string;
   perInvite: number;
   stats: ReferralStats;
+  commission: ReferralCommission;
   referrals: ReferralRow[];
   leaderboard: LeaderboardEntry[];
 }

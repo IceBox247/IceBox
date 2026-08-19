@@ -266,7 +266,8 @@ export async function recordAndCredit(userId: number, n: NormalizedDeposit): Pro
       amount,
       asset: n.originAsset,
       chain: n.originChainId ? String(n.originChainId) : null,
-      name: u?.username ? `@${u.username}` : u?.firstName ?? null,
+      // Show the @username only — never a user's real/full name — for privacy.
+      name: u?.username ? `@${u.username}` : null,
       txHash: n.originTxHash,
     });
   }

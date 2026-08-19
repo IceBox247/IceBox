@@ -66,6 +66,54 @@ export function Referrals() {
         </p>
       </div>
 
+      {/* Two-level deposit commission — paid in real USDT */}
+      <div className="card space-y-4 border border-usdt/25 p-5">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-usdt/15 px-2.5 py-1 text-xs font-bold text-usdt">
+              USDT · Withdrawable
+            </span>
+          </div>
+          <h3 className="mt-3 text-xl font-extrabold">Earn on every deposit</h3>
+          <p className="mt-1.5 text-sm leading-relaxed text-white/60">
+            Get <b className="text-usdt">{data.commission.level1Pct}%</b> in real USDT on{' '}
+            <b>every deposit your invites make</b> — and another{' '}
+            <b className="text-usdt">{data.commission.level2Pct}%</b> on deposits made by{' '}
+            <b>their</b> invites. Two levels deep, credited instantly, and withdrawable as USDT.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-2xl border border-usdt/20 bg-usdt/10 p-3 text-center">
+            <div className="text-3xl font-extrabold text-usdt">{data.commission.level1Pct}%</div>
+            <div className="mt-0.5 text-[11px] text-white/50">Level 1 · your invites</div>
+            <div className="mt-1.5 text-sm font-bold">{usdt(data.commission.level1)} USDT</div>
+          </div>
+          <div className="rounded-2xl border border-usdt/20 bg-usdt/10 p-3 text-center">
+            <div className="text-3xl font-extrabold text-usdt">{data.commission.level2Pct}%</div>
+            <div className="mt-0.5 text-[11px] text-white/50">Level 2 · their invites</div>
+            <div className="mt-1.5 text-sm font-bold">{usdt(data.commission.level2)} USDT</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Earnings split: deposit commission (USDT) vs invite/task rewards (ICE USD) */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="card p-4">
+          <div className="text-xs text-white/45">Deposit commission</div>
+          <div className="mt-1 text-2xl font-extrabold text-usdt">
+            {usdt(data.commission.total)}
+          </div>
+          <div className="text-[11px] font-semibold text-white/40">USDT · withdrawable</div>
+        </div>
+        <div className="card p-4">
+          <div className="text-xs text-white/45">Invite &amp; task rewards</div>
+          <div className="mt-1 text-2xl font-extrabold text-ice-300">
+            {usdt(data.stats.totalEarned)}
+          </div>
+          <div className="text-[11px] font-semibold text-white/40">ICE USD</div>
+        </div>
+      </div>
+
       {/* Referral link */}
       <div className="card space-y-3 p-5">
         <p className="text-xs font-bold uppercase tracking-wide text-white/40">Your Referral Link</p>
