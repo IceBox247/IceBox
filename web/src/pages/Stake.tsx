@@ -89,6 +89,19 @@ export function StakePage() {
         </div>
       )}
 
+      {/* Active positions — shown right under the summary so you see your live
+          investments (and their daily progress) first, before the tier menu. */}
+      {active.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-sm font-bold uppercase tracking-wide text-white/40">
+            Your positions
+          </p>
+          {active.map((s) => (
+            <PositionCard key={s.id} stake={s} name={nameFor(staking, s)} />
+          ))}
+        </div>
+      )}
+
       {/* Earned vault */}
       {staking.enabled && et.enabled && (
         <div className="space-y-2">
@@ -219,18 +232,6 @@ export function StakePage() {
           <p className="text-center text-[11px] text-white/40">
             Tiers accept deposited (bought) ICE USD only. Deposit to stake here.
           </p>
-        </div>
-      )}
-
-      {/* Active positions */}
-      {active.length > 0 && (
-        <div className="space-y-3">
-          <p className="pt-2 text-sm font-bold uppercase tracking-wide text-white/40">
-            Your positions
-          </p>
-          {active.map((s) => (
-            <PositionCard key={s.id} stake={s} name={nameFor(staking, s)} />
-          ))}
         </div>
       )}
 

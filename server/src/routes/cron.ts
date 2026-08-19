@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { config } from '../config';
+import { config, hasBot } from '../config';
 import { runPayouts, payoutStatus } from '../services/payout';
 import { runDextopusPayouts, pollDextopusWithdrawals } from '../services/dextopusPayout';
 
@@ -56,6 +56,46 @@ cronRouter.get('/dextopus-payouts', async (req, res) => {
     console.error('[cron] dextopus payout run failed', e);
     res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
   }
+});
+
+/**
+ * GET /api/cron/test-alert — post a sample alert to the deposit AND payout
+ * channels and return Telegram's raw answer for each, so channel/bot-admin
+ * misconfig is diagnosable from a phone without waiting for a real deposit.
+ * Call: /api/cron/test-alert?secret=YOUR_CRON_SECRET
+ */
+cronRouter.get('/test-alert', async (req, res) => {
+  if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
+
+  const button = { inline_keyboard: [[{ text: config.alerts.buttonText, url: config.alerts.buttonUrl }]] };
+  const photo = config.alerts.image;
+
+  async function post(label: string, channel: string) {
+    if (!hasBot) return { label, ok: false, reason: 'BOT_TOKEN not set' };
+    if (!channel) return { label, ok: false, reason: `${label.toUpperCase()}_CHANNEL is empty` };
+    const method = photo ? 'sendPhoto' : 'sendMessage';
+    const caption = `✅ IceBox test — ${label} channel is wired up correctly.`;
+    const body = photo
+      ? { chat_id: channel, photo, caption, reply_markup: button }
+      : { chat_id: channel, text: caption, reply_markup: button };
+    try {
+      const r = await fetch(`https://api.telegram.org/bot${config.botToken}/${method}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const j: any = await r.json().catch(() => ({}));
+      return { label, channel, status: r.status, ok: !!j?.ok, description: j?.description ?? null };
+    } catch (e) {
+      return { label, channel, ok: false, reason: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  const results = await Promise.all([
+    post('deposit', config.channels.deposit),
+    post('payout', config.channels.payout),
+  ]);
+  res.json({ ok: true, hasImage: !!photo, image: photo || null, results });
 });
 
 /** GET /api/cron/status — queue counts and hot-wallet balances. */
