@@ -110,6 +110,38 @@ export async function runDextopusPayouts(): Promise<DextopusPayoutResult> {
       continue;
     }
 
+    // Direct rail: same-chain, same-token payouts send USDT straight to the user
+    // (no Dextopus identity swap). See processWithdrawalInstant for the rationale.
+    const bDestChainId = w.destChainId ?? config.dextopus.withdrawDestChainId;
+    const bDestAsset = w.destAsset ?? config.dextopus.withdrawDestAsset;
+    if (
+      bDestChainId === config.dextopus.withdrawOriginChainId &&
+      bDestAsset.trim().toLowerCase() === config.dextopus.withdrawOriginAsset.trim().toLowerCase()
+    ) {
+      try {
+        const tx = await usdt.transfer(w.address, amountUnits, { nonce });
+        nonce++;
+        await prisma.withdrawal.update({
+          where: { id: w.id },
+          data: { txHash: tx.hash, status: 'paid', processedAt: new Date() },
+        });
+        await alertUsdtWithdrawal({ amount: w.amount, address: w.address, txHash: tx.hash });
+        out.sent++;
+        out.details.push({ id: w.id, status: 'paid', txHash: tx.hash });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        const current = await prisma.withdrawal.findUnique({ where: { id: w.id } });
+        if (current?.txHash) {
+          out.details.push({ id: w.id, status: 'processing', txHash: current.txHash, error: msg });
+        } else {
+          await refund(w.id, w.userId, w.amount, msg);
+          out.failed++;
+          out.details.push({ id: w.id, status: 'rejected', error: msg });
+        }
+      }
+      continue;
+    }
+
     try {
       // (2) Create the Dextopus quote for the user's chosen destination.
       const quote = await createWithdrawalQuote({
@@ -222,6 +254,25 @@ export async function processWithdrawalInstant(withdrawalId: number): Promise<{
     if (bal < amountUnits) {
       await refund(w.id, w.userId, w.amount, 'treasury is out of USDT — please top it up');
       return { ok: false, status: 'rejected', reason: 'insufficient_float' };
+    }
+
+    // Direct rail: when the payout stays on the treasury's own chain + token
+    // (e.g. BSC USDT -> BSC USDT), there is nothing to swap. Send USDT straight
+    // to the user and skip Dextopus, which rejects identity swaps. Delivery is
+    // the on-chain transfer itself, so mark it paid once broadcast.
+    const destChainId = w.destChainId ?? config.dextopus.withdrawDestChainId;
+    const destAsset = w.destAsset ?? config.dextopus.withdrawDestAsset;
+    const sameChain = destChainId === config.dextopus.withdrawOriginChainId;
+    const sameAsset = destAsset.trim().toLowerCase() === config.dextopus.withdrawOriginAsset.trim().toLowerCase();
+    if (sameChain && sameAsset) {
+      const nonce = await provider.getTransactionCount(wallet.address, 'pending');
+      const tx = await usdt.transfer(w.address, amountUnits, { nonce });
+      await prisma.withdrawal.update({
+        where: { id: w.id },
+        data: { txHash: tx.hash, status: 'paid', processedAt: new Date() },
+      });
+      await alertUsdtWithdrawal({ amount: w.amount, address: w.address, txHash: tx.hash });
+      return { ok: true, status: 'paid', txHash: tx.hash };
     }
 
     const quote = await createWithdrawalQuote({

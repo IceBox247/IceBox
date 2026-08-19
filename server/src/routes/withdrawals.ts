@@ -178,10 +178,11 @@ withdrawalsRouter.post('/', async (req, res) => {
           return res.status(502).json({
             error: 'payout_failed',
             balance,
+            reason: instant.reason,
             message:
               instant.reason === 'insufficient_float'
-                ? 'Payouts are temporarily paused. Your balance was refunded.'
-                : 'Withdrawal could not be sent right now. Your balance was refunded.',
+                ? 'Treasury is out of USDT — top it up. Your balance was refunded.'
+                : `Withdrawal could not be sent: ${String(instant.reason ?? 'unknown error').slice(0, 160)}. Your balance was refunded.`,
           });
         }
       } catch (e) {
