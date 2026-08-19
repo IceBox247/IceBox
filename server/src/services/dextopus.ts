@@ -135,6 +135,44 @@ export async function fetchDepositTokens(): Promise<CatalogChain[]> {
     });
 }
 
+// Small in-process cache of the catalog so we can resolve token symbols ->
+// contract addresses on every mint without hammering the API. 5-minute TTL.
+let catalogCache: { at: number; chains: CatalogChain[] } | null = null;
+async function cachedCatalog(): Promise<CatalogChain[]> {
+  if (catalogCache && Date.now() - catalogCache.at < 5 * 60 * 1000) return catalogCache.chains;
+  const chains = await fetchDepositTokens();
+  catalogCache = { at: Date.now(), chains };
+  return chains;
+}
+
+/**
+ * Resolve a user-facing asset value (a symbol like "USDT", or an address) into
+ * the identifier Dextopus expects for that chain — the token's contract address.
+ * Dextopus rejects bare symbols ("Invalid input or output currency"), so we map
+ * symbol -> address via the catalog. If the value already looks like an address,
+ * or no catalog match is found (e.g. a native coin), it is returned unchanged.
+ */
+export async function resolveAsset(chainId: number, asset: string): Promise<string> {
+  const val = String(asset || '').trim();
+  if (!val) return val;
+  try {
+    const chains = await cachedCatalog();
+    const chain = chains.find((c) => c.chainId === chainId);
+    if (!chain) return val;
+    const lower = val.toLowerCase();
+    const match =
+      chain.tokens.find((t) => t.address && t.address.toLowerCase() === lower) ||
+      chain.tokens.find((t) => String(t.symbol || '').toLowerCase() === lower) ||
+      chain.tokens.find((t) => String(t.id || '').toLowerCase() === lower);
+    if (match?.address) return match.address;
+    // Matched a native coin (no contract address) — keep its symbol.
+    if (match) return match.symbol;
+  } catch {
+    // Catalog unavailable — fall through and send what we were given.
+  }
+  return val;
+}
+
 /**
  * Mint (or fetch) the static deposit address for this user + origin. Dextopus
  * returns the same address for the same (userId, origin, settlement) tuple, so
@@ -186,12 +224,19 @@ export async function createDepositAddress(
     }
   }
 
+  // Dextopus wants the token's contract address, not its symbol, or it rejects
+  // with "Invalid input or output currency". Resolve both sides via the catalog.
+  const [originAsset, settlementAsset] = await Promise.all([
+    resolveAsset(originChainId, origin?.asset ?? config.dextopus.originAsset),
+    resolveAsset(config.dextopus.settlementChainId, config.dextopus.settlementAsset),
+  ]);
+
   const payload: Record<string, unknown> = {
     userId,
     originChainId,
-    originAsset: origin?.asset ?? config.dextopus.originAsset,
+    originAsset,
     settlementChainId: config.dextopus.settlementChainId,
-    settlementAsset: config.dextopus.settlementAsset,
+    settlementAsset,
     settlementAddress: config.dextopus.treasuryAddress,
     ...(refundTo ? { refundTo } : {}),
   };
