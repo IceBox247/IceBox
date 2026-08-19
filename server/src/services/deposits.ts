@@ -78,13 +78,16 @@ export async function depositCatalog(): Promise<{
   // actually mint an address (EVM defaults to the treasury; SOL/TRON/BTC need
   // REFUND_SOL / REFUND_TRON / REFUND_BTC set to appear).
   const familyHasRefund = (family: string) =>
-    family === 'solana'
+    // Dashboard defaults cover every family, so don't filter unless the operator
+    // opts into env-only refunds.
+    config.dextopus.dashboardRefunds ||
+    (family === 'solana'
       ? !!config.dextopus.refundSol
       : family === 'tron'
         ? !!config.dextopus.refundTron
         : family === 'bitcoin'
           ? !!config.dextopus.refundBtc
-          : !!config.dextopus.refundEvm;
+          : !!config.dextopus.refundEvm);
   const chains = all.filter(
     (c) => c.supportsStaticAddress && c.tokens.length > 0 && familyHasRefund(c.family),
   );

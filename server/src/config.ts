@@ -261,6 +261,10 @@ export const config = {
     refundSol: process.env.REFUND_SOL ?? '',
     refundTron: process.env.REFUND_TRON ?? '',
     refundBtc: process.env.REFUND_BTC ?? '',
+    // When true (default), trust the Default Refund Addresses set in the
+    // Dextopus dashboard and offer coins on every supported chain. Set to false
+    // to restrict the picker to only families with a REFUND_* env address.
+    dashboardRefunds: process.env.DEXTOPUS_DASHBOARD_REFUNDS !== 'false',
 
     // ── Withdrawal (off-ramp) ──
     // Turn on ICE USD -> USDT withdrawals routed through Dextopus. Requires the
