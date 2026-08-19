@@ -287,6 +287,17 @@ export const config = {
     deposit: process.env.DEPOSIT_CHANNEL ?? '',
     payout: process.env.PAYOUT_CHANNEL ?? '',
   },
+  // Rich-alert styling: an image attached to each alert + an "Open IceBox"
+  // button below it. Image must be a public URL Telegram can fetch (host it,
+  // e.g. https://www.iceboxminiapp.online/paid-alert.jpg). The button opens the
+  // Mini App — use a t.me link, not the raw domain.
+  alerts: {
+    image: process.env.ALERT_IMAGE_URL ?? '',
+    depositImage: process.env.ALERT_DEPOSIT_IMAGE_URL ?? '',
+    payoutImage: process.env.ALERT_PAYOUT_IMAGE_URL ?? '',
+    buttonText: str('ALERT_BUTTON_TEXT', '❄️ Open IceBox'),
+    buttonUrl: str('ALERT_BUTTON_URL', `https://t.me/${process.env.BOT_USERNAME ?? 'myIceBoxBot'}?startapp`),
+  },
   // Block explorer for tx links in alerts (BscScan by default).
   explorerBase: str('EXPLORER_BASE', 'https://bscscan.com'),
 };

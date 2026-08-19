@@ -6,19 +6,42 @@ import { config, hasBot } from '../config';
  * an alert failing must not roll back a credited deposit or a sent payout.
  */
 
-async function sendChannel(channel: string, text: string): Promise<void> {
+/** Inline keyboard with the "Open IceBox" button under every alert. */
+function replyMarkup() {
+  return {
+    inline_keyboard: [[{ text: config.alerts.buttonText, url: config.alerts.buttonUrl }]],
+  };
+}
+
+/**
+ * Post an alert to a channel: a photo with the caption when an image is
+ * configured (falls back to a text message), always with the Open IceBox
+ * button below it. Best-effort — never throws.
+ */
+async function sendChannel(channel: string, text: string, image?: string): Promise<void> {
   if (!hasBot || !channel) return;
+  const photo = image || config.alerts.image;
+  const reply_markup = replyMarkup();
   try {
-    await fetch(`https://api.telegram.org/bot${config.botToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: channel,
-        text,
-        parse_mode: 'HTML',
-        disable_web_page_preview: true,
-      }),
-    });
+    if (photo) {
+      await fetch(`https://api.telegram.org/bot${config.botToken}/sendPhoto`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: channel, photo, caption: text, parse_mode: 'HTML', reply_markup }),
+      });
+    } else {
+      await fetch(`https://api.telegram.org/bot${config.botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: channel,
+          text,
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+          reply_markup,
+        }),
+      });
+    }
   } catch (e) {
     console.error('[notify] channel post failed', e);
   }
@@ -55,7 +78,7 @@ export async function alertDeposit(params: {
     who +
     txLink(params.txHash) +
     `\n\n#deposit #IceBox`;
-  await sendChannel(config.channels.deposit, text);
+  await sendChannel(config.channels.deposit, text, config.alerts.depositImage);
 }
 
 /** ❄️ ICE token withdrawal → Payout Channel. */
@@ -70,7 +93,7 @@ export async function alertIceWithdrawal(params: {
     `📤 To: <code>${shortAddr(params.address)}</code>` +
     txLink(params.txHash) +
     `\n\n#IceWithdrawal #IceBox`;
-  await sendChannel(config.channels.payout, text);
+  await sendChannel(config.channels.payout, text, config.alerts.payoutImage);
 }
 
 /** 💵 USDT withdrawal → Payout Channel. */
@@ -85,5 +108,5 @@ export async function alertUsdtWithdrawal(params: {
     `📤 To: <code>${shortAddr(params.address)}</code>` +
     txLink(params.txHash) +
     `\n\n#UsdtWithdrawal #IceBox`;
-  await sendChannel(config.channels.payout, text);
+  await sendChannel(config.channels.payout, text, config.alerts.payoutImage);
 }
