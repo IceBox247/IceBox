@@ -37,6 +37,54 @@ async function main() {
   );
   console.log(`[deploy-db] earned-balance backfill touched ${backfilled} row(s).`);
 
+  // One-time correction for deposits credited BEFORE the decimals fix: the old
+  // code credited the raw settlement amount (base units of 18-decimal BSC USDT)
+  // without dividing by decimals, so a $5 deposit credited 5e18. Every polluted
+  // credit is therefore off by exactly 1e18. Reverse the over-credit on the
+  // depositor's balance, the deposit row, and any referral commissions paid from
+  // it. Idempotent: after correction the amounts fall below the 1e6 base-unit
+  // threshold, so re-runs on later deploys select nothing.
+  console.log('[deploy-db] Correcting pre-fix deposit decimals…');
+  const BASE = 1000000; // any real USD amount is far below this; base units are far above
+  await prisma.$transaction([
+    // 1. Undo the over-credit on each depositor's balance (before we rescale the rows).
+    prisma.$executeRawUnsafe(
+      `UPDATE "User" u SET "balance" = u."balance" - agg.delta
+         FROM (
+           SELECT d."userId" AS uid,
+                  SUM(d."creditedAmount" - d."creditedAmount" / 1e18) AS delta
+           FROM "Deposit" d
+           WHERE d."credited" = true AND d."creditedAmount" >= ${BASE}
+           GROUP BY d."userId"
+         ) agg
+         WHERE u."id" = agg.uid`,
+    ),
+    // 2. Rescale the deposit rows themselves.
+    prisma.$executeRawUnsafe(
+      `UPDATE "Deposit" SET "creditedAmount" = "creditedAmount" / 1e18
+         WHERE "credited" = true AND "creditedAmount" >= ${BASE}`,
+    ),
+    // 3. Reverse referral commissions paid as a % of the huge amount.
+    prisma.$executeRawUnsafe(
+      `UPDATE "User" u
+         SET "balance" = u."balance" - agg.delta,
+             "totalEarned" = GREATEST(0, u."totalEarned" - agg.delta)
+         FROM (
+           SELECT l."userId" AS uid, SUM(l."amount" - l."amount" / 1e18) AS delta
+           FROM "LedgerEntry" l
+           WHERE l."reason" = 'referral_deposit' AND l."amount" >= ${BASE}
+           GROUP BY l."userId"
+         ) agg
+         WHERE u."id" = agg.uid`,
+    ),
+    // 4. Rescale the ledger history (deposit + referral) for accurate records.
+    prisma.$executeRawUnsafe(
+      `UPDATE "LedgerEntry" SET "amount" = "amount" / 1e18
+         WHERE "reason" IN ('deposit', 'referral_deposit') AND "amount" >= ${BASE}`,
+    ),
+  ]);
+  console.log('[deploy-db] Deposit-decimals correction applied.');
+
   console.log('[deploy-db] Database ready ✅');
 }
 

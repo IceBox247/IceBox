@@ -7,6 +7,7 @@ import {
   fetchDepositTokens,
   listDeposits,
   normalizeDeposit,
+  resolveDecimals,
   type NormalizedDeposit,
   type CatalogChain,
 } from './dextopus';
@@ -130,10 +131,29 @@ export async function depositCatalog(): Promise<{
   return { featured, chains };
 }
 
-/** ICE USD to credit for a settled deposit (1 USDT = rate ICE USD). */
-function creditAmountFor(n: NormalizedDeposit): number {
-  const settled = n.settlementAmount ?? n.originAmount ?? 0;
-  return money(settled * config.dextopus.rate);
+/**
+ * ICE USD to credit for a settled deposit (1 USDT = rate ICE USD).
+ *
+ * Dextopus reports amounts in the token's SMALLEST unit (base units), so a $5
+ * settlement of 18-decimal BSC USDT arrives as 5000000000000000000. We divide
+ * by the settlement token's decimals to get the human USD figure before
+ * applying the peg rate. A raw value already below 1 base unit is treated as
+ * already-human and passed through unchanged.
+ */
+async function creditAmountFor(n: NormalizedDeposit): Promise<number> {
+  const useSettlement = n.settlementAmount != null;
+  const raw = Number(useSettlement ? n.settlementAmount : n.originAmount) || 0;
+  if (raw <= 0) return 0;
+  const decimals = useSettlement
+    ? await resolveDecimals(config.dextopus.settlementChainId, config.dextopus.settlementAsset)
+    : await resolveDecimals(
+        n.originChainId ?? config.dextopus.originChainId,
+        n.originAsset ?? config.dextopus.originAsset,
+      );
+  // Guard against a value that is already human (e.g. "5"): only scale down a
+  // genuine base-unit integer, which for any real deposit is a large number.
+  const scaled = raw >= 10 ** (decimals - 6) ? raw / 10 ** decimals : raw;
+  return money(scaled * config.dextopus.rate);
 }
 
 /**
@@ -146,7 +166,7 @@ export async function recordAndCredit(userId: number, n: NormalizedDeposit): Pro
   const externalId = n.dextopusId || n.originTxHash;
   if (!externalId) return; // can't dedupe -> don't credit
 
-  const amount = creditAmountFor(n);
+  const amount = await creditAmountFor(n);
   const completed = n.status === 'completed';
 
   const didCredit = await prisma.$transaction(async (tx) => {

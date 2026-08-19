@@ -174,6 +174,30 @@ export async function resolveAsset(chainId: number, asset: string): Promise<stri
 }
 
 /**
+ * Look up a token's decimals for a chain (symbol / id / address all match).
+ * Dextopus reports deposit amounts in the token's smallest unit, so we need
+ * this to convert a settled amount back to a human value. Defaults to 18.
+ */
+export async function resolveDecimals(chainId: number, asset: string): Promise<number> {
+  const val = String(asset || '').trim().toLowerCase();
+  if (!val) return 18;
+  try {
+    const chains = await cachedCatalog();
+    const chain = chains.find((c) => c.chainId === chainId);
+    const match = chain?.tokens.find(
+      (t) =>
+        (t.address && t.address.toLowerCase() === val) ||
+        String(t.symbol || '').toLowerCase() === val ||
+        String(t.id || '').toLowerCase() === val,
+    );
+    if (match && Number.isFinite(match.decimals)) return match.decimals;
+  } catch {
+    // Catalog unavailable — fall back to the EVM default.
+  }
+  return 18;
+}
+
+/**
  * Mint (or fetch) the static deposit address for this user + origin. Dextopus
  * returns the same address for the same (userId, origin, settlement) tuple, so
  * calling this repeatedly is safe and cheap. `origin` defaults to the
