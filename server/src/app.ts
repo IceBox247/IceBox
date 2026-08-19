@@ -11,6 +11,7 @@ import { tasksRouter } from './routes/tasks';
 import { referralsRouter } from './routes/referrals';
 import { withdrawalsRouter } from './routes/withdrawals';
 import { stakingRouter } from './routes/staking';
+import { checkinRouter } from './routes/checkin';
 import { depositsRouter } from './routes/deposits';
 import { dextopusWebhookHandler } from './routes/webhooks';
 import { tokensRouter } from './routes/tokens';
@@ -77,6 +78,7 @@ export function createApp(): Express {
   app.use('/api/referrals', referralsRouter);
   app.use('/api/withdrawals', withdrawalsRouter);
   app.use('/api/staking', stakingRouter);
+  app.use('/api/checkin', checkinRouter);
   app.use('/api/deposits', depositsRouter);
 
   // Serve the built web app when co-located (local prod). On Vercel the static

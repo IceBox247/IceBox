@@ -11,6 +11,7 @@ import type {
   DepositRow,
   DepositCatalog,
   DepositAddressInfo,
+  CheckinState,
 } from './types';
 
 const BASE = import.meta.env.VITE_API_BASE || '';
@@ -94,6 +95,16 @@ export const api = {
       totalEarned: number;
       stake: Stake;
     }>(`/staking/${id}/unstake`, { method: 'POST' }),
+  checkin: () => request<CheckinState>('/checkin'),
+  claimCheckin: () =>
+    request<{
+      ok: boolean;
+      claimedReward: number;
+      streak: number;
+      balance: number;
+      earnedBalance: number;
+      state: CheckinState;
+    }>('/checkin/claim', { method: 'POST' }),
   deposits: () => request<DepositInfo>('/deposits'),
   depositTokens: () => request<DepositCatalog>('/deposits/tokens'),
   depositAddress: (chainId: number, asset: string) =>

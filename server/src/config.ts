@@ -122,6 +122,17 @@ export const config = {
     level2Pct: num('REF_DEPOSIT_L2_PCT', 3),
   },
 
+  // Daily check-in bonus. `rewards` is the per-streak-day reward schedule; once
+  // the streak passes the list length it stays at the last value. Credited to
+  // the earned bucket (like tasks). Tune with CHECKIN_REWARDS (comma list).
+  checkin: {
+    enabled: process.env.CHECKIN_ENABLED !== 'false',
+    rewards: (process.env.CHECKIN_REWARDS ?? '0.05,0.10,0.15,0.20,0.25,0.30,0.50')
+      .split(',')
+      .map((s) => Number(s.trim()))
+      .filter((n) => Number.isFinite(n) && n >= 0),
+  },
+
   staking: {
     // Master switch. Staking is on by default; set STAKING_ENABLED=false to hide
     // the feature and refuse new stakes (existing positions can still be

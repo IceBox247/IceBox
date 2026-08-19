@@ -30,6 +30,11 @@ model User {
   earnedBalance Float    @default(0)
   totalEarned   Float    @default(0) // lifetime earned
 
+  // Daily check-in bonus. `lastCheckIn` is when they last claimed; `checkInStreak`
+  // is the consecutive-day count (resets if a UTC day is missed).
+  lastCheckIn   DateTime?
+  checkInStreak Int      @default(0)
+
   // Referral graph
   referralCode  String   @unique
   referredById  Int?

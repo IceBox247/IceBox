@@ -171,6 +171,17 @@ export interface StakingResponse {
   summary: StakingSummary;
 }
 
+export interface CheckinState {
+  enabled: boolean;
+  canClaim: boolean;
+  claimedToday: boolean;
+  streak: number;
+  nextStreak: number;
+  reward: number;
+  rewards: number[];
+  nextClaimAt: string;
+}
+
 export interface DepositRow {
   id: number;
   status: string;

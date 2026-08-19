@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { api, ApiError } from './api';
-import type { MeResponse, Task, StakingResponse, DepositInfo } from './types';
+import type { MeResponse, Task, StakingResponse, DepositInfo, CheckinState } from './types';
 
 interface Store {
   loading: boolean;
@@ -17,15 +17,18 @@ interface Store {
   tasks: Task[];
   staking: StakingResponse | null;
   deposit: DepositInfo | null;
+  checkin: CheckinState | null;
   refreshAll: () => Promise<void>;
   refreshMe: () => Promise<void>;
   refreshTasks: () => Promise<void>;
   refreshStaking: () => Promise<void>;
   refreshDeposit: () => Promise<void>;
+  refreshCheckin: () => Promise<void>;
   claimTask: (id: number) => Promise<{ reward: number; completed: boolean }>;
   stake: (tier: string, amount: number) => Promise<void>;
   claimStake: (id: number) => Promise<{ reward: number }>;
   unstake: (id: number) => Promise<{ payout: number; reward: number }>;
+  claimCheckin: () => Promise<{ reward: number; streak: number }>;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -37,6 +40,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [staking, setStaking] = useState<StakingResponse | null>(null);
   const [deposit, setDeposit] = useState<DepositInfo | null>(null);
+  const [checkin, setCheckin] = useState<CheckinState | null>(null);
+
+  const refreshCheckin = useCallback(async () => {
+    setCheckin(await api.checkin());
+  }, []);
 
   const refreshMe = useCallback(async () => {
     const res = await api.me();
@@ -70,7 +78,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const refreshAll = useCallback(async () => {
     try {
       setError(null);
-      await Promise.all([refreshMe(), refreshTasks(), refreshStaking()]);
+      await Promise.all([refreshMe(), refreshTasks(), refreshStaking(), refreshCheckin()]);
     } catch (e) {
       const msg =
         e instanceof ApiError
@@ -80,7 +88,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           : 'Something went wrong. Please try again.';
       setError(msg);
     }
-  }, [refreshMe, refreshTasks]);
+  }, [refreshMe, refreshTasks, refreshStaking, refreshCheckin]);
 
   const claimTask = useCallback(async (id: number) => {
     // Throws ApiError on failure so the caller can surface the real reason.
@@ -134,6 +142,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [refreshMe, refreshStaking],
   );
 
+  const claimCheckin = useCallback(async () => {
+    const res = await api.claimCheckin();
+    setCheckin(res.state);
+    await refreshMe();
+    return { reward: res.claimedReward, streak: res.streak };
+  }, [refreshMe]);
+
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -150,15 +165,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       tasks,
       staking,
       deposit,
+      checkin,
       refreshAll,
       refreshMe,
       refreshTasks,
       refreshStaking,
       refreshDeposit,
+      refreshCheckin,
       claimTask,
       stake,
       claimStake,
       unstake,
+      claimCheckin,
     }),
     [
       loading,
@@ -167,15 +185,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       tasks,
       staking,
       deposit,
+      checkin,
       refreshAll,
       refreshMe,
       refreshTasks,
       refreshStaking,
       refreshDeposit,
+      refreshCheckin,
       claimTask,
       stake,
       claimStake,
       unstake,
+      claimCheckin,
     ],
   );
 

@@ -18,11 +18,12 @@ interface Props {
   onWithdraw: () => void;
   onHistory: () => void;
   onDeposit: () => void;
+  onCheckin: () => void;
   onNavigate: (t: Tab) => void;
 }
 
-export function Home({ onWithdraw, onHistory, onDeposit, onNavigate }: Props) {
-  const { me } = useStore();
+export function Home({ onWithdraw, onHistory, onDeposit, onCheckin, onNavigate }: Props) {
+  const { me, checkin } = useStore();
   if (!me) return null;
   const { overview } = me;
 
@@ -107,6 +108,33 @@ export function Home({ onWithdraw, onHistory, onDeposit, onNavigate }: Props) {
           </div>
         )}
       </div>
+
+      {/* Daily check-in */}
+      {checkin?.enabled && (
+        <button
+          onClick={onCheckin}
+          className="card flex w-full items-center gap-4 border border-ice-400/20 p-4 text-left"
+        >
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-ice-400/15 text-2xl">
+            🔥
+          </span>
+          <div className="flex-1">
+            <h3 className="text-lg font-extrabold leading-tight">Daily Check-in</h3>
+            <p className="text-sm text-white/50">
+              {checkin.canClaim
+                ? `Day ${checkin.nextStreak} · claim ${usdt(checkin.reward)} USD`
+                : `Day ${checkin.streak} streak · claimed today ✓`}
+            </p>
+          </div>
+          {checkin.canClaim ? (
+            <span className="rounded-full bg-ice-400 px-4 py-2 text-sm font-bold text-night-900">
+              Claim
+            </span>
+          ) : (
+            <ChevronRightIcon width={18} height={18} />
+          )}
+        </button>
+      )}
 
       {/* Stake to Earn CTA */}
       {me.config.stakingEnabled && (
