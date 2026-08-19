@@ -268,8 +268,15 @@ export const config = {
 
     // ── Withdrawal (off-ramp) ──
     // Turn on ICE USD -> USDT withdrawals routed through Dextopus. Requires the
-    // treasury signer (payout.privateKey) to hold USDT + gas to send.
+    // TREASURY signer below to hold USDT + gas to send.
     withdrawEnabled: process.env.DEXTOPUS_WITHDRAW_ENABLED === 'true',
+    // Private key of the TREASURY hot wallet that holds USDT + gas and signs USDT
+    // payouts. This is a SEPARATE wallet from PAYOUT_PRIVATE_KEY (which signs the
+    // ICE-token payouts). Set TREASURY_PRIVATE_KEY to the wallet that actually
+    // holds your USDT float — do NOT reuse the ICE-token key here.
+    treasuryPrivateKey: process.env.TREASURY_PRIVATE_KEY ?? '',
+    // RPC the treasury signer broadcasts through (defaults to the BSC RPC).
+    withdrawRpcUrl: str('TREASURY_RPC_URL', process.env.BSC_RPC_URL ?? 'https://bsc-dataseed.binance.org'),
     // What the treasury sends from when paying out (defaults to USDT on BSC).
     withdrawOriginChainId: num('DEXTOPUS_WITHDRAW_ORIGIN_CHAIN_ID', 56),
     withdrawOriginAsset: str('DEXTOPUS_WITHDRAW_ORIGIN_ASSET', 'USDT'),
@@ -333,7 +340,7 @@ export const dextopusReady =
 export const dextopusWithdrawReady =
   config.dextopus.withdrawEnabled &&
   config.dextopus.apiKey.length > 0 &&
-  config.payout.privateKey.length > 0 &&
+  config.dextopus.treasuryPrivateKey.length > 0 &&
   /^0x[a-fA-F0-9]{40}$/.test(config.dextopus.usdtAddress) &&
   config.dextopus.refundAddress.length > 0;
 

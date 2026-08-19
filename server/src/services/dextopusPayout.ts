@@ -63,8 +63,8 @@ export async function runDextopusPayouts(): Promise<DextopusPayoutResult> {
     return out;
   }
 
-  const provider = new ethers.JsonRpcProvider(config.payout.rpcUrl);
-  const wallet = new ethers.Wallet(config.payout.privateKey, provider);
+  const provider = new ethers.JsonRpcProvider(config.dextopus.withdrawRpcUrl);
+  const wallet = new ethers.Wallet(config.dextopus.treasuryPrivateKey, provider);
   const usdt = new ethers.Contract(config.dextopus.usdtAddress, ERC20_ABI, wallet);
   const decimals = Number(await usdt.decimals());
 
@@ -201,8 +201,8 @@ export async function processWithdrawalInstant(withdrawalId: number): Promise<{
   });
   if (claim.count !== 1) return { ok: false, status: 'processing', reason: 'claimed_elsewhere' };
 
-  const provider = new ethers.JsonRpcProvider(config.payout.rpcUrl);
-  const wallet = new ethers.Wallet(config.payout.privateKey, provider);
+  const provider = new ethers.JsonRpcProvider(config.dextopus.withdrawRpcUrl);
+  const wallet = new ethers.Wallet(config.dextopus.treasuryPrivateKey, provider);
   const usdt = new ethers.Contract(config.dextopus.usdtAddress, ERC20_ABI, wallet);
 
   try {
