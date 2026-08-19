@@ -180,6 +180,7 @@ export interface CheckinState {
   reward: number;
   rewards: number[];
   nextClaimAt: string;
+  asUsdt: boolean; // true = reward paid as USDT (user has staked funds)
 }
 
 export interface DepositRow {

@@ -203,7 +203,7 @@ export const config = {
       minStake: num('STAKE_EARNED_MIN', 1),
       apy: num('STAKE_EARNED_APY', 40),
       dailyRate: num('STAKE_EARNED_DAILY', 0.11),
-      durationDays: num('STAKE_EARNED_DURATION', 30),
+      durationDays: num('STAKE_EARNED_DURATION', 100),
       accent: 'ice',
     },
   },

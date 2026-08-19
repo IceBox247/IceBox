@@ -88,7 +88,9 @@ export function CheckinSheet({ open, onClose }: { open: boolean; onClose: () => 
           Close
         </button>
         <p className="text-center text-[11px] text-white/40">
-          Check-in bonuses are earned ICE USD (withdrawable as the ICE token, or stake to convert to USDT).
+          {checkin.asUsdt
+            ? 'You have staked funds — your daily bonus is paid as real USDT (withdrawable).'
+            : 'Paid as ICE USD. Stake any funds to earn your daily bonus as real USDT instead.'}
         </p>
       </div>
     </Sheet>

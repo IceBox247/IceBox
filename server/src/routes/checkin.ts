@@ -38,7 +38,8 @@ function checkinState(lastCheckIn: Date | null, streak: number, now = new Date()
 /** GET /api/checkin — current streak, whether claimable today, reward schedule. */
 checkinRouter.get('/', async (req, res) => {
   const user = req.user!;
-  res.json(checkinState(user.lastCheckIn, user.checkInStreak));
+  const activeStakes = await prisma.stake.count({ where: { userId: user.id, status: 'active' } });
+  res.json({ ...checkinState(user.lastCheckIn, user.checkInStreak), asUsdt: activeStakes > 0 });
 });
 
 /** POST /api/checkin/claim — claim today's bonus (once per UTC day). */
@@ -57,26 +58,38 @@ checkinRouter.post('/claim', async (req, res) => {
       const streak = last === today - 1 ? fresh.checkInStreak + 1 : 1;
       const reward = rewardForStreak(streak);
 
+      // Reward rail depends on whether the user has staked funds: stakers get
+      // it as USDT-withdrawable (deposited bucket); everyone else gets ICE USD
+      // (earned bucket, ICE-token-only until they stake).
+      const activeStakes = await tx.stake.count({ where: { userId: user.id, status: 'active' } });
+      const asUsdt = activeStakes > 0;
+
       const updated = await tx.user.update({
         where: { id: user.id },
         data: {
           lastCheckIn: now,
           checkInStreak: streak,
-          // Check-in is earned (ICE-token bucket), like tasks.
           balance: { increment: reward },
-          earnedBalance: { increment: reward },
+          // Only credit the earned bucket when NOT a staker (keeps it ICE-only).
+          ...(asUsdt ? {} : { earnedBalance: { increment: reward } }),
           totalEarned: { increment: reward },
         },
       });
       if (reward > 0) {
         await tx.ledgerEntry.create({
-          data: { userId: user.id, amount: reward, reason: 'checkin', meta: JSON.stringify({ streak }) },
+          data: {
+            userId: user.id,
+            amount: reward,
+            reason: 'checkin',
+            meta: JSON.stringify({ streak, rail: asUsdt ? 'usdt' : 'ice' }),
+          },
         });
       }
       return {
         already: false as const,
         reward,
         streak,
+        asUsdt,
         balance: money(updated.balance),
         earnedBalance: money(updated.earnedBalance),
       };
@@ -87,9 +100,10 @@ checkinRouter.post('/claim', async (req, res) => {
       ok: true,
       claimedReward: result.reward,
       streak: result.streak,
+      asUsdt: result.asUsdt,
       balance: result.balance,
       earnedBalance: result.earnedBalance,
-      state: checkinState(now, result.streak, now),
+      state: { ...checkinState(now, result.streak, now), asUsdt: result.asUsdt },
     });
   } catch (err) {
     console.error('checkin error', err);
