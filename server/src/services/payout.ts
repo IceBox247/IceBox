@@ -1,6 +1,7 @@
 import { ethers } from 'ethers';
 import { prisma, money } from '../db';
 import { config, payoutReady } from '../config';
+import { alertIceWithdrawal } from './notify';
 
 /**
  * Automated ICE USD payouts.
@@ -78,8 +79,9 @@ export async function runPayouts(): Promise<PayoutResult> {
     return out;
   }
 
+  // Only ICE-token withdrawals are paid here; USDT withdrawals go via Dextopus.
   const candidates = await prisma.withdrawal.findMany({
-    where: { status: 'pending' },
+    where: { status: 'pending', token: 'ice' },
     orderBy: { createdAt: 'asc' },
     take: config.payout.batchSize,
   });
@@ -134,6 +136,7 @@ export async function runPayouts(): Promise<PayoutResult> {
           where: { id: w.id },
           data: { status: 'paid', processedAt: new Date() },
         });
+        await alertIceWithdrawal({ amount: w.amount, address: w.address, txHash: tx.hash });
         out.paid++;
         out.details.push({ id: w.id, status: 'paid', txHash: tx.hash });
       } else {
@@ -164,6 +167,86 @@ export async function runPayouts(): Promise<PayoutResult> {
   }
 
   return out;
+}
+
+/**
+ * Process ONE ICE-token withdrawal immediately at request time, so ICE
+ * withdrawals are instant. Claims the row, sends the ICE token from the payout
+ * wallet to the user, waits one confirmation, and marks it paid (+ alert).
+ * Reuses the same never-pay-twice guards as the batch worker.
+ */
+export async function processIceWithdrawalInstant(withdrawalId: number): Promise<{
+  ok: boolean;
+  status: string;
+  txHash?: string;
+  reason?: string;
+}> {
+  if (!payoutReady) return { ok: false, status: 'pending', reason: 'not_configured' };
+
+  const w = await prisma.withdrawal.findUnique({ where: { id: withdrawalId } });
+  if (!w) return { ok: false, status: 'missing', reason: 'not_found' };
+  if (w.status !== 'pending') return { ok: false, status: w.status, reason: 'not_pending' };
+  if (w.amount > config.payout.maxPerWithdrawal) {
+    return { ok: false, status: 'pending', reason: 'over_auto_limit' };
+  }
+
+  const claim = await prisma.withdrawal.updateMany({
+    where: { id: w.id, status: 'pending' },
+    data: { status: 'processing' },
+  });
+  if (claim.count !== 1) return { ok: false, status: 'processing', reason: 'claimed_elsewhere' };
+
+  const provider = new ethers.JsonRpcProvider(config.payout.rpcUrl);
+  const wallet = new ethers.Wallet(config.payout.privateKey, provider);
+  const token = new ethers.Contract(config.payout.tokenAddress, ERC20_ABI, wallet);
+
+  try {
+    const decimals = Number(await token.decimals());
+    const amountUnits = ethers.parseUnits(
+      (w.amount * config.payout.tokensPerUnit).toFixed(decimals),
+      decimals,
+    );
+    const [bal, gas] = await Promise.all([
+      token.balanceOf(wallet.address) as Promise<bigint>,
+      provider.getBalance(wallet.address),
+    ]);
+    if (gas === 0n) {
+      await prisma.withdrawal.update({ where: { id: w.id }, data: { status: 'pending' } });
+      return { ok: false, status: 'pending', reason: 'wallet_no_gas' };
+    }
+    if (bal < amountUnits) {
+      await refund(w.id, w.userId, w.amount, 'payout wallet is out of ICE USD — please top it up');
+      return { ok: false, status: 'rejected', reason: 'insufficient_float' };
+    }
+
+    const nonce = await provider.getTransactionCount(wallet.address, 'pending');
+    const tx = await token.transfer(w.address, amountUnits, { nonce });
+    await prisma.withdrawal.update({ where: { id: w.id }, data: { txHash: tx.hash } });
+
+    const receipt = await tx.wait(1);
+    if (receipt && receipt.status === 1) {
+      await prisma.withdrawal.update({
+        where: { id: w.id },
+        data: { status: 'paid', processedAt: new Date() },
+      });
+      await alertIceWithdrawal({ amount: w.amount, address: w.address, txHash: tx.hash });
+      return { ok: true, status: 'paid', txHash: tx.hash };
+    }
+    // Broadcast but not yet confirmed — leave processing for the cron to finish.
+    return { ok: true, status: 'processing', txHash: tx.hash };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const current = await prisma.withdrawal.findUnique({ where: { id: w.id } });
+    if (current?.txHash) {
+      await prisma.withdrawal.update({
+        where: { id: w.id },
+        data: { error: `unconfirmed: ${msg}`.slice(0, 500) },
+      });
+      return { ok: true, status: 'processing', txHash: current.txHash };
+    }
+    await refund(w.id, w.userId, w.amount, msg);
+    return { ok: false, status: 'rejected', reason: msg };
+  }
 }
 
 /** Operational snapshot for the cron response and manual checks. */

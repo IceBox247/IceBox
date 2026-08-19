@@ -2,6 +2,7 @@ import { ethers } from 'ethers';
 import { prisma, money } from '../db';
 import { config, dextopusWithdrawReady } from '../config';
 import { createWithdrawalQuote, getRequestStatus } from './dextopus';
+import { alertUsdtWithdrawal } from './notify';
 
 /**
  * Dextopus off-ramp payouts: ICE USD -> USDT delivered to the user's external
@@ -74,7 +75,7 @@ export async function runDextopusPayouts(): Promise<DextopusPayoutResult> {
   }
 
   const candidates = await prisma.withdrawal.findMany({
-    where: { status: 'pending' },
+    where: { status: 'pending', token: 'usdt' },
     orderBy: { createdAt: 'asc' },
     take: config.payout.batchSize,
   });
@@ -292,6 +293,11 @@ export async function pollDextopusWithdrawals(): Promise<{ checked: number; paid
         await prisma.withdrawal.update({
           where: { id: w.id },
           data: { status: 'paid', processedAt: new Date() },
+        });
+        await alertUsdtWithdrawal({
+          amount: w.amount,
+          address: w.address,
+          txHash: s.destinationTxHashes[0] ?? w.txHash,
         });
         paid++;
       } else if (['failed', 'refunded', 'expired'].includes(s.status)) {

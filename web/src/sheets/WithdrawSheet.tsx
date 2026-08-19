@@ -6,6 +6,8 @@ import { useToast } from '../components/Toast';
 import { haptic } from '../telegram';
 import { usdt } from '../lib/format';
 
+type Rail = 'usdt' | 'ice';
+
 export function WithdrawSheet({
   open,
   onClose,
@@ -17,22 +19,24 @@ export function WithdrawSheet({
 }) {
   const { me, refreshMe } = useStore();
   const toast = useToast();
+  const [rail, setRail] = useState<Rail>('usdt');
   const [address, setAddress] = useState('');
-  const [network, setNetwork] = useState('BEP20');
   const [amount, setAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   if (!me) return null;
 
-  const balance = me.overview.available;
   const min = me.config.minWithdrawal;
-  const enough = balance >= min;
-  const needed = Math.max(0, min - balance);
+  const stakeable = me.overview.stakeable; // USDT-withdrawable (deposited/staked)
+  const earned = me.overview.earnedBalance; // ICE-token-withdrawable
+  const available = rail === 'usdt' ? stakeable : earned;
+  const enough = available >= min;
+  const needed = Math.max(0, min - available);
+  const label = rail === 'usdt' ? 'USDT' : 'ICE token';
 
   async function submit() {
     const amt = Number(amount || min);
     const addr = address.trim();
-    // Must be a real EVM address — a payout to a typo is unrecoverable.
     if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) {
       toast.show('Enter a valid BSC address — 0x followed by 40 characters', 'error');
       return;
@@ -41,17 +45,17 @@ export function WithdrawSheet({
       toast.show(`Minimum withdrawal is ${usdt(min)} USD`, 'error');
       return;
     }
-    if (amt > balance) {
-      toast.show(`You only have ${usdt(balance)} USD available`, 'error');
+    if (amt > available) {
+      toast.show(`You only have ${usdt(available)} available on this rail`, 'error');
       return;
     }
     setSubmitting(true);
     try {
-      const res = await api.withdraw(amt, addr, network);
+      const res = await api.withdraw(amt, addr, 'BEP20', rail);
       haptic('success');
       toast.show(
-        res.withdrawal?.status === 'processing'
-          ? 'Withdrawal sent — arriving shortly 🚀'
+        res.withdrawal?.status === 'processing' || res.withdrawal?.status === 'paid'
+          ? `Withdrawal sent — arriving shortly 🚀`
           : 'Withdrawal requested 🎉',
         'success',
       );
@@ -69,98 +73,103 @@ export function WithdrawSheet({
   }
 
   return (
-    <Sheet open={open} onClose={onClose} title={enough ? 'Withdraw to USDT' : undefined}>
-      {!enough ? (
-        // "Not Enough Balance" gate — mirrors the reference app.
-        <div className="py-4 text-center">
-          <div className="mb-3 text-5xl">❄️</div>
-          <p className="text-2xl font-extrabold">Not Enough Balance</p>
-          <p className="mt-2 text-4xl font-extrabold text-ice-300">
-            {usdt(min)} <span className="text-2xl text-ice-400">USD</span>
-          </p>
-          <p className="mx-auto mt-3 max-w-xs text-white/55">
-            Minimum withdrawal is <b className="text-white">{usdt(min)} USD</b>. Keep earning — you
-            need <b className="text-ice-300">{usdt(needed)} USD</b> more. Your balance:{' '}
-            <b className="text-white">{usdt(balance)} USD</b>.
-          </p>
-          <button
-            onClick={() => {
-              haptic('light');
-              onEarnMore();
-            }}
-            className="btn-primary mt-6 w-full py-4 text-lg"
-          >
-            Earn More
-          </button>
-          <button onClick={onClose} className="btn-ghost mt-3 w-full py-4">
-            Close
-          </button>
+    <Sheet open={open} onClose={onClose} title="Withdraw">
+      <div className="space-y-4">
+        {/* Rail toggle */}
+        <div className="flex gap-2 rounded-2xl bg-white/5 p-1">
+          {(['usdt', 'ice'] as Rail[]).map((r) => (
+            <button
+              key={r}
+              onClick={() => setRail(r)}
+              className={`flex-1 rounded-xl py-2.5 text-sm font-bold transition ${
+                rail === r ? 'bg-ice-400/20 text-ice-200' : 'text-white/50'
+              }`}
+            >
+              {r === 'usdt' ? 'USDT' : 'ICE token'}
+            </button>
+          ))}
         </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="rounded-2xl bg-ice-400/10 p-3 text-center text-xs text-white/60">
-            Your <b className="text-ice-200">ICE USD</b> is converted to{' '}
-            <b className="text-ice-200">USDT</b> (1:1) and delivered to your external wallet.
-          </div>
-          <div className="rounded-2xl bg-white/5 p-4">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-white/50">Available</span>
-              <span className="font-bold">{usdt(balance)} ICE USD</span>
-            </div>
-          </div>
 
-          <label className="block">
-            <span className="mb-1 block text-sm text-white/50">Network</span>
-            <div className="flex gap-2">
-              {['BEP20'].map((n) => (
-                <button
-                  key={n}
-                  onClick={() => setNetwork(n)}
-                  className={`flex-1 rounded-xl py-3 text-sm font-bold transition ${
-                    network === n ? 'bg-ice-400/20 text-ice-200 border border-ice-400/40' : 'bg-white/5 text-white/60'
-                  }`}
-                >
-                  BSC (BEP-20)
-                </button>
-              ))}
-            </div>
-          </label>
-
-          <label className="block">
-            <span className="mb-1 block text-sm text-white/50">BSC wallet address</span>
-            <input
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="Paste your BSC (BEP-20) wallet address — 0x…"
-              className="w-full rounded-xl border border-white/10 bg-night-700 px-4 py-3 text-white outline-none focus:border-ice-400"
-            />
-          </label>
-
-          <label className="block">
-            <span className="mb-1 block text-sm text-white/50">
-              Amount (min {usdt(min)} USD)
-            </span>
-            <input
-              value={amount}
-              onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-              inputMode="decimal"
-              placeholder={usdt(min)}
-              className="w-full rounded-xl border border-white/10 bg-night-700 px-4 py-3 text-white outline-none focus:border-ice-400"
-            />
-          </label>
-
-          <button
-            onClick={submit}
-            disabled={submitting}
-            className="btn-primary w-full py-4 text-lg"
-          >
-            {submitting ? 'Processing…' : 'Withdraw'}
-          </button>
-          <button onClick={onClose} className="btn-ghost w-full py-4">
-            Close
-          </button>
+        <div className="rounded-2xl bg-ice-400/10 p-3 text-center text-xs text-white/60">
+          {rail === 'usdt' ? (
+            <>
+              Withdraw your <b className="text-ice-200">deposited & staked</b> balance as real{' '}
+              <b className="text-ice-200">USDT</b> to your wallet.
+            </>
+          ) : (
+            <>
+              Withdraw your <b className="text-ice-200">earned</b> balance (tasks & referrals) as the{' '}
+              <b className="text-ice-200">ICE token</b>. Stake it first to withdraw as USDT.
+            </>
+          )}
         </div>
-      )}
+
+        <div className="rounded-2xl bg-white/5 p-4">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-white/50">{label} available</span>
+            <span className="font-bold">{usdt(available)} USD</span>
+          </div>
+        </div>
+
+        {!enough ? (
+          <div className="py-2 text-center">
+            <p className="text-lg font-extrabold">Not enough on the {label} rail</p>
+            <p className="mx-auto mt-2 max-w-xs text-sm text-white/55">
+              Minimum is <b className="text-white">{usdt(min)} USD</b>. You need{' '}
+              <b className="text-ice-300">{usdt(needed)} USD</b> more here.
+              {rail === 'usdt' && ' Deposit or stake to build this rail.'}
+            </p>
+            <button
+              onClick={() => {
+                haptic('light');
+                onEarnMore();
+              }}
+              className="btn-primary mt-4 w-full py-3"
+            >
+              {rail === 'usdt' ? 'Go stake / deposit' : 'Earn more'}
+            </button>
+            <button onClick={onClose} className="btn-ghost mt-2 w-full py-3">
+              Close
+            </button>
+          </div>
+        ) : (
+          <>
+            <label className="block">
+              <span className="mb-1 block text-sm text-white/50">BSC (BEP-20) wallet address</span>
+              <input
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Paste your BSC wallet address — 0x…"
+                className="w-full rounded-xl border border-white/10 bg-night-700 px-4 py-3 text-white outline-none focus:border-ice-400"
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-1 block text-sm text-white/50">Amount (min {usdt(min)} USD)</span>
+              <input
+                value={amount}
+                onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+                inputMode="decimal"
+                placeholder={usdt(min)}
+                className="w-full rounded-xl border border-white/10 bg-night-700 px-4 py-3 text-white outline-none focus:border-ice-400"
+              />
+              <button
+                onClick={() => setAmount(String(Math.floor(available)))}
+                className="mt-2 w-full rounded-lg bg-white/5 py-2 text-xs font-semibold text-white/70"
+              >
+                Max ({usdt(available)})
+              </button>
+            </label>
+
+            <button onClick={submit} disabled={submitting} className="btn-primary w-full py-4 text-lg">
+              {submitting ? 'Processing…' : `Withdraw ${label}`}
+            </button>
+            <button onClick={onClose} className="btn-ghost w-full py-4">
+              Close
+            </button>
+          </>
+        )}
+      </div>
     </Sheet>
   );
 }

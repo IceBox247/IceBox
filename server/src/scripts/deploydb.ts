@@ -22,6 +22,21 @@ async function main() {
   const { seedTasks } = await import('../services/seed');
   await seedTasks();
 
+  // One-time backfill: balances that predate the earned/deposited split came
+  // entirely from tasks/referrals/signup, so mark them earned. Guarded to
+  // pre-feature rows only (earnedBalance still 0, positive balance, and no
+  // credited deposit), so it's a no-op on every later deploy.
+  console.log('[deploy-db] Backfilling earned balances…');
+  const { prisma } = await import('../db');
+  const backfilled = await prisma.$executeRawUnsafe(
+    `UPDATE "User" SET "earnedBalance" = "balance"
+       WHERE "earnedBalance" = 0 AND "balance" > 0
+       AND NOT EXISTS (
+         SELECT 1 FROM "Deposit" d WHERE d."userId" = "User"."id" AND d."credited" = true
+       )`,
+  );
+  console.log(`[deploy-db] earned-balance backfill touched ${backfilled} row(s).`);
+
   console.log('[deploy-db] Database ready ✅');
 }
 

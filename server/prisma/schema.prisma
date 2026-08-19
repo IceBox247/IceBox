@@ -22,7 +22,12 @@ model User {
   photoUrl      String?
 
   // Economy — stored in whole USDT with 2 decimal precision as Float.
-  balance       Float    @default(0) // withdrawable balance
+  balance       Float    @default(0) // withdrawable balance (total)
+  // Portion of `balance` that came from tasks/referrals/signup/stake rewards —
+  // i.e. NOT from real deposits. The tier stakes only accept the deposited
+  // portion (balance - earnedBalance); earned ICE USD can only go into the
+  // special locked "earned" stake. Always kept <= balance.
+  earnedBalance Float    @default(0)
   totalEarned   Float    @default(0) // lifetime earned
 
   // Referral graph
@@ -88,6 +93,9 @@ model Withdrawal {
   amount      Float
   address     String
   network     String   @default("BEP20")
+  // Which rail pays this out: "ice" = the ICE token on-chain (from earned
+  // balance); "usdt" = real USDT via Dextopus (from deposited/staked balance).
+  token       String   @default("usdt")
   status      String   @default("pending") // pending | processing | paid | rejected
   createdAt   DateTime @default(now())
 
@@ -198,7 +206,11 @@ model CreatedToken {
 model Stake {
   id          Int      @id @default(autoincrement())
   userId      Int
-  tier        String   // section key, e.g. "s1" | "s2" | "s3" | "s4"
+  tier        String   // section key, e.g. "s1" | "s2" | "s3" | "s4" | "earned"
+  // "tier"   = normal stake of deposited ICE USD; rewards claimable anytime.
+  // "earned" = locked stake of task/referral-earned ICE USD; rewards accrue but
+  //            stay locked and release with the principal only at maturity.
+  kind        String   @default("tier")
   principal   Float    // amount staked, in whole USD
   apy         Float    // headline APY snapshot, for display (e.g. 15 = 15%)
   dailyRate   Float    // % per day at stake time — this is what actually accrues

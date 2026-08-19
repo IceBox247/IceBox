@@ -65,11 +65,14 @@ export const api = {
     request<ClaimResult>(`/tasks/${id}/claim`, { method: 'POST' }),
   referrals: () => request<ReferralsResponse>('/referrals'),
   withdrawals: () => request<{ withdrawals: Withdrawal[] }>('/withdrawals'),
-  withdraw: (amount: number, address: string, network: string) =>
-    request<{ ok: boolean; balance: number; withdrawal: Withdrawal }>('/withdrawals', {
-      method: 'POST',
-      body: JSON.stringify({ amount, address, network }),
-    }),
+  withdraw: (amount: number, address: string, network: string, token: 'ice' | 'usdt') =>
+    request<{ ok: boolean; balance: number; earnedBalance: number; withdrawal: Withdrawal }>(
+      '/withdrawals',
+      {
+        method: 'POST',
+        body: JSON.stringify({ amount, address, network, token }),
+      },
+    ),
   staking: () => request<StakingResponse>('/staking'),
   stake: (tier: string, amount: number) =>
     request<{ ok: boolean; balance: number; stake: Stake }>('/staking/stake', {

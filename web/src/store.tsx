@@ -67,28 +67,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  /** Patch the cached balance/totalEarned into `me` after a staking action. */
-  const patchBalance = useCallback((balance: number, totalEarned?: number) => {
-    setMe((prev) =>
-      prev
-        ? {
-            ...prev,
-            user: {
-              ...prev.user,
-              balance,
-              totalEarned: totalEarned ?? prev.user.totalEarned,
-            },
-            overview: {
-              ...prev.overview,
-              balance,
-              available: balance,
-              totalEarned: totalEarned ?? prev.overview.totalEarned,
-            },
-          }
-        : prev,
-    );
-  }, []);
-
   const refreshAll = useCallback(async () => {
     try {
       setError(null);
@@ -131,31 +109,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const stake = useCallback(
     async (tier: string, amount: number) => {
-      const res = await api.stake(tier, amount);
-      patchBalance(res.balance);
-      await refreshStaking();
+      await api.stake(tier, amount);
+      // Refresh both so the earned/deposited buckets stay in sync everywhere.
+      await Promise.all([refreshMe(), refreshStaking()]);
     },
-    [patchBalance, refreshStaking],
+    [refreshMe, refreshStaking],
   );
 
   const claimStake = useCallback(
     async (id: number) => {
       const res = await api.claimStake(id);
-      patchBalance(res.balance, res.totalEarned);
-      await refreshStaking();
+      await Promise.all([refreshMe(), refreshStaking()]);
       return { reward: res.reward };
     },
-    [patchBalance, refreshStaking],
+    [refreshMe, refreshStaking],
   );
 
   const unstake = useCallback(
     async (id: number) => {
       const res = await api.unstake(id);
-      patchBalance(res.balance, res.totalEarned);
-      await refreshStaking();
+      await Promise.all([refreshMe(), refreshStaking()]);
       return { payout: res.payout, reward: res.reward };
     },
-    [patchBalance, refreshStaking],
+    [refreshMe, refreshStaking],
   );
 
   useEffect(() => {

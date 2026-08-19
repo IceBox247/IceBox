@@ -19,6 +19,11 @@ export function tierForAmount(amount: number): StakeTier | undefined {
   return config.staking.tiers.find((t) => amount >= t.minStake && amount <= t.maxStake);
 }
 
+/** The special locked stake for task/referral-earned ICE USD. */
+export function earnedTier() {
+  return config.staking.earned;
+}
+
 /**
  * Reward accrued on a stake since its last claim, as of `now`.
  *
@@ -38,9 +43,11 @@ export function pendingReward(stake: Stake, now: Date = new Date()): number {
 
 /** Public shape of a stake returned to the client, with live pending reward. */
 export function serializeStake(stake: Stake, now: Date = new Date()) {
+  const matured = now.getTime() >= stake.maturesAt.getTime();
   return {
     id: stake.id,
     tier: stake.tier,
+    kind: stake.kind,
     principal: money(stake.principal),
     apy: stake.apy,
     dailyRate: stake.dailyRate,
@@ -48,10 +55,29 @@ export function serializeStake(stake: Stake, now: Date = new Date()) {
     status: stake.status,
     claimed: money(stake.claimed),
     pending: pendingReward(stake, now),
+    // Earned-vault rewards are locked — they only release with the principal at
+    // maturity, so they are never separately claimable.
+    claimable: stake.kind !== 'earned',
     startedAt: stake.startedAt,
     maturesAt: stake.maturesAt,
     unstakedAt: stake.unstakedAt,
-    matured: now.getTime() >= stake.maturesAt.getTime(),
+    matured,
+  };
+}
+
+/** Public, safe shape of the earned-vault config for the client. */
+export function serializeEarnedTier() {
+  const e = config.staking.earned;
+  return {
+    enabled: e.enabled,
+    key: e.key,
+    name: e.name,
+    blurb: e.blurb,
+    minStake: e.minStake,
+    apy: e.apy,
+    dailyRate: e.dailyRate,
+    durationDays: e.durationDays,
+    accent: e.accent,
   };
 }
 

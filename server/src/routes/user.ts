@@ -33,6 +33,9 @@ userRouter.get('/me', async (req, res) => {
       activeReferrals: activeReferralCount,
       tasksDone,
       totalStaked: money(staked._sum.principal ?? 0),
+      earnedBalance: money(user.earnedBalance),
+      // Deposited (bought) portion — the only balance the tiers accept.
+      stakeable: money(Math.max(0, user.balance - user.earnedBalance)),
       usdRate: 1, // USD ≈ 1 USD
     },
     config: {

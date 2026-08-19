@@ -9,6 +9,7 @@ import {
   type NormalizedDeposit,
   type CatalogChain,
 } from './dextopus';
+import { alertDeposit } from './notify';
 
 /**
  * Return (minting once) the user's stable deposit address for a given origin
@@ -130,7 +131,7 @@ export async function recordAndCredit(userId: number, n: NormalizedDeposit): Pro
   const amount = creditAmountFor(n);
   const completed = n.status === 'completed';
 
-  await prisma.$transaction(async (tx) => {
+  const didCredit = await prisma.$transaction(async (tx) => {
     const dep = await tx.deposit.upsert({
       where: { dextopusId: externalId },
       create: {
@@ -153,17 +154,18 @@ export async function recordAndCredit(userId: number, n: NormalizedDeposit): Pro
       },
     });
 
-    if (!completed || dep.credited || amount <= 0) return;
+    if (!completed || dep.credited || amount <= 0) return false;
 
     // Atomic credit guard: only the first caller to flip `credited` pays out.
     const claim = await tx.deposit.updateMany({
       where: { id: dep.id, credited: false },
       data: { credited: true, creditedAmount: amount },
     });
-    if (claim.count !== 1) return;
+    if (claim.count !== 1) return false;
 
     // A deposit is the user's own money moving in — it grows the withdrawable
-    // balance but is NOT lifetime "earnings", so totalEarned is left alone.
+    // (deposited/USDT) balance but is NOT lifetime "earnings", so totalEarned
+    // and earnedBalance are left alone.
     await tx.user.update({ where: { id: userId }, data: { balance: { increment: amount } } });
     await tx.ledgerEntry.create({
       data: {
@@ -173,7 +175,20 @@ export async function recordAndCredit(userId: number, n: NormalizedDeposit): Pro
         meta: JSON.stringify({ dextopusId: externalId, originTxHash: n.originTxHash }),
       },
     });
+    return true;
   });
+
+  // Alert the Deposit Channel once, after the credit commits (best-effort).
+  if (didCredit) {
+    const u = await prisma.user.findUnique({ where: { id: userId } });
+    await alertDeposit({
+      amount,
+      asset: n.originAsset,
+      chain: n.originChainId ? String(n.originChainId) : null,
+      name: u?.username ? `@${u.username}` : u?.firstName ?? null,
+      txHash: n.originTxHash,
+    });
+  }
 }
 
 /** Poll Dextopus for this user's deposits and credit any newly completed ones. */

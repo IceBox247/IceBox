@@ -6,6 +6,8 @@ export interface PublicUser {
   lastName: string | null;
   photoUrl: string | null;
   balance: number;
+  earnedBalance: number;
+  stakeable: number;
   totalEarned: number;
   referralCode: string;
 }
@@ -18,7 +20,21 @@ export interface Overview {
   activeReferrals: number;
   tasksDone: number;
   totalStaked: number;
+  earnedBalance: number;
+  stakeable: number;
   usdRate: number;
+}
+
+export interface EarnedTier {
+  enabled: boolean;
+  key: string;
+  name: string;
+  blurb: string;
+  minStake: number;
+  apy: number;
+  dailyRate: number;
+  durationDays: number;
+  accent: string;
 }
 
 export interface AppConfig {
@@ -100,7 +116,9 @@ export interface Withdrawal {
   amount: number;
   address: string;
   network: string;
+  token?: 'ice' | 'usdt';
   status: string;
+  txHash?: string | null;
   createdAt: string;
 }
 
@@ -119,6 +137,7 @@ export interface StakeTier {
 export interface Stake {
   id: number;
   tier: string;
+  kind: 'tier' | 'earned';
   principal: number;
   apy: number;
   dailyRate: number;
@@ -126,6 +145,7 @@ export interface Stake {
   status: 'active' | 'unstaked';
   claimed: number;
   pending: number;
+  claimable: boolean;
   startedAt: string;
   maturesAt: string;
   unstakedAt: string | null;
@@ -142,7 +162,10 @@ export interface StakingSummary {
 export interface StakingResponse {
   enabled: boolean;
   balance: number;
+  earnedBalance: number;
+  stakeable: number;
   tiers: StakeTier[];
+  earnedTier: EarnedTier;
   stakes: Stake[];
   summary: StakingSummary;
 }

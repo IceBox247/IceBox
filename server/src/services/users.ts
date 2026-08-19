@@ -71,6 +71,8 @@ export async function findOrCreateUser(
         referralCode,
         referredById: referrer?.id ?? null,
         balance: money(config.signupBonus),
+        // Signup bonus is earned (not deposited), so it can't go into the tiers.
+        earnedBalance: money(config.signupBonus),
         totalEarned: money(config.signupBonus),
       },
     });
@@ -88,6 +90,7 @@ export async function findOrCreateUser(
         where: { id: referrer.id },
         data: {
           balance: { increment: reward },
+          earnedBalance: { increment: reward }, // referral reward is earned
           totalEarned: { increment: reward },
         },
       });
@@ -115,6 +118,9 @@ export function publicUser(user: User) {
     lastName: user.lastName,
     photoUrl: user.photoUrl,
     balance: money(user.balance),
+    earnedBalance: money(user.earnedBalance),
+    // The deposited portion — the only balance the tier stakes accept.
+    stakeable: money(Math.max(0, user.balance - user.earnedBalance)),
     totalEarned: money(user.totalEarned),
     referralCode: user.referralCode,
   };

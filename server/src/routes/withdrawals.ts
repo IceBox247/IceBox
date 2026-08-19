@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { prisma, money } from '../db';
-import { config, dextopusWithdrawReady } from '../config';
+import { config, dextopusWithdrawReady, payoutReady } from '../config';
 import { processWithdrawalInstant, pollDextopusWithdrawals } from '../services/dextopusPayout';
+import { processIceWithdrawalInstant } from '../services/payout';
 
 export const withdrawalsRouter = Router();
 
@@ -12,8 +13,8 @@ const EVM_ADDRESS = /^0x[a-fA-F0-9]{40}$/;
 withdrawalsRouter.get('/', async (req, res) => {
   const user = req.user!;
 
-  // Confirm any in-flight Dextopus withdrawals right away, so a user who just
-  // withdrew sees it flip from "processing" to "paid" without waiting for cron.
+  // Confirm any in-flight Dextopus (USDT) withdrawals right away, so a user who
+  // just withdrew sees it flip from "processing" to "paid" without cron.
   if (dextopusWithdrawReady) {
     try {
       await pollDextopusWithdrawals();
@@ -33,7 +34,9 @@ withdrawalsRouter.get('/', async (req, res) => {
       amount: money(w.amount),
       address: w.address,
       network: w.network,
+      token: w.token,
       status: w.status,
+      txHash: w.txHash,
       createdAt: w.createdAt,
     })),
   });
@@ -41,15 +44,21 @@ withdrawalsRouter.get('/', async (req, res) => {
 
 /**
  * POST /api/withdrawals
- * Body: { amount, address, network }
- * Enforces the minimum-withdrawal gate and sufficient balance, then debits the
- * balance and records a pending withdrawal. Actual payout is handled off-app.
+ * Body: { amount, address, network, token }
+ *
+ * Two rails, chosen by `token`:
+ *  - "ice"  → pays the ICE token on-chain (instant), drawn from the EARNED
+ *             bucket (task/referral earnings).
+ *  - "usdt" → pays real USDT via Dextopus (instant), drawn from the DEPOSITED /
+ *             staked bucket. Only funds that were deposited or passed through
+ *             staking are USDT-withdrawable.
  */
 withdrawalsRouter.post('/', async (req, res) => {
   const user = req.user!;
   const amount = money(Number(req.body?.amount));
   const address = String(req.body?.address ?? '').trim();
   const network = String(req.body?.network ?? 'BEP20').trim() || 'BEP20';
+  const token = String(req.body?.token ?? 'usdt').trim().toLowerCase() === 'ice' ? 'ice' : 'usdt';
 
   if (!Number.isFinite(amount) || amount <= 0) {
     return res.status(400).json({ error: 'invalid_amount' });
@@ -61,8 +70,6 @@ withdrawalsRouter.post('/', async (req, res) => {
       message: `Minimum withdrawal is ${config.minWithdrawal.toFixed(2)} USD.`,
     });
   }
-  // A BEP-20 payout address must be a well-formed EVM address. A loose length
-  // check would accept typos, and tokens sent to a bad address are unrecoverable.
   if (!EVM_ADDRESS.test(address)) {
     return res.status(400).json({
       error: 'invalid_address',
@@ -85,13 +92,27 @@ withdrawalsRouter.post('/', async (req, res) => {
   try {
     const result = await prisma.$transaction(async (tx) => {
       const fresh = await tx.user.findUniqueOrThrow({ where: { id: user.id } });
-      if (fresh.balance < amount) {
-        return { insufficient: true as const, balance: money(fresh.balance) };
+      const deposited = money(Math.max(0, fresh.balance - fresh.earnedBalance));
+
+      if (token === 'ice') {
+        // ICE token rail draws from the earned bucket.
+        if (fresh.earnedBalance < amount) {
+          return { insufficient: 'earned' as const, available: money(fresh.earnedBalance) };
+        }
+      } else {
+        // USDT rail draws from the deposited/staked bucket.
+        if (deposited < amount) {
+          return { insufficient: 'deposited' as const, available: deposited };
+        }
       }
 
       const updated = await tx.user.update({
         where: { id: user.id },
-        data: { balance: { decrement: amount } },
+        data: {
+          balance: { decrement: amount },
+          // ICE withdrawal also draws down the earned bucket; USDT leaves it.
+          ...(token === 'ice' ? { earnedBalance: { decrement: amount } } : {}),
+        },
       });
 
       const withdrawal = await tx.withdrawal.create({
@@ -100,9 +121,9 @@ withdrawalsRouter.post('/', async (req, res) => {
           amount,
           address,
           network,
+          token,
           status: 'pending',
-          // Destination for the Dextopus off-ramp (ICE USD -> USDT). Defaults to
-          // USDT on BSC; the cron worker funds the Dextopus quote from here.
+          // Dextopus off-ramp destination (USDT rail only); harmless on the ICE rail.
           destChainId: config.dextopus.withdrawDestChainId,
           destAsset: config.dextopus.withdrawDestAsset,
         },
@@ -113,7 +134,7 @@ withdrawalsRouter.post('/', async (req, res) => {
           userId: user.id,
           amount: -amount,
           reason: 'withdrawal',
-          meta: JSON.stringify({ withdrawalId: withdrawal.id, address, network }),
+          meta: JSON.stringify({ withdrawalId: withdrawal.id, address, network, token }),
         },
       });
 
@@ -121,26 +142,33 @@ withdrawalsRouter.post('/', async (req, res) => {
         insufficient: false as const,
         withdrawal,
         balance: money(updated.balance),
+        earnedBalance: money(updated.earnedBalance),
       };
     });
 
-    if (result.insufficient) {
+    if ('insufficient' in result && result.insufficient) {
       return res.status(400).json({
         error: 'insufficient_balance',
-        balance: result.balance,
-        message: 'Not enough balance.',
+        bucket: result.insufficient,
+        available: result.available,
+        message:
+          result.insufficient === 'earned'
+            ? 'Not enough earned ICE USD for an ICE-token withdrawal.'
+            : 'Not enough USDT-withdrawable balance. Only deposited or staked ICE USD can be withdrawn as USDT.',
       });
     }
 
-    // Instant payout: process this withdrawal now instead of queuing for cron.
-    // If the treasury can't cover it the helper refunds the balance and marks
-    // the row rejected; surface that to the user rather than a silent pending.
+    // Instant payout via the matching rail.
     let status = result.withdrawal.status;
     let txHash: string | null = null;
     let balance = result.balance;
-    if (dextopusWithdrawReady) {
+    const ready = token === 'ice' ? payoutReady : dextopusWithdrawReady;
+    if (ready) {
       try {
-        const instant = await processWithdrawalInstant(result.withdrawal.id);
+        const instant =
+          token === 'ice'
+            ? await processIceWithdrawalInstant(result.withdrawal.id)
+            : await processWithdrawalInstant(result.withdrawal.id);
         status = instant.status;
         txHash = instant.txHash ?? null;
         if (instant.status === 'rejected') {
@@ -151,12 +179,11 @@ withdrawalsRouter.post('/', async (req, res) => {
             balance,
             message:
               instant.reason === 'insufficient_float'
-                ? 'Payouts are temporarily paused. Your balance was not deducted.'
+                ? 'Payouts are temporarily paused. Your balance was refunded.'
                 : 'Withdrawal could not be sent right now. Your balance was refunded.',
           });
         }
       } catch (e) {
-        // Leave the row for the cron/poll to reconcile; don't fail the request.
         console.error('instant withdrawal error', e);
       }
     }
@@ -164,12 +191,14 @@ withdrawalsRouter.post('/', async (req, res) => {
     res.json({
       ok: true,
       balance,
-      instant: dextopusWithdrawReady,
+      earnedBalance: result.earnedBalance,
+      instant: ready,
       withdrawal: {
         id: result.withdrawal.id,
         amount: money(result.withdrawal.amount),
         address: result.withdrawal.address,
         network: result.withdrawal.network,
+        token,
         status,
         txHash,
         createdAt: result.withdrawal.createdAt,

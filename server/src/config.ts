@@ -167,6 +167,24 @@ export const config = {
         accent: 'violet',
       }),
     ] as StakeTier[],
+
+    // The special locked stake for task/referral-earned ICE USD. Rewards accrue
+    // but stay locked — principal + all rewards release only at maturity. Tune
+    // via STAKE_EARNED_APY / _DAILY / _DURATION / _MIN.
+    earned: {
+      enabled: process.env.STAKE_EARNED_ENABLED !== 'false',
+      key: 'earned',
+      name: str('STAKE_EARNED_NAME', 'Earned Vault'),
+      blurb: str(
+        'STAKE_EARNED_BLURB',
+        'Lock ICE USD earned from tasks & referrals. Rewards release with your principal at the end of the term.',
+      ),
+      minStake: num('STAKE_EARNED_MIN', 1),
+      apy: num('STAKE_EARNED_APY', 40),
+      dailyRate: num('STAKE_EARNED_DAILY', 0.11),
+      durationDays: num('STAKE_EARNED_DURATION', 30),
+      accent: 'ice',
+    },
   },
 
   payout: {
@@ -233,6 +251,15 @@ export const config = {
     partnerAddress: process.env.DEXTOPUS_PARTNER_ADDRESS ?? '',
     partnerFeeBps: num('DEXTOPUS_PARTNER_FEE_BPS', 0),
   },
+
+  // Telegram channels the bot posts activity alerts to (chat id like -100… or
+  // an @channelusername the bot is an admin of). Left blank = no alert sent.
+  channels: {
+    deposit: process.env.DEPOSIT_CHANNEL ?? '',
+    payout: process.env.PAYOUT_CHANNEL ?? '',
+  },
+  // Block explorer for tx links in alerts (BscScan by default).
+  explorerBase: str('EXPLORER_BASE', 'https://bscscan.com'),
 };
 
 /** Payouts only run when every required piece is present. */

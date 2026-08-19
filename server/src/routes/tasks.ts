@@ -101,7 +101,11 @@ tasksRouter.post('/:id/claim', async (req, res) => {
 
       const updatedUser = await tx.user.update({
         where: { id: user.id },
-        data: { balance: { increment: reward }, totalEarned: { increment: reward } },
+        data: {
+          balance: { increment: reward },
+          earnedBalance: { increment: reward }, // task reward is earned, not deposited
+          totalEarned: { increment: reward },
+        },
       });
 
       await tx.ledgerEntry.create({
