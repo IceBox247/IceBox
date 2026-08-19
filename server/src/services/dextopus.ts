@@ -163,6 +163,29 @@ export async function createDepositAddress(
           ? config.dextopus.refundBtc
           : config.dextopus.refundEvm;
 
+  // Fail fast with an operator-facing message when the settlement/refund address
+  // doesn't match the settlement chain's family. The commonest misconfig: the
+  // BSC (EVM, chain 56) settlement, but TREASURY_ADDRESS / REFUND_EVM was set to
+  // a Solana/Tron address — Dextopus then rejects the mint with a confusing
+  // "refund address is not a valid EVM address" error on every deposit.
+  const isEvmAddr = (a: string) => /^0x[a-fA-F0-9]{40}$/.test(a);
+  if (settlementFamily === 'evm') {
+    if (!isEvmAddr(config.dextopus.treasuryAddress)) {
+      throw new Error(
+        `Deposit is misconfigured: TREASURY_ADDRESS must be an EVM (0x…) address for the ` +
+          `chain ${config.dextopus.settlementChainId} settlement, but is "${config.dextopus.treasuryAddress}". ` +
+          `Set it to your BSC wallet in Vercel.`,
+      );
+    }
+    if (refundTo && !isEvmAddr(refundTo)) {
+      throw new Error(
+        `Deposit is misconfigured: the EVM refund address (REFUND_EVM, defaulting to ` +
+          `TREASURY_ADDRESS) must be an EVM (0x…) address for chain ${config.dextopus.settlementChainId}, ` +
+          `but is "${refundTo}". Set REFUND_EVM to your BSC wallet in Vercel.`,
+      );
+    }
+  }
+
   const payload: Record<string, unknown> = {
     userId,
     originChainId,
