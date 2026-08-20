@@ -42,6 +42,17 @@ const TASKS = [
     sortOrder: 3,
   },
   {
+    key: 'join_seedly',
+    title: 'Join Seedly Farm',
+    subtitle: 'Join our partner channel',
+    reward: 0.5,
+    actionType: 'join',
+    actionLabel: 'Join',
+    url: 'https://t.me/seedlyfarm',
+    icon: 'telegram',
+    sortOrder: 4,
+  },
+  {
     key: 'join_sharkverse',
     title: 'Join SharkVerse',
     subtitle: 'Join our partner channel',
@@ -50,7 +61,7 @@ const TASKS = [
     actionLabel: 'Join',
     url: 'https://t.me/telegram',
     icon: 'telegram',
-    sortOrder: 3,
+    sortOrder: 5,
   },
   {
     key: 'visit_website',
