@@ -84,8 +84,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const res = await api.deposits();
     setDeposit(res);
     try {
-      const me = await api.me();
+      const [me, mine] = await Promise.all([api.me(), api.mining()]);
       setMe(me);
+      setMining(mine);
     } catch {
       /* balance refresh is best-effort */
     }

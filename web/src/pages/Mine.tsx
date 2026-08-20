@@ -12,7 +12,7 @@ interface Props {
 }
 
 export function Mine({ onDeposit }: Props) {
-  const { mining, buyHashrate, collectMining } = useStore();
+  const { mining, buyHashrate, collectMining, refreshMining } = useStore();
   const toast = useToast();
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState<'buy' | 'collect' | null>(null);
@@ -23,6 +23,11 @@ export function Mine({ onDeposit }: Props) {
     const id = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(id);
   }, []);
+  // Always pull fresh rig state when the Mine tab opens, so a just-credited
+  // deposit shows up as spendable power right away.
+  useEffect(() => {
+    refreshMining().catch(() => {});
+  }, [refreshMining]);
   // Lazy-load the leaderboard once.
   useEffect(() => {
     api
