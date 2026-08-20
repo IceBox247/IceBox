@@ -314,11 +314,17 @@ export async function listUserDeposits(userId: number, take = 20) {
     orderBy: { createdAt: 'desc' },
     take,
   });
+  // `creditedAmount` is already the human value; the raw origin/settlement
+  // amounts from Dextopus are in base units, so scale those down for display
+  // (a big integer is base units; a small one is already human).
+  const scaleRaw = (n: number) => (n >= 1_000_000 ? n / 1e18 : n);
   return rows.map((d) => ({
     id: d.id,
     status: d.status,
     credited: d.credited,
-    amount: money(d.creditedAmount || d.settlementAmount || d.originAmount || 0),
+    amount: d.credited
+      ? money(d.creditedAmount)
+      : money(scaleRaw(d.settlementAmount || d.originAmount || 0)),
     originAsset: d.originAsset,
     originTxHash: d.originTxHash,
     createdAt: d.createdAt,

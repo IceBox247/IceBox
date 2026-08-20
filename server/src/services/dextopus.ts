@@ -178,6 +178,28 @@ export async function resolveAsset(chainId: number, asset: string): Promise<stri
  * Dextopus reports deposit amounts in the token's smallest unit, so we need
  * this to convert a settled amount back to a human value. Defaults to 18.
  */
+/** Common USD stablecoins — treated as 1:1 with ICE USD. */
+const STABLES = new Set(['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'FDUSD', 'USDD', 'USDP', 'USDE']);
+
+/** Resolve a token's symbol for a chain from the catalog (by address/symbol/id). */
+async function tokenSymbol(chainId: number, asset: string): Promise<string | null> {
+  const val = String(asset || '').trim().toLowerCase();
+  if (!val) return null;
+  try {
+    const chains = await cachedCatalog();
+    const chain = chains.find((c) => c.chainId === chainId);
+    const match = chain?.tokens.find(
+      (t) =>
+        (t.address && t.address.toLowerCase() === val) ||
+        String(t.symbol || '').toLowerCase() === val ||
+        String(t.id || '').toLowerCase() === val,
+    );
+    return match?.symbol ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function resolveDecimals(chainId: number, asset: string): Promise<number> {
   const val = String(asset || '').trim().toLowerCase();
   if (!val) return 18;
@@ -247,12 +269,26 @@ export async function createDepositAddress(
     resolveAsset(config.dextopus.settlementChainId, config.dextopus.settlementAsset),
   ]);
 
+  // Same chain, different token (e.g. USDC → USDT on BSC) is a cross-token swap
+  // Dextopus often has no route for ("No route available for this token pair").
+  // When the origin is a USD stablecoin, settle to that SAME token instead — no
+  // swap needed, and it still credits 1:1 as ICE USD. Non-stables keep swapping
+  // to the treasury asset (those routes exist).
+  let outAsset = settlementAsset;
+  if (
+    originChainId === config.dextopus.settlementChainId &&
+    originAsset.toLowerCase() !== settlementAsset.toLowerCase()
+  ) {
+    const sym = (await tokenSymbol(originChainId, origin?.asset ?? config.dextopus.originAsset)) ?? '';
+    if (STABLES.has(sym.toUpperCase())) outAsset = originAsset;
+  }
+
   const payload: Record<string, unknown> = {
     userId,
     originChainId,
     originAsset,
     settlementChainId: config.dextopus.settlementChainId,
-    settlementAsset,
+    settlementAsset: outAsset,
     settlementAddress: config.dextopus.treasuryAddress,
     ...(refundTo ? { refundTo } : {}),
   };
