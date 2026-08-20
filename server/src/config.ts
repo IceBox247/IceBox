@@ -275,7 +275,7 @@ export const config = {
     settlementChainId: num('DEXTOPUS_SETTLEMENT_CHAIN_ID', 56),
     settlementAsset: str('DEXTOPUS_SETTLEMENT_ASSET', 'USDT'),
     // Smallest deposit the UI encourages, in USD.
-    minDeposit: num('DEXTOPUS_MIN_DEPOSIT', 2),
+    minDeposit: num('DEXTOPUS_MIN_DEPOSIT', 0.2),
     // 1 USDT = this many ICE USD. Keep at 1 for a 1:1 peg.
     rate: num('DEXTOPUS_RATE', 1),
 
