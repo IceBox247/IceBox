@@ -177,8 +177,8 @@ export const config = {
       stakeTier('S2', {
         key: 's2',
         name: 'Silver',
-        blurb: 'Step up your position from $501 to $2,000.',
-        minStake: 501,
+        blurb: 'Step up your position up to $2,000.',
+        minStake: 1,
         maxStake: 2000,
         apy: 30,
         dailyRate: 0.08,
@@ -188,8 +188,8 @@ export const config = {
       stakeTier('S3', {
         key: 's3',
         name: 'Gold',
-        blurb: 'Serious stakers — $2,001 to $5,000.',
-        minStake: 2001,
+        blurb: 'Serious stakers — up to $5,000.',
+        minStake: 1,
         maxStake: 5000,
         apy: 45,
         dailyRate: 0.12,
@@ -199,8 +199,8 @@ export const config = {
       stakeTier('S4', {
         key: 's4',
         name: 'Diamond',
-        blurb: 'Top tier — $5,001 to $10,000 for our best yield.',
-        minStake: 5001,
+        blurb: 'Top tier — up to $10,000 for our best yield.',
+        minStake: 1,
         maxStake: 10000,
         apy: 60,
         dailyRate: 0.16,
