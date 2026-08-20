@@ -49,6 +49,31 @@ export interface AppConfig {
   tokenLaunchAt?: string;
   tokenLaunchLabel?: string;
   tokenTradeUrl?: string;
+  isAdmin?: boolean;
+}
+
+export interface AdminStats {
+  users: { total: number; newToday: number };
+  deposits: { totalUsd: number; count: number };
+  withdrawals: {
+    paidUsdt: number;
+    paidUsdtCount: number;
+    paidIce: number;
+    paidIceCount: number;
+    pendingCount: number;
+    pendingUsd: number;
+  };
+  staking: { activeStaked: number; activeCount: number };
+  mining: { spentUsd: number; minedIce: number; totalHashrate: number; activeMiners: number };
+  balances: {
+    totalBalance: number;
+    earnedBalance: number;
+    depositedBucket: number;
+    lifetimeEarned: number;
+  };
+  referrals: { depositCommissionPaid: number };
+  tasks: { completions: number };
+  generatedAt: string;
 }
 
 export interface MeResponse {

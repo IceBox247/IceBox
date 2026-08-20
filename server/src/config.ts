@@ -120,6 +120,11 @@ export const config = {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
+  // Telegram user ids allowed to see the in-app Admin dashboard (comma list).
+  adminIds: (process.env.ADMIN_TELEGRAM_IDS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
   // Bypass initData validation for browser testing. Never true in prod.
   devAllowUnsigned: process.env.DEV_ALLOW_UNSIGNED === 'true',
   // Max age (seconds) of a Telegram initData payload before it's rejected as

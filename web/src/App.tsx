@@ -14,6 +14,7 @@ import { HistorySheet } from './sheets/HistorySheet';
 import { DepositSheet } from './sheets/DepositSheet';
 import { CheckinSheet } from './sheets/CheckinSheet';
 import { LaunchSheet } from './sheets/LaunchSheet';
+import { AdminSheet } from './sheets/AdminSheet';
 
 export default function App() {
   const { loading, error, me, refreshAll } = useStore();
@@ -24,6 +25,7 @@ export default function App() {
   const [depositOpen, setDepositOpen] = useState(false);
   const [checkinOpen, setCheckinOpen] = useState(false);
   const [launchOpen, setLaunchOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
 
   if (loading) return <LoadingScreen />;
 
@@ -66,6 +68,7 @@ export default function App() {
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
         onHistory={() => setHistoryOpen(true)}
+        onAdmin={() => setAdminOpen(true)}
       />
       <WithdrawSheet
         open={withdrawOpen}
@@ -79,6 +82,7 @@ export default function App() {
       <DepositSheet open={depositOpen} onClose={() => setDepositOpen(false)} />
       <CheckinSheet open={checkinOpen} onClose={() => setCheckinOpen(false)} />
       <LaunchSheet open={launchOpen} onClose={() => setLaunchOpen(false)} />
+      <AdminSheet open={adminOpen} onClose={() => setAdminOpen(false)} />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma, money } from '../db';
 import { config, dextopusReady } from '../config';
 import { publicUser } from '../services/users';
+import { isAdminTelegramId } from '../services/admin';
 
 export const userRouter = Router();
 
@@ -51,6 +52,7 @@ userRouter.get('/me', async (req, res) => {
       tokenLaunchAt: config.tokenLaunch.at,
       tokenLaunchLabel: config.tokenLaunch.label,
       tokenTradeUrl: config.tokenLaunch.tradeUrl,
+      isAdmin: isAdminTelegramId(user.telegramId),
     },
     referralLink: `https://t.me/${config.botUsername}?startapp=ref_${user.referralCode}`,
   });

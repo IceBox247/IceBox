@@ -127,6 +127,16 @@ cronRouter.get('/config', (req, res) => {
   });
 });
 
+/**
+ * GET /api/cron/admin?secret=CRON_SECRET — the operator stats dashboard as JSON,
+ * accessible from a browser without needing an admin Telegram id set up.
+ */
+cronRouter.get('/admin', async (req, res) => {
+  if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
+  const { adminStats } = await import('../services/admin');
+  res.json({ ok: true, ...(await adminStats()) });
+});
+
 /** GET /api/cron/status — queue counts and hot-wallet balances. */
 cronRouter.get('/status', async (req, res) => {
   if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });

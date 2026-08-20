@@ -14,6 +14,7 @@ import type {
   CheckinState,
   MiningState,
   MiningLeaderboard,
+  AdminStats,
 } from './types';
 
 const BASE = import.meta.env.VITE_API_BASE || '';
@@ -127,4 +128,5 @@ export const api = {
       method: 'POST',
     }),
   miningLeaderboard: () => request<MiningLeaderboard>('/mining/leaderboard'),
+  adminStats: () => request<AdminStats>('/admin/stats'),
 };

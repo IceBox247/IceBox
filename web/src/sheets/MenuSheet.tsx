@@ -9,13 +9,27 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onHistory: () => void;
+  onAdmin: () => void;
 }
 
-export function MenuSheet({ open, onClose, onHistory }: Props) {
+export function MenuSheet({ open, onClose, onHistory, onAdmin }: Props) {
   const { me, refreshAll } = useStore();
   const toast = useToast();
 
   const rows = [
+    ...(me?.config.isAdmin
+      ? [
+          {
+            icon: ClockIcon,
+            title: 'Admin dashboard',
+            subtitle: 'Platform stats & totals',
+            onClick: () => {
+              onClose();
+              setTimeout(onAdmin, 200);
+            },
+          },
+        ]
+      : []),
     {
       icon: RefreshIcon,
       title: 'Refresh balance',
