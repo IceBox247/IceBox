@@ -48,6 +48,70 @@ export function createBot(): Bot | null {
     );
   });
 
+  /**
+   * /post — repost an admin's message to the MAIN channel with the "Open IceBox"
+   * button attached (Telegram only allows inline buttons on bot-sent messages).
+   * Usage: send the bot `/post <your text>`, or a photo whose caption starts
+   * with `/post <text>`. Only admins of the main channel may use it.
+   */
+  bot.on('message', async (ctx) => {
+    const text = ctx.message?.text ?? '';
+    const caption = ctx.message?.caption ?? '';
+    const isPost = text.startsWith('/post') || caption.startsWith('/post');
+    if (!isPost) return; // ignore everything that isn't a /post
+
+    const channel = config.channels.main;
+    if (!channel) {
+      await ctx.reply('No MAIN_CHANNEL is configured.');
+      return;
+    }
+    // Only channel admins/creator may broadcast.
+    try {
+      const member = await ctx.api.getChatMember(channel, ctx.from!.id);
+      if (member.status !== 'administrator' && member.status !== 'creator') {
+        await ctx.reply('Only an admin of the channel can use /post.');
+        return;
+      }
+    } catch {
+      await ctx.reply(
+        `I can't check admins of ${channel}. Add me as an admin of that channel (with "Post Messages") and try again.`,
+      );
+      return;
+    }
+
+    const body = (text || caption).replace(/^\/post@?\w*\s*/i, '').trim();
+    const keyboard = new InlineKeyboard().url(config.alerts.buttonText, config.alerts.buttonUrl);
+
+    try {
+      const photos = ctx.message?.photo;
+      if (photos && photos.length > 0) {
+        const fileId = photos[photos.length - 1].file_id;
+        await ctx.api.sendPhoto(channel, fileId, {
+          caption: body || undefined,
+          parse_mode: 'HTML',
+          reply_markup: keyboard,
+        });
+      } else {
+        if (!body) {
+          await ctx.reply('Add the text after /post, e.g. `/post Big news!`', {
+            parse_mode: 'Markdown',
+          });
+          return;
+        }
+        await ctx.api.sendMessage(channel, body, {
+          parse_mode: 'HTML',
+          link_preview_options: { is_disabled: true },
+          reply_markup: keyboard,
+        });
+      }
+      await ctx.reply('✅ Posted to the channel with the Open IceBox button.');
+    } catch (e) {
+      await ctx.reply(
+        `Couldn't post: ${e instanceof Error ? e.message : String(e)}. Make sure I'm an admin of ${channel} with post rights.`,
+      );
+    }
+  });
+
   bot.catch((err) => {
     console.error('[bot] error', err.error);
   });

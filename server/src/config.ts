@@ -317,6 +317,9 @@ export const config = {
   channels: {
     deposit: process.env.DEPOSIT_CHANNEL ?? '',
     payout: process.env.PAYOUT_CHANNEL ?? '',
+    // Main announcement channel — the bot reposts an admin's /post here with the
+    // Open IceBox button attached. Must have the bot as an admin with post rights.
+    main: process.env.MAIN_CHANNEL ?? '@iceboxAi',
   },
   // Rich-alert styling: an image attached to each alert + an "Open IceBox"
   // button below it. Image must be a public URL Telegram can fetch (host it,
