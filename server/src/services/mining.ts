@@ -20,19 +20,27 @@ export async function miningReferralCount(db: Db, userId: number): Promise<numbe
   });
 }
 
-/** The free daily rate for a user = base + referral bonus. */
-function effectiveBase(referralMiners: number): number {
-  return config.mining.baseIcePerDay + referralMiners * config.mining.referralBonusPerDay;
+/** Extra hashrate a user gets from referrals who mine (0.1 each by default). */
+function referralHash(referralMiners: number): number {
+  return referralMiners * config.mining.referralBonusPerDay;
 }
 
-/** ICE mined per DAY = free base (incl. referral bonus) + bought power. */
-function icePerDay(hashrate: number, referralMiners: number): number {
-  return effectiveBase(referralMiners) + hashrate * config.mining.icePerHashDay;
+/** Total effective hashrate = bought power + referral power. */
+export function effectiveHashrate(boughtHashrate: number, referralMiners: number): number {
+  return boughtHashrate + referralHash(referralMiners);
+}
+
+/** ICE mined per DAY = free base + effective hashrate (bought + referrals). */
+function icePerDay(boughtHashrate: number, referralMiners: number): number {
+  return (
+    config.mining.baseIcePerDay +
+    effectiveHashrate(boughtHashrate, referralMiners) * config.mining.icePerHashDay
+  );
 }
 
 /** ICE mined per HOUR. */
-function ratePerHour(hashrate: number, referralMiners: number): number {
-  return icePerDay(hashrate, referralMiners) / 24;
+function ratePerHour(boughtHashrate: number, referralMiners: number): number {
+  return icePerDay(boughtHashrate, referralMiners) / 24;
 }
 
 /** Deposited (USDT-withdrawable) portion of a balance — the only USD that can buy hashrate. */
@@ -77,17 +85,22 @@ export function levelFor(hashrate: number) {
 /** Serialize a miner + config for the client. */
 export function serializeMining(user: User, miner: Miner, referralMiners: number, now = new Date()) {
   const pending = livePending(miner, referralMiners, now);
+  const effHash = money(effectiveHashrate(miner.hashrate, referralMiners));
   return {
     enabled: config.mining.enabled,
     name: config.mining.name,
     unit: config.mining.unit,
-    hashrate: miner.hashrate,
+    // Total effective hashrate (bought + referral), with a breakdown.
+    hashrate: effHash,
+    boughtHashrate: money(miner.hashrate),
+    referralHashrate: money(referralHash(referralMiners)),
     pending,
     perHour: money(ratePerHour(miner.hashrate, referralMiners)),
     perDay: money(icePerDay(miner.hashrate, referralMiners)),
     totalMined: money(miner.totalMined),
     totalSpent: money(miner.totalSpent),
-    level: levelFor(miner.hashrate),
+    level: levelFor(effHash),
+    levels: config.mining.levels,
     // What the user can spend on hashrate, and the pricing.
     spendable: depositedOf(user),
     icePerHashDay: config.mining.icePerHashDay,
@@ -218,6 +231,53 @@ export async function collectMined(userId: number) {
 
     return { ok: true as const, collected: total, user: updatedUser };
   });
+}
+
+/**
+ * Top miners by effective hashrate (bought power + referral power). Includes
+ * lifetime mined for display, and flags the requesting user's own row.
+ */
+export async function miningLeaderboard(meId: number, take = 100) {
+  const [miners, refGroups] = await Promise.all([
+    prisma.miner.findMany({
+      where: { OR: [{ hashrate: { gt: 0 } }, { totalMined: { gt: 0 } }] },
+      take: 300,
+      orderBy: { hashrate: 'desc' },
+      include: { user: { select: { id: true, firstName: true, username: true, photoUrl: true } } },
+    }),
+    // Mining-referral counts per referrer, to fold referral power into the rank.
+    prisma.user.groupBy({
+      by: ['referredById'],
+      where: {
+        referredById: { not: null },
+        miner: { is: { OR: [{ hashrate: { gt: 0 } }, { totalMined: { gt: 0 } }] } },
+      },
+      _count: { referredById: true },
+    }),
+  ]);
+
+  const refCount = new Map<number, number>();
+  for (const g of refGroups) {
+    if (g.referredById != null) refCount.set(g.referredById, g._count.referredById);
+  }
+
+  const rows = miners
+    .map((m) => {
+      const refs = refCount.get(m.userId) ?? 0;
+      const hashrate = money(effectiveHashrate(m.hashrate, refs));
+      return {
+        userId: m.userId,
+        name: m.user.firstName || m.user.username || 'Miner',
+        photoUrl: m.user.photoUrl,
+        hashrate,
+        totalMined: money(m.totalMined),
+      };
+    })
+    .sort((a, b) => b.hashrate - a.hashrate || b.totalMined - a.totalMined)
+    .slice(0, take)
+    .map((r, i) => ({ rank: i + 1, ...r, isMe: r.userId === meId }));
+
+  return { unit: config.mining.unit, leaderboard: rows };
 }
 
 export { MS_PER_DAY };

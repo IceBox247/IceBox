@@ -13,6 +13,7 @@ import type {
   DepositAddressInfo,
   CheckinState,
   MiningState,
+  MiningLeaderboard,
 } from './types';
 
 const BASE = import.meta.env.VITE_API_BASE || '';
@@ -125,4 +126,5 @@ export const api = {
     request<{ ok: boolean; collected: number; mining: MiningState }>('/mining/collect', {
       method: 'POST',
     }),
+  miningLeaderboard: () => request<MiningLeaderboard>('/mining/leaderboard'),
 };

@@ -256,11 +256,34 @@ export interface MiningLevel {
   progress: number;
 }
 
+export interface MiningLevelDef {
+  name: string;
+  minHash: number;
+}
+
+export interface MinerRankRow {
+  rank: number;
+  userId: number;
+  name: string;
+  photoUrl: string | null;
+  hashrate: number;
+  totalMined: number;
+  isMe: boolean;
+}
+
+export interface MiningLeaderboard {
+  unit: string;
+  leaderboard: MinerRankRow[];
+}
+
 export interface MiningState {
   enabled: boolean;
   name: string;
   unit: string;
   hashrate: number;
+  boughtHashrate: number;
+  referralHashrate: number;
+  levels: MiningLevelDef[];
   pending: number;
   perHour: number;
   perDay: number;

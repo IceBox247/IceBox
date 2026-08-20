@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { useToast } from '../components/Toast';
-import { ApiError } from '../api';
+import { api, ApiError } from '../api';
 import { haptic } from '../telegram';
 import { usdt } from '../lib/format';
 import { MineIcon } from '../components/icons';
+import type { MinerRankRow } from '../types';
 
 interface Props {
   onDeposit: () => void;
@@ -15,11 +16,19 @@ export function Mine({ onDeposit }: Props) {
   const toast = useToast();
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState<'buy' | 'collect' | null>(null);
+  const [board, setBoard] = useState<MinerRankRow[] | null>(null);
   // Live-ticking pending so the counter visibly climbs.
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(id);
+  }, []);
+  // Lazy-load the leaderboard once.
+  useEffect(() => {
+    api
+      .miningLeaderboard()
+      .then((r) => setBoard(r.leaderboard))
+      .catch(() => setBoard([]));
   }, []);
 
   if (!mining) return null;
@@ -120,6 +129,11 @@ export function Mine({ onDeposit }: Props) {
             <div className="mt-1 text-xl font-extrabold">
               {mining.hashrate} <span className="text-xs text-white/40">{mining.unit}</span>
             </div>
+            {mining.referralHashrate > 0 && (
+              <div className="text-[10px] text-ice-300">
+                incl. +{mining.referralHashrate} from refs
+              </div>
+            )}
           </div>
           <div className="p-4 text-center">
             <div className="text-xs text-white/45">Per hour</div>
@@ -253,6 +267,101 @@ export function Mine({ onDeposit }: Props) {
           <div className="text-xs text-white/45">Invested</div>
           <div className="mt-1 text-2xl font-extrabold">{usdt(mining.totalSpent)}</div>
           <div className="text-[11px] text-white/40">USD</div>
+        </div>
+      </div>
+
+      {/* Levels */}
+      <div className="space-y-2">
+        <p className="text-sm font-bold uppercase tracking-wide text-white/40">Mining levels</p>
+        <div className="card divide-y divide-white/5 p-0">
+          {mining.levels.map((lv, i) => {
+            const current = mining.level.level === i + 1;
+            const reached = mining.hashrate >= lv.minHash;
+            return (
+              <div
+                key={lv.name}
+                className={`flex items-center justify-between px-4 py-3 ${current ? 'bg-ice-400/10' : ''}`}
+              >
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`grid h-8 w-8 place-items-center rounded-lg text-sm font-extrabold ${
+                      reached ? 'bg-ice-400/20 text-ice-200' : 'bg-white/5 text-white/40'
+                    }`}
+                  >
+                    {i + 1}
+                  </span>
+                  <div>
+                    <div className={`font-bold ${current ? 'text-ice-200' : ''}`}>
+                      {lv.name}
+                      {current && <span className="ml-2 text-[10px] text-ice-300">YOU</span>}
+                    </div>
+                    <div className="text-[11px] text-white/40">
+                      {lv.minHash === 0 ? 'from 0' : `${lv.minHash.toLocaleString()}+`} {mining.unit}
+                    </div>
+                  </div>
+                </div>
+                {reached ? (
+                  <span className="text-xs font-bold text-usdt">✓ reached</span>
+                ) : (
+                  <span className="text-[11px] text-white/40">
+                    {(lv.minHash - mining.hashrate).toLocaleString(undefined, {
+                      maximumFractionDigits: 2,
+                    })}{' '}
+                    to go
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Top miners leaderboard */}
+      <div className="space-y-2">
+        <p className="text-sm font-bold uppercase tracking-wide text-white/40">Top miners</p>
+        <div className="card divide-y divide-white/5 p-0">
+          {board === null ? (
+            <div className="px-4 py-6 text-center text-sm text-white/40">Loading…</div>
+          ) : board.length === 0 ? (
+            <div className="px-4 py-6 text-center text-sm text-white/40">
+              No miners yet — be the first!
+            </div>
+          ) : (
+            board.slice(0, 50).map((r) => (
+              <div
+                key={r.userId}
+                className={`flex items-center justify-between px-4 py-3 ${r.isMe ? 'bg-ice-400/10' : ''}`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="w-6 text-center text-sm font-extrabold text-white/50">
+                    {r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : r.rank}
+                  </span>
+                  {r.photoUrl ? (
+                    <img src={r.photoUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
+                  ) : (
+                    <span className="grid h-8 w-8 place-items-center rounded-full bg-ice-400/20 text-xs font-bold text-ice-200">
+                      {r.name.slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
+                  <div>
+                    <div className="text-sm font-bold">
+                      {r.name}
+                      {r.isMe && <span className="ml-1 text-[10px] text-ice-300">(You)</span>}
+                    </div>
+                    <div className="text-[11px] text-white/40">
+                      {usdt(r.totalMined)} ICE mined
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-extrabold text-ice-300">
+                    {r.hashrate.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  </div>
+                  <div className="text-[10px] text-white/40">{mining.unit}</div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

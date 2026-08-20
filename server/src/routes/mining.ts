@@ -7,9 +7,16 @@ import {
   buyHashrate,
   collectMined,
   miningReferralCount,
+  miningLeaderboard,
 } from '../services/mining';
 
 export const miningRouter = Router();
+
+/** GET /api/mining/leaderboard — top miners by effective hashrate. */
+miningRouter.get('/leaderboard', async (req, res) => {
+  const user = req.user!;
+  res.json(await miningLeaderboard(user.id));
+});
 
 /** GET /api/mining — the user's rig + config. */
 miningRouter.get('/', async (req, res) => {
