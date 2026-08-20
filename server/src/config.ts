@@ -371,42 +371,60 @@ export const config = {
   // it mines ICE USD continuously. Rewards land in the earned (ICE) bucket.
   // Every rate is env-tunable so you can balance the economy from Vercel.
   mining: (() => {
-    const hashPerUsd = num('MINE_HASH_PER_USD', 1);
-    const icePerHashDay = num('MINE_ICE_PER_HASH_DAY', 0.5);
     // Every user mines this many ICE USD/day for free, before buying any power.
     const baseIcePerDay = num('MINE_BASE_ICE_PER_DAY', 1);
-    // The most a single miner can earn per day (bought power is capped here).
-    const maxIcePerDay = num('MINE_MAX_ICE_PER_DAY', 1000);
+    // Purchase price range, and the daily ICE yield at each end. Price and yield
+    // each scale geometrically across the tiers, so the cheapest tier ($0.09)
+    // yields MINE_MIN_DAY ICE/day and the top tier ($2000) yields MINE_MAX_DAY.
     const minBuy = num('MINE_MIN_BUY', 0.09);
     const maxBuy = num('MINE_MAX_BUY', 2000);
+    const minDay = num('MINE_MIN_DAY', 3); // ICE/day the cheapest tier adds
+    const maxDay = num('MINE_MAX_DAY', 10000); // ICE/day the top tier adds
     const packageCount = Math.max(2, Math.floor(num('MINE_PACKAGE_COUNT', 100)));
-    // 100 geometric price steps from minBuy → maxBuy (each ~x% above the last).
-    const ratio = Math.pow(maxBuy / minBuy, 1 / (packageCount - 1));
-    const packages: number[] = [];
+
+    // yield(usd) = minDay * (usd / minBuy) ^ exp, where exp maps the price curve
+    // onto the yield curve so both hit their endpoints exactly.
+    const yieldExp = Math.log(maxDay / minDay) / Math.log(maxBuy / minBuy);
+    const yieldForUsd = (usd: number) =>
+      Math.round(minDay * Math.pow(Math.max(usd, minBuy) / minBuy, yieldExp) * 100) / 100;
+
+    const priceRatio = Math.pow(maxBuy / minBuy, 1 / (packageCount - 1));
+    const packages: { price: number; ice: number }[] = [];
     for (let i = 0; i < packageCount; i++) {
-      packages.push(Math.round(minBuy * Math.pow(ratio, i) * 100) / 100);
+      const price = Math.round(minBuy * Math.pow(priceRatio, i) * 100) / 100;
+      packages.push({ price, ice: yieldForUsd(price) });
     }
-    // Cap bought hashrate so per-day earnings can't exceed maxIcePerDay.
-    const maxHashrate = icePerHashDay > 0 ? (maxIcePerDay - baseIcePerDay) / icePerHashDay : 0;
+
+    // A miner's own "hashrate" is stored directly in ICE/day units (1 hash =
+    // 1 ICE/day), so per-day earnings = base + hashrate. Cap the bought part.
+    const icePerHashDay = 1;
+    const maxHashrate = maxDay;
+    const maxIcePerDay = baseIcePerDay + maxDay;
+    // Each referral who starts mining adds this to the referrer's daily rate.
+    const referralBonusPerDay = num('MINE_REF_BONUS_PER_DAY', 0.1);
+
     return {
       enabled: process.env.MINING_ENABLED !== 'false',
       name: str('MINE_NAME', 'Glacier'),
       unit: str('MINE_UNIT', 'GH/s'),
-      hashPerUsd,
       icePerHashDay,
       baseIcePerDay,
+      referralBonusPerDay,
       maxIcePerDay,
       minBuy,
       maxBuy,
+      minDay,
+      yieldExp,
       maxHashrate,
+      yieldForUsd,
       packages,
-      // Level names by ascending hashrate threshold. Level 1 starts at 0.
+      // Level names by ascending hashrate (ICE/day) threshold.
       levels: [
         { name: 'Frost', minHash: 0 },
         { name: 'Glacier', minHash: 50 },
-        { name: 'Iceberg', minHash: 250 },
-        { name: 'Avalanche', minHash: 800 },
-        { name: 'Polar Vortex', minHash: 1500 },
+        { name: 'Iceberg', minHash: 500 },
+        { name: 'Avalanche', minHash: 2500 },
+        { name: 'Polar Vortex', minHash: 7000 },
       ],
     };
   })(),

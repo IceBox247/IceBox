@@ -4,14 +4,35 @@ import { config } from '../config';
 
 const MS_PER_DAY = 86_400_000;
 
-/** ICE mined per DAY for a given hashrate — base rate (free) + bought power. */
-function icePerDay(hashrate: number): number {
-  return config.mining.baseIcePerDay + hashrate * config.mining.icePerHashDay;
+/** Prisma-like client (the base client or a transaction handle). */
+type Db = { user: { count: (args: any) => Promise<number> } };
+
+/**
+ * How many of a user's referrals have started mining (bought hashrate or
+ * collected mined ICE). Each one lifts the referrer's daily base rate.
+ */
+export async function miningReferralCount(db: Db, userId: number): Promise<number> {
+  return db.user.count({
+    where: {
+      referredById: userId,
+      miner: { is: { OR: [{ hashrate: { gt: 0 } }, { totalMined: { gt: 0 } }] } },
+    },
+  });
 }
 
-/** ICE mined per HOUR for a given hashrate. */
-function ratePerHour(hashrate: number): number {
-  return icePerDay(hashrate) / 24;
+/** The free daily rate for a user = base + referral bonus. */
+function effectiveBase(referralMiners: number): number {
+  return config.mining.baseIcePerDay + referralMiners * config.mining.referralBonusPerDay;
+}
+
+/** ICE mined per DAY = free base (incl. referral bonus) + bought power. */
+function icePerDay(hashrate: number, referralMiners: number): number {
+  return effectiveBase(referralMiners) + hashrate * config.mining.icePerHashDay;
+}
+
+/** ICE mined per HOUR. */
+function ratePerHour(hashrate: number, referralMiners: number): number {
+  return icePerDay(hashrate, referralMiners) / 24;
 }
 
 /** Deposited (USDT-withdrawable) portion of a balance — the only USD that can buy hashrate. */
@@ -27,9 +48,9 @@ export async function getOrCreateMiner(userId: number): Promise<Miner> {
 }
 
 /** Live-accrued pending ICE for a miner as of `now` (does not persist). */
-export function livePending(miner: Miner, now = new Date()): number {
+export function livePending(miner: Miner, referralMiners: number, now = new Date()): number {
   const hours = Math.max(0, (now.getTime() - miner.lastAccruedAt.getTime()) / 3_600_000);
-  return money(miner.pending + ratePerHour(miner.hashrate) * hours);
+  return money(miner.pending + ratePerHour(miner.hashrate, referralMiners) * hours);
 }
 
 /** Which level a hashrate falls into, with progress toward the next. */
@@ -54,29 +75,37 @@ export function levelFor(hashrate: number) {
 }
 
 /** Serialize a miner + config for the client. */
-export function serializeMining(user: User, miner: Miner, now = new Date()) {
-  const pending = livePending(miner, now);
+export function serializeMining(user: User, miner: Miner, referralMiners: number, now = new Date()) {
+  const pending = livePending(miner, referralMiners, now);
   return {
     enabled: config.mining.enabled,
     name: config.mining.name,
     unit: config.mining.unit,
     hashrate: miner.hashrate,
     pending,
-    perHour: money(ratePerHour(miner.hashrate)),
-    perDay: money(icePerDay(miner.hashrate)),
+    perHour: money(ratePerHour(miner.hashrate, referralMiners)),
+    perDay: money(icePerDay(miner.hashrate, referralMiners)),
     totalMined: money(miner.totalMined),
     totalSpent: money(miner.totalSpent),
     level: levelFor(miner.hashrate),
     // What the user can spend on hashrate, and the pricing.
     spendable: depositedOf(user),
-    hashPerUsd: config.mining.hashPerUsd,
     icePerHashDay: config.mining.icePerHashDay,
     baseIcePerDay: config.mining.baseIcePerDay,
     maxIcePerDay: config.mining.maxIcePerDay,
     minBuy: config.mining.minBuy,
     maxBuy: config.mining.maxBuy,
+    // Client uses these to price a custom amount: ice = minDay*(usd/minBuy)^exp.
+    minDay: config.mining.minDay,
+    yieldExp: config.mining.yieldExp,
+    // Referral mining boost.
+    referralMiners,
+    referralBonusPerDay: config.mining.referralBonusPerDay,
+    referralBonus: money(referralMiners * config.mining.referralBonusPerDay),
     // Remaining daily-earning capacity before hitting the per-user cap.
-    capacityLeftPerDay: money(Math.max(0, config.mining.maxIcePerDay - icePerDay(miner.hashrate))),
+    capacityLeftPerDay: money(
+      Math.max(0, config.mining.maxIcePerDay - icePerDay(miner.hashrate, referralMiners)),
+    ),
     packages: config.mining.packages,
   };
 }
@@ -104,14 +133,15 @@ export async function buyHashrate(userId: number, usd: number) {
 
     const miner = (await tx.miner.findUnique({ where: { userId } })) ??
       (await tx.miner.create({ data: { userId } }));
+    const refs = await miningReferralCount(tx as unknown as Db, userId);
 
-    const addedHash = money(amount * config.mining.hashPerUsd);
+    const addedHash = money(config.mining.yieldForUsd(amount));
     // Enforce the per-user max mining rate (bought hashrate is capped).
     if (miner.hashrate + addedHash > config.mining.maxHashrate + 1e-9) {
       return {
         error: 'max_rate_reached' as const,
         capacityLeftPerDay: money(
-          Math.max(0, config.mining.maxIcePerDay - icePerDay(miner.hashrate)),
+          Math.max(0, config.mining.maxIcePerDay - icePerDay(miner.hashrate, refs)),
         ),
       };
     }
@@ -119,7 +149,7 @@ export async function buyHashrate(userId: number, usd: number) {
     // Settle accrued pending up to now before changing the rate.
     const now = new Date();
     const hours = Math.max(0, (now.getTime() - miner.lastAccruedAt.getTime()) / 3_600_000);
-    const accrued = ratePerHour(miner.hashrate) * hours;
+    const accrued = ratePerHour(miner.hashrate, refs) * hours;
 
     const updatedMiner = await tx.miner.update({
       where: { userId },
@@ -158,9 +188,10 @@ export async function collectMined(userId: number) {
     const miner = (await tx.miner.findUnique({ where: { userId } })) ??
       (await tx.miner.create({ data: { userId } }));
 
+    const refs = await miningReferralCount(tx as unknown as Db, userId);
     const now = new Date();
     const hours = Math.max(0, (now.getTime() - miner.lastAccruedAt.getTime()) / 3_600_000);
-    const accrued = ratePerHour(miner.hashrate) * hours;
+    const accrued = ratePerHour(miner.hashrate, refs) * hours;
     const total = money(miner.pending + accrued);
 
     if (total <= 0) {

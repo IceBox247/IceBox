@@ -268,14 +268,18 @@ export interface MiningState {
   totalSpent: number;
   level: MiningLevel;
   spendable: number;
-  hashPerUsd: number;
   icePerHashDay: number;
   baseIcePerDay: number;
   maxIcePerDay: number;
   minBuy: number;
   maxBuy: number;
+  minDay: number;
+  yieldExp: number;
+  referralMiners: number;
+  referralBonusPerDay: number;
+  referralBonus: number;
   capacityLeftPerDay: number;
-  packages: number[];
+  packages: { price: number; ice: number }[];
 }
 
 export interface DepositAddressInfo {

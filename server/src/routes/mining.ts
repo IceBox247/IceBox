@@ -1,15 +1,24 @@
 import { Router } from 'express';
-import { money } from '../db';
+import { prisma, money } from '../db';
 import { config } from '../config';
-import { getOrCreateMiner, serializeMining, buyHashrate, collectMined } from '../services/mining';
+import {
+  getOrCreateMiner,
+  serializeMining,
+  buyHashrate,
+  collectMined,
+  miningReferralCount,
+} from '../services/mining';
 
 export const miningRouter = Router();
 
 /** GET /api/mining — the user's rig + config. */
 miningRouter.get('/', async (req, res) => {
   const user = req.user!;
-  const miner = await getOrCreateMiner(user.id);
-  res.json(serializeMining(user, miner));
+  const [miner, refs] = await Promise.all([
+    getOrCreateMiner(user.id),
+    miningReferralCount(prisma, user.id),
+  ]);
+  res.json(serializeMining(user, miner, refs));
 });
 
 /** POST /api/mining/buy { amount } — buy hashrate with deposited USD. */
@@ -55,7 +64,8 @@ miningRouter.post('/buy', async (req, res) => {
       message: 'Not enough deposited USD. Only deposited USD can buy mining power.',
     });
   }
-  res.json({ ok: true, mining: serializeMining(result.user, result.miner) });
+  const refs = await miningReferralCount(prisma, user.id);
+  res.json({ ok: true, mining: serializeMining(result.user, result.miner, refs) });
 });
 
 /** POST /api/mining/collect — sweep mined ICE into the earned balance. */
@@ -65,6 +75,13 @@ miningRouter.post('/collect', async (req, res) => {
   if (!result.ok) {
     return res.status(400).json({ error: 'nothing_to_collect', message: 'Nothing to collect yet.' });
   }
-  const miner = await getOrCreateMiner(user.id);
-  res.json({ ok: true, collected: result.collected, mining: serializeMining(result.user, miner) });
+  const [miner, refs] = await Promise.all([
+    getOrCreateMiner(user.id),
+    miningReferralCount(prisma, user.id),
+  ]);
+  res.json({
+    ok: true,
+    collected: result.collected,
+    mining: serializeMining(result.user, miner, refs),
+  });
 });

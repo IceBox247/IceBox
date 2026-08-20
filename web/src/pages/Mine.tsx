@@ -32,14 +32,16 @@ export function Mine({ onDeposit }: Props) {
     amt >= mining.minBuy &&
     amt <= mining.maxBuy &&
     amt <= mining.spendable;
-  const iceForUsd = (usd: number) => usd * mining.hashPerUsd * mining.icePerHashDay;
+  // Same curve the server prices with: ice/day = minDay * (usd/minBuy)^exp.
+  const iceForUsd = (usd: number) =>
+    mining.minDay * Math.pow(Math.max(usd, mining.minBuy) / mining.minBuy, mining.yieldExp);
 
   async function buy(v: number) {
     setBusy('buy');
     try {
       await buyHashrate(v);
       haptic('success');
-      toast.show(`+${usdt(v * mining!.hashPerUsd)} ${mining!.unit} added`, 'success');
+      toast.show(`+${iceForUsd(v).toFixed(2)} ICE/day added ❄️`, 'success');
       setAmount('');
     } catch (e) {
       haptic('error');
@@ -137,6 +139,27 @@ export function Mine({ onDeposit }: Props) {
         </button>
       </div>
 
+      {/* Referral mining boost */}
+      <div className="card flex items-center gap-4 border border-ice-400/20 p-4">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-ice-400/15 text-2xl">
+          👥
+        </span>
+        <div className="flex-1">
+          <h3 className="font-extrabold leading-tight">Referral mining boost</h3>
+          <p className="text-sm text-white/55">
+            {mining.referralMiners > 0
+              ? `${mining.referralMiners} friend${mining.referralMiners > 1 ? 's' : ''} mining · +${mining.referralBonus.toFixed(2)} ICE/day`
+              : `Invite friends — each one who mines adds +${mining.referralBonusPerDay} ICE/day`}
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-lg font-extrabold text-ice-300">
+            +{mining.referralBonus.toFixed(2)}
+          </div>
+          <div className="text-[10px] text-white/40">ICE / day</div>
+        </div>
+      </div>
+
       {/* Buy hashrate */}
       <div className="card space-y-4 p-5">
         <div>
@@ -162,25 +185,25 @@ export function Mine({ onDeposit }: Props) {
           </div>
           <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
             {mining.packages.map((p, i) => {
-              const affordable = p <= mining.spendable;
+              const affordable = p.price <= mining.spendable;
               return (
                 <button
                   key={i}
-                  onClick={() => buy(p)}
+                  onClick={() => buy(p.price)}
                   disabled={busy !== null || !affordable}
                   className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-left disabled:opacity-40"
                 >
                   <div>
                     <div className="text-sm font-extrabold">
-                      #{i + 1} · ${p.toLocaleString()}
+                      #{i + 1} · ${p.price.toLocaleString()}
                     </div>
                     <div className="text-[11px] text-white/45">
-                      +{Math.round(p * mining.hashPerUsd * 100) / 100} {mining.unit}
+                      +{p.ice.toLocaleString()} {mining.unit}
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-bold text-ice-300">
-                      +{iceForUsd(p).toFixed(iceForUsd(p) < 1 ? 3 : 2)}
+                      +{p.ice.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                     </div>
                     <div className="text-[10px] text-white/40">ICE / day</div>
                   </div>
