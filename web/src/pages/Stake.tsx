@@ -10,6 +10,11 @@ import { ApiError } from '../api';
 import { StakeIcon, LockIcon, CheckIcon } from '../components/icons';
 import type { Stake } from '../types';
 
+/** Total % return over the whole lock term (daily rate × duration in days). */
+function totalReturn(dailyRate: number, days: number): number {
+  return Math.round(dailyRate * days * 100) / 100;
+}
+
 /** "in 5d 3h" for a future date, or "ready" once passed. */
 function maturesIn(iso: string): string {
   const ms = new Date(iso).getTime() - Date.now();
@@ -118,8 +123,10 @@ export function StakePage() {
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-2xl font-extrabold text-amber-300">{et.apy}%</div>
-                <div className="text-[10px] uppercase tracking-wide text-white/40">APY</div>
+                <div className="text-2xl font-extrabold text-amber-300">
+                  {totalReturn(et.dailyRate, et.durationDays)}%
+                </div>
+                <div className="text-[10px] uppercase tracking-wide text-white/40">Total</div>
               </div>
             </div>
             <p className="mt-3 text-sm text-white/55">{et.blurb}</p>
@@ -188,8 +195,10 @@ export function StakePage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className={`text-2xl font-extrabold ${a.text}`}>{tier.apy}%</div>
-                    <div className="text-[10px] uppercase tracking-wide text-white/40">APY</div>
+                    <div className={`text-2xl font-extrabold ${a.text}`}>
+                      {totalReturn(tier.dailyRate, tier.durationDays)}%
+                    </div>
+                    <div className="text-[10px] uppercase tracking-wide text-white/40">Total</div>
                   </div>
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
@@ -202,8 +211,10 @@ export function StakePage() {
                     <div className="text-white/40">lock</div>
                   </div>
                   <div className="rounded-lg bg-white/5 py-2">
-                    <div className="font-bold text-white/80">{tier.apy}%</div>
-                    <div className="text-white/40">APY</div>
+                    <div className="font-bold text-white/80">
+                      {totalReturn(tier.dailyRate, tier.durationDays)}%
+                    </div>
+                    <div className="text-white/40">total</div>
                   </div>
                 </div>
                 <button

@@ -82,7 +82,7 @@ export function StakeSheet({
       <div className="space-y-4">
         <div className="grid grid-cols-3 gap-2">
           {[
-            { label: 'APY', value: `${pick.apy}%` },
+            { label: 'Total', value: `${Math.round(pick.dailyRate * pick.durationDays * 100) / 100}%` },
             { label: 'Daily', value: `${pick.dailyRate}%` },
             { label: 'Lock', value: `${pick.durationDays}d` },
           ].map((s) => (
