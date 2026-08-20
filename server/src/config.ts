@@ -122,6 +122,12 @@ export const config = {
     .filter(Boolean),
   // Bypass initData validation for browser testing. Never true in prod.
   devAllowUnsigned: process.env.DEV_ALLOW_UNSIGNED === 'true',
+  // Max age (seconds) of a Telegram initData payload before it's rejected as
+  // stale. Telegram reopens Mini Apps from a cached webview whose auth_date can
+  // be days old, so a strict window locks legitimate users out with "open from
+  // inside Telegram". The HMAC signature already proves authenticity; 0 disables
+  // the age check entirely (default). Set INITDATA_MAX_AGE_SECONDS to re-enable.
+  initDataMaxAge: num('INITDATA_MAX_AGE_SECONDS', 0),
   referralReward: num('REFERRAL_REWARD', 2),
   minWithdrawal: num('MIN_WITHDRAWAL', 18), // ICE-token rail minimum
   minWithdrawalUsdt: num('MIN_WITHDRAWAL_USDT', 0.5), // USDT rail minimum

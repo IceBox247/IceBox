@@ -26,7 +26,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       req.header('x-telegram-init-data') ??
       '';
 
-    let parsed = header ? validateInitData(header, config.botToken) : null;
+    let parsed = header ? validateInitData(header, config.botToken, config.initDataMaxAge) : null;
 
     // Dev escape hatch for browser testing without Telegram.
     if (!parsed && config.devAllowUnsigned && header) {
