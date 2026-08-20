@@ -11,6 +11,26 @@ interface Props {
   onDeposit: () => void;
 }
 
+/** Avatar that falls back to the name's initial if the photo fails to load. */
+function Avatar({ name, photoUrl }: { name: string; photoUrl: string | null }) {
+  const [broken, setBroken] = useState(false);
+  if (photoUrl && !broken) {
+    return (
+      <img
+        src={photoUrl}
+        alt=""
+        onError={() => setBroken(true)}
+        className="h-8 w-8 rounded-full object-cover"
+      />
+    );
+  }
+  return (
+    <span className="grid h-8 w-8 place-items-center rounded-full bg-ice-400/20 text-xs font-bold text-ice-200">
+      {name.slice(0, 1).toUpperCase()}
+    </span>
+  );
+}
+
 export function Mine({ onDeposit }: Props) {
   const { mining, buyHashrate, collectMining, refreshMining } = useStore();
   const toast = useToast();
@@ -353,13 +373,7 @@ export function Mine({ onDeposit }: Props) {
                   <span className="w-6 text-center text-sm font-extrabold text-white/50">
                     {r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : r.rank}
                   </span>
-                  {r.photoUrl ? (
-                    <img src={r.photoUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
-                  ) : (
-                    <span className="grid h-8 w-8 place-items-center rounded-full bg-ice-400/20 text-xs font-bold text-ice-200">
-                      {r.name.slice(0, 1).toUpperCase()}
-                    </span>
-                  )}
+                  <Avatar name={r.name} photoUrl={r.photoUrl} />
                   <div>
                     <div className="text-sm font-bold">
                       {r.name}
