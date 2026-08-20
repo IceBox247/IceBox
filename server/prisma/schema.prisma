@@ -50,8 +50,28 @@ model User {
   stakes          Stake[]
   deposits        Deposit[]
   depositAddresses DepositAddress[]
+  miner           Miner?
 
   @@index([referredById])
+}
+
+// A user's mining rig ("Glacier"). Users buy `hashrate` with DEPOSITED USD;
+// rewards accrue continuously at the configured ICE-per-hash-per-day rate into
+// `pending`, and collecting moves `pending` into the earned (ICE) balance.
+// `pending` is settled (accrued from `lastAccruedAt`) on every buy/collect so
+// the stored value is always current as of `lastAccruedAt`.
+model Miner {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @unique
+  hashrate      Float    @default(0) // total mining power owned (GH/s)
+  pending       Float    @default(0) // accrued, uncollected ICE as of lastAccruedAt
+  totalMined    Float    @default(0) // lifetime ICE collected
+  totalSpent    Float    @default(0) // lifetime USD spent buying hashrate
+  lastAccruedAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
 }
 
 model Task {

@@ -1,11 +1,12 @@
-import { HomeIcon, TasksIcon, ReferralsIcon, StakeIcon } from './icons';
+import { HomeIcon, TasksIcon, ReferralsIcon, StakeIcon, MineIcon } from './icons';
 import { haptic } from '../telegram';
 
-export type Tab = 'home' | 'tasks' | 'stake' | 'referrals';
+export type Tab = 'home' | 'tasks' | 'mine' | 'stake' | 'referrals';
 
 const items: { key: Tab; label: string; Icon: typeof HomeIcon }[] = [
   { key: 'home', label: 'Home', Icon: HomeIcon },
   { key: 'tasks', label: 'Tasks', Icon: TasksIcon },
+  { key: 'mine', label: 'Mine', Icon: MineIcon },
   { key: 'stake', label: 'Stake', Icon: StakeIcon },
   { key: 'referrals', label: 'Referrals', Icon: ReferralsIcon },
 ];

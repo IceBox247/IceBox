@@ -5,6 +5,7 @@ import { Header } from './components/Header';
 import { BottomNav, type Tab } from './components/BottomNav';
 import { Home } from './pages/Home';
 import { Tasks } from './pages/Tasks';
+import { Mine } from './pages/Mine';
 import { StakePage } from './pages/Stake';
 import { Referrals } from './pages/Referrals';
 import { MenuSheet } from './sheets/MenuSheet';
@@ -54,6 +55,7 @@ export default function App() {
           />
         )}
         {tab === 'tasks' && <Tasks />}
+        {tab === 'mine' && <Mine onDeposit={() => setDepositOpen(true)} />}
         {tab === 'stake' && <StakePage />}
         {tab === 'referrals' && <Referrals />}
       </main>

@@ -363,6 +363,34 @@ export const config = {
     label: str('TOKEN_LAUNCH_LABEL', 'ICE Token goes live on-chain'),
     tradeUrl: process.env.TOKEN_TRADE_URL ?? '',
   },
+
+  // "Glacier" mining: users buy hashrate (mining power) with DEPOSITED USD and
+  // it mines ICE USD continuously. Rewards land in the earned (ICE) bucket.
+  // Every rate is env-tunable so you can balance the economy from Vercel.
+  mining: {
+    enabled: process.env.MINING_ENABLED !== 'false',
+    name: str('MINE_NAME', 'Glacier'),
+    unit: str('MINE_UNIT', 'GH/s'),
+    // Hashrate gained per 1 USD spent (deposited USD → mining power).
+    hashPerUsd: num('MINE_HASH_PER_USD', 1),
+    // ICE USD mined per 1 unit of hashrate per day (drives earnings/hour = /24).
+    icePerHashDay: num('MINE_ICE_PER_HASH_DAY', 0.05),
+    // Smallest hashrate purchase, in USD.
+    minBuy: num('MINE_MIN_BUY', 1),
+    // Optional preset buy packages (USD), shown as quick-buy chips.
+    packages: (process.env.MINE_PACKAGES ?? '5,20,50,100,500')
+      .split(',')
+      .map((s) => Number(s.trim()))
+      .filter((n) => Number.isFinite(n) && n > 0),
+    // Level names by ascending hashrate threshold. Level 1 starts at 0.
+    levels: [
+      { name: 'Frost', minHash: 0 },
+      { name: 'Glacier', minHash: 50 },
+      { name: 'Iceberg', minHash: 250 },
+      { name: 'Avalanche', minHash: 1000 },
+      { name: 'Polar Vortex', minHash: 5000 },
+    ],
+  },
 };
 
 /** Payouts only run when every required piece is present. */

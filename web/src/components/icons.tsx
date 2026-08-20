@@ -159,6 +159,17 @@ export const LockIcon = (p: P) => (
     <path d="M8 11V7a4 4 0 0 1 8 0v4" />
   </svg>
 );
+/** Snowflake — the Glacier mining tab. */
+export const MineIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M12 2v20" />
+    <path d="M2 12h20" />
+    <path d="m4.9 4.9 14.2 14.2" />
+    <path d="m19.1 4.9-14.2 14.2" />
+    <path d="M12 6l2.5-2.5M12 6 9.5 3.5M12 18l2.5 2.5M12 18l-2.5 2.5" />
+    <path d="M6 12 3.5 9.5M6 12l-2.5 2.5M18 12l2.5-2.5M18 12l2.5 2.5" />
+  </svg>
+);
 
 /** ICE USD coin badge — IceBox's own ice-blue reward coin (not Tether). */
 export const IceUsdCoin = ({ size = 40 }: { size?: number }) => (

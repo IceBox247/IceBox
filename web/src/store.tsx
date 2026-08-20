@@ -8,7 +8,14 @@ import {
   type ReactNode,
 } from 'react';
 import { api, ApiError } from './api';
-import type { MeResponse, Task, StakingResponse, DepositInfo, CheckinState } from './types';
+import type {
+  MeResponse,
+  Task,
+  StakingResponse,
+  DepositInfo,
+  CheckinState,
+  MiningState,
+} from './types';
 
 interface Store {
   loading: boolean;
@@ -18,17 +25,21 @@ interface Store {
   staking: StakingResponse | null;
   deposit: DepositInfo | null;
   checkin: CheckinState | null;
+  mining: MiningState | null;
   refreshAll: () => Promise<void>;
   refreshMe: () => Promise<void>;
   refreshTasks: () => Promise<void>;
   refreshStaking: () => Promise<void>;
   refreshDeposit: () => Promise<void>;
   refreshCheckin: () => Promise<void>;
+  refreshMining: () => Promise<void>;
   claimTask: (id: number) => Promise<{ reward: number; completed: boolean }>;
   stake: (tier: string, amount: number) => Promise<void>;
   claimStake: (id: number) => Promise<{ reward: number }>;
   unstake: (id: number) => Promise<{ payout: number; reward: number }>;
   claimCheckin: () => Promise<{ reward: number; streak: number }>;
+  buyHashrate: (amount: number) => Promise<void>;
+  collectMining: () => Promise<{ collected: number }>;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -41,9 +52,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [staking, setStaking] = useState<StakingResponse | null>(null);
   const [deposit, setDeposit] = useState<DepositInfo | null>(null);
   const [checkin, setCheckin] = useState<CheckinState | null>(null);
+  const [mining, setMining] = useState<MiningState | null>(null);
 
   const refreshCheckin = useCallback(async () => {
     setCheckin(await api.checkin());
+  }, []);
+
+  const refreshMining = useCallback(async () => {
+    setMining(await api.mining());
   }, []);
 
   const refreshMe = useCallback(async () => {
@@ -78,7 +94,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const refreshAll = useCallback(async () => {
     try {
       setError(null);
-      await Promise.all([refreshMe(), refreshTasks(), refreshStaking(), refreshCheckin()]);
+      await Promise.all([
+        refreshMe(),
+        refreshTasks(),
+        refreshStaking(),
+        refreshCheckin(),
+        refreshMining(),
+      ]);
     } catch (e) {
       const msg =
         e instanceof ApiError
@@ -88,7 +110,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           : 'Something went wrong. Please try again.';
       setError(msg);
     }
-  }, [refreshMe, refreshTasks, refreshStaking, refreshCheckin]);
+  }, [refreshMe, refreshTasks, refreshStaking, refreshCheckin, refreshMining]);
+
+  const buyHashrate = useCallback(
+    async (amount: number) => {
+      const res = await api.buyHashrate(amount);
+      setMining(res.mining);
+      await refreshMe();
+    },
+    [refreshMe],
+  );
+
+  const collectMining = useCallback(async () => {
+    const res = await api.collectMining();
+    setMining(res.mining);
+    await refreshMe();
+    return { collected: res.collected };
+  }, [refreshMe]);
 
   const claimTask = useCallback(async (id: number) => {
     // Throws ApiError on failure so the caller can surface the real reason.
@@ -166,17 +204,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       staking,
       deposit,
       checkin,
+      mining,
       refreshAll,
       refreshMe,
       refreshTasks,
       refreshStaking,
       refreshDeposit,
       refreshCheckin,
+      refreshMining,
       claimTask,
       stake,
       claimStake,
       unstake,
       claimCheckin,
+      buyHashrate,
+      collectMining,
     }),
     [
       loading,
@@ -186,17 +228,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       staking,
       deposit,
       checkin,
+      mining,
       refreshAll,
       refreshMe,
       refreshTasks,
       refreshStaking,
       refreshDeposit,
       refreshCheckin,
+      refreshMining,
       claimTask,
       stake,
       claimStake,
       unstake,
       claimCheckin,
+      buyHashrate,
+      collectMining,
     ],
   );
 

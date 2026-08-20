@@ -12,6 +12,7 @@ import type {
   DepositCatalog,
   DepositAddressInfo,
   CheckinState,
+  MiningState,
 } from './types';
 
 const BASE = import.meta.env.VITE_API_BASE || '';
@@ -114,4 +115,14 @@ export const api = {
     }),
   refreshDeposits: () =>
     request<{ ok: boolean; deposits: DepositRow[] }>('/deposits/refresh', { method: 'POST' }),
+  mining: () => request<MiningState>('/mining'),
+  buyHashrate: (amount: number) =>
+    request<{ ok: boolean; mining: MiningState }>('/mining/buy', {
+      method: 'POST',
+      body: JSON.stringify({ amount }),
+    }),
+  collectMining: () =>
+    request<{ ok: boolean; collected: number; mining: MiningState }>('/mining/collect', {
+      method: 'POST',
+    }),
 };

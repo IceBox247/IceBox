@@ -248,6 +248,32 @@ export interface DepositCatalog {
   chains: CatalogChain[];
 }
 
+export interface MiningLevel {
+  level: number;
+  name: string;
+  nextName: string | null;
+  nextAtHash: number | null;
+  progress: number;
+}
+
+export interface MiningState {
+  enabled: boolean;
+  name: string;
+  unit: string;
+  hashrate: number;
+  pending: number;
+  perHour: number;
+  perDay: number;
+  totalMined: number;
+  totalSpent: number;
+  level: MiningLevel;
+  spendable: number;
+  hashPerUsd: number;
+  icePerHashDay: number;
+  minBuy: number;
+  packages: number[];
+}
+
 export interface DepositAddressInfo {
   address: string;
   originAsset: string;

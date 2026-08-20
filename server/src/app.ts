@@ -13,6 +13,7 @@ import { withdrawalsRouter } from './routes/withdrawals';
 import { stakingRouter } from './routes/staking';
 import { checkinRouter } from './routes/checkin';
 import { depositsRouter } from './routes/deposits';
+import { miningRouter } from './routes/mining';
 import { dextopusWebhookHandler } from './routes/webhooks';
 import { tokensRouter } from './routes/tokens';
 import { cronRouter } from './routes/cron';
@@ -80,6 +81,7 @@ export function createApp(): Express {
   app.use('/api/staking', stakingRouter);
   app.use('/api/checkin', checkinRouter);
   app.use('/api/deposits', depositsRouter);
+  app.use('/api/mining', miningRouter);
 
   // Serve the built web app when co-located (local prod). On Vercel the static
   // frontend is served by the platform, so this directory won't exist there.
