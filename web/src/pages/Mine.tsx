@@ -103,7 +103,7 @@ export function Mine({ onDeposit }: Props) {
     <div className="animate-fade-in space-y-5 px-5 pb-28 pt-2">
       <div>
         <h1 className="text-3xl font-extrabold leading-tight">{mining.name}</h1>
-        <p className="mt-1 text-white/50">Mine ICE USD with hashrate — powered by deposits</p>
+        <p className="mt-1 text-white/50">Mine ICE USD with hashrate</p>
       </div>
 
       {/* Rig card */}
