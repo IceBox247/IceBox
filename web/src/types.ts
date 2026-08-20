@@ -270,7 +270,11 @@ export interface MiningState {
   spendable: number;
   hashPerUsd: number;
   icePerHashDay: number;
+  baseIcePerDay: number;
+  maxIcePerDay: number;
   minBuy: number;
+  maxBuy: number;
+  capacityLeftPerDay: number;
   packages: number[];
 }
 

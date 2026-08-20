@@ -27,7 +27,12 @@ export function Mine({ onDeposit }: Props) {
   // Estimate the live pending between refreshes (perHour → per second).
   const livePending = mining.pending + (mining.perHour / 3600) * tick;
   const amt = Number(amount);
-  const validBuy = Number.isFinite(amt) && amt >= mining.minBuy && amt <= mining.spendable;
+  const validBuy =
+    Number.isFinite(amt) &&
+    amt >= mining.minBuy &&
+    amt <= mining.maxBuy &&
+    amt <= mining.spendable;
+  const iceForUsd = (usd: number) => usd * mining.hashPerUsd * mining.icePerHashDay;
 
   async function buy(v: number) {
     setBusy('buy');
@@ -119,6 +124,7 @@ export function Mine({ onDeposit }: Props) {
             <div className="mt-1 text-xl font-extrabold text-ice-300">
               {mining.perHour.toFixed(4)}
             </div>
+            <div className="text-[10px] text-white/40">{mining.perDay.toFixed(2)} / day</div>
           </div>
         </div>
 
@@ -136,8 +142,10 @@ export function Mine({ onDeposit }: Props) {
         <div>
           <h2 className="text-lg font-extrabold">Boost your hashrate</h2>
           <p className="mt-1 text-sm text-white/55">
-            Buy mining power with <b className="text-ice-200">deposited</b> USD. Each ${1} adds{' '}
-            {mining.hashPerUsd} {mining.unit}, mining {(mining.hashPerUsd * mining.icePerHashDay).toFixed(3)} ICE USD/day.
+            You mine <b className="text-ice-200">{mining.baseIcePerDay} ICE USD/day</b> free. Buy
+            more power with <b className="text-ice-200">deposited</b> USD — from ${mining.minBuy} up
+            to ${mining.maxBuy.toLocaleString()}, growing to as much as{' '}
+            {mining.maxIcePerDay.toLocaleString()} ICE USD/day.
           </p>
         </div>
 
@@ -146,21 +154,40 @@ export function Mine({ onDeposit }: Props) {
           <b>{usdt(mining.spendable)} USD</b>
         </div>
 
-        {/* Quick packages */}
-        <div className="grid grid-cols-3 gap-2">
-          {mining.packages.map((p) => (
-            <button
-              key={p}
-              onClick={() => buy(p)}
-              disabled={busy !== null || p > mining.spendable}
-              className="rounded-2xl border border-ice-400/20 bg-ice-400/5 py-3 text-center font-bold disabled:opacity-40"
-            >
-              ${p}
-              <div className="text-[10px] font-semibold text-white/40">
-                +{p * mining.hashPerUsd} {mining.unit}
-              </div>
-            </button>
-          ))}
+        {/* 100-step hashrate ladder */}
+        <div>
+          <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-wide text-white/40">
+            <span>Hashrate packages</span>
+            <span>{mining.packages.length} tiers</span>
+          </div>
+          <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+            {mining.packages.map((p, i) => {
+              const affordable = p <= mining.spendable;
+              return (
+                <button
+                  key={i}
+                  onClick={() => buy(p)}
+                  disabled={busy !== null || !affordable}
+                  className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-left disabled:opacity-40"
+                >
+                  <div>
+                    <div className="text-sm font-extrabold">
+                      #{i + 1} · ${p.toLocaleString()}
+                    </div>
+                    <div className="text-[11px] text-white/45">
+                      +{Math.round(p * mining.hashPerUsd * 100) / 100} {mining.unit}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-bold text-ice-300">
+                      +{iceForUsd(p).toFixed(iceForUsd(p) < 1 ? 3 : 2)}
+                    </div>
+                    <div className="text-[10px] text-white/40">ICE / day</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Custom amount */}
@@ -169,12 +196,12 @@ export function Mine({ onDeposit }: Props) {
             inputMode="decimal"
             value={amount}
             onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-            placeholder={`Custom amount (min $${mining.minBuy})`}
+            placeholder={`Custom amount ($${mining.minBuy} – $${mining.maxBuy.toLocaleString()})`}
             className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-lg font-bold outline-none focus:border-ice-400/50"
           />
           {mining.spendable < mining.minBuy ? (
             <button onClick={onDeposit} className="btn-ghost w-full py-3">
-              Deposit USD to start mining
+              Deposit USD to buy hashrate
             </button>
           ) : (
             <button
@@ -185,7 +212,7 @@ export function Mine({ onDeposit }: Props) {
               {busy === 'buy'
                 ? 'Buying…'
                 : validBuy
-                  ? `Buy ${amt * mining.hashPerUsd} ${mining.unit}`
+                  ? `Buy — +${iceForUsd(amt).toFixed(iceForUsd(amt) < 1 ? 3 : 2)} ICE/day`
                   : 'Buy hashrate'}
             </button>
           )}

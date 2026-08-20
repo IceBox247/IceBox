@@ -4,9 +4,14 @@ import { config } from '../config';
 
 const MS_PER_DAY = 86_400_000;
 
-/** ICE mined per hashrate unit per hour. */
-function ratePerHashHour(): number {
-  return config.mining.icePerHashDay / 24;
+/** ICE mined per DAY for a given hashrate — base rate (free) + bought power. */
+function icePerDay(hashrate: number): number {
+  return config.mining.baseIcePerDay + hashrate * config.mining.icePerHashDay;
+}
+
+/** ICE mined per HOUR for a given hashrate. */
+function ratePerHour(hashrate: number): number {
+  return icePerDay(hashrate) / 24;
 }
 
 /** Deposited (USDT-withdrawable) portion of a balance — the only USD that can buy hashrate. */
@@ -24,7 +29,7 @@ export async function getOrCreateMiner(userId: number): Promise<Miner> {
 /** Live-accrued pending ICE for a miner as of `now` (does not persist). */
 export function livePending(miner: Miner, now = new Date()): number {
   const hours = Math.max(0, (now.getTime() - miner.lastAccruedAt.getTime()) / 3_600_000);
-  return money(miner.pending + miner.hashrate * ratePerHashHour() * hours);
+  return money(miner.pending + ratePerHour(miner.hashrate) * hours);
 }
 
 /** Which level a hashrate falls into, with progress toward the next. */
@@ -51,23 +56,27 @@ export function levelFor(hashrate: number) {
 /** Serialize a miner + config for the client. */
 export function serializeMining(user: User, miner: Miner, now = new Date()) {
   const pending = livePending(miner, now);
-  const perHour = money(miner.hashrate * ratePerHashHour());
   return {
     enabled: config.mining.enabled,
     name: config.mining.name,
     unit: config.mining.unit,
     hashrate: miner.hashrate,
     pending,
-    perHour,
-    perDay: money(miner.hashrate * config.mining.icePerHashDay),
+    perHour: money(ratePerHour(miner.hashrate)),
+    perDay: money(icePerDay(miner.hashrate)),
     totalMined: money(miner.totalMined),
     totalSpent: money(miner.totalSpent),
     level: levelFor(miner.hashrate),
-    // What the user can spend on hashrate, and the price.
+    // What the user can spend on hashrate, and the pricing.
     spendable: depositedOf(user),
     hashPerUsd: config.mining.hashPerUsd,
     icePerHashDay: config.mining.icePerHashDay,
+    baseIcePerDay: config.mining.baseIcePerDay,
+    maxIcePerDay: config.mining.maxIcePerDay,
     minBuy: config.mining.minBuy,
+    maxBuy: config.mining.maxBuy,
+    // Remaining daily-earning capacity before hitting the per-user cap.
+    capacityLeftPerDay: money(Math.max(0, config.mining.maxIcePerDay - icePerDay(miner.hashrate))),
     packages: config.mining.packages,
   };
 }
@@ -82,6 +91,9 @@ export async function buyHashrate(userId: number, usd: number) {
   if (!Number.isFinite(amount) || amount < config.mining.minBuy) {
     return { error: 'below_minimum' as const, minBuy: config.mining.minBuy };
   }
+  if (amount > config.mining.maxBuy) {
+    return { error: 'above_maximum' as const, maxBuy: config.mining.maxBuy };
+  }
 
   return prisma.$transaction(async (tx) => {
     const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
@@ -93,11 +105,21 @@ export async function buyHashrate(userId: number, usd: number) {
     const miner = (await tx.miner.findUnique({ where: { userId } })) ??
       (await tx.miner.create({ data: { userId } }));
 
+    const addedHash = money(amount * config.mining.hashPerUsd);
+    // Enforce the per-user max mining rate (bought hashrate is capped).
+    if (miner.hashrate + addedHash > config.mining.maxHashrate + 1e-9) {
+      return {
+        error: 'max_rate_reached' as const,
+        capacityLeftPerDay: money(
+          Math.max(0, config.mining.maxIcePerDay - icePerDay(miner.hashrate)),
+        ),
+      };
+    }
+
     // Settle accrued pending up to now before changing the rate.
     const now = new Date();
     const hours = Math.max(0, (now.getTime() - miner.lastAccruedAt.getTime()) / 3_600_000);
-    const accrued = miner.hashrate * ratePerHashHour() * hours;
-    const addedHash = money(amount * config.mining.hashPerUsd);
+    const accrued = ratePerHour(miner.hashrate) * hours;
 
     const updatedMiner = await tx.miner.update({
       where: { userId },
@@ -138,7 +160,7 @@ export async function collectMined(userId: number) {
 
     const now = new Date();
     const hours = Math.max(0, (now.getTime() - miner.lastAccruedAt.getTime()) / 3_600_000);
-    const accrued = miner.hashrate * ratePerHashHour() * hours;
+    const accrued = ratePerHour(miner.hashrate) * hours;
     const total = money(miner.pending + accrued);
 
     if (total <= 0) {

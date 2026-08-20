@@ -370,30 +370,46 @@ export const config = {
   // "Glacier" mining: users buy hashrate (mining power) with DEPOSITED USD and
   // it mines ICE USD continuously. Rewards land in the earned (ICE) bucket.
   // Every rate is env-tunable so you can balance the economy from Vercel.
-  mining: {
-    enabled: process.env.MINING_ENABLED !== 'false',
-    name: str('MINE_NAME', 'Glacier'),
-    unit: str('MINE_UNIT', 'GH/s'),
-    // Hashrate gained per 1 USD spent (deposited USD → mining power).
-    hashPerUsd: num('MINE_HASH_PER_USD', 1),
-    // ICE USD mined per 1 unit of hashrate per day (drives earnings/hour = /24).
-    icePerHashDay: num('MINE_ICE_PER_HASH_DAY', 0.05),
-    // Smallest hashrate purchase, in USD.
-    minBuy: num('MINE_MIN_BUY', 1),
-    // Optional preset buy packages (USD), shown as quick-buy chips.
-    packages: (process.env.MINE_PACKAGES ?? '5,20,50,100,500')
-      .split(',')
-      .map((s) => Number(s.trim()))
-      .filter((n) => Number.isFinite(n) && n > 0),
-    // Level names by ascending hashrate threshold. Level 1 starts at 0.
-    levels: [
-      { name: 'Frost', minHash: 0 },
-      { name: 'Glacier', minHash: 50 },
-      { name: 'Iceberg', minHash: 250 },
-      { name: 'Avalanche', minHash: 1000 },
-      { name: 'Polar Vortex', minHash: 5000 },
-    ],
-  },
+  mining: (() => {
+    const hashPerUsd = num('MINE_HASH_PER_USD', 1);
+    const icePerHashDay = num('MINE_ICE_PER_HASH_DAY', 0.5);
+    // Every user mines this many ICE USD/day for free, before buying any power.
+    const baseIcePerDay = num('MINE_BASE_ICE_PER_DAY', 1);
+    // The most a single miner can earn per day (bought power is capped here).
+    const maxIcePerDay = num('MINE_MAX_ICE_PER_DAY', 1000);
+    const minBuy = num('MINE_MIN_BUY', 0.09);
+    const maxBuy = num('MINE_MAX_BUY', 2000);
+    const packageCount = Math.max(2, Math.floor(num('MINE_PACKAGE_COUNT', 100)));
+    // 100 geometric price steps from minBuy → maxBuy (each ~x% above the last).
+    const ratio = Math.pow(maxBuy / minBuy, 1 / (packageCount - 1));
+    const packages: number[] = [];
+    for (let i = 0; i < packageCount; i++) {
+      packages.push(Math.round(minBuy * Math.pow(ratio, i) * 100) / 100);
+    }
+    // Cap bought hashrate so per-day earnings can't exceed maxIcePerDay.
+    const maxHashrate = icePerHashDay > 0 ? (maxIcePerDay - baseIcePerDay) / icePerHashDay : 0;
+    return {
+      enabled: process.env.MINING_ENABLED !== 'false',
+      name: str('MINE_NAME', 'Glacier'),
+      unit: str('MINE_UNIT', 'GH/s'),
+      hashPerUsd,
+      icePerHashDay,
+      baseIcePerDay,
+      maxIcePerDay,
+      minBuy,
+      maxBuy,
+      maxHashrate,
+      packages,
+      // Level names by ascending hashrate threshold. Level 1 starts at 0.
+      levels: [
+        { name: 'Frost', minHash: 0 },
+        { name: 'Glacier', minHash: 50 },
+        { name: 'Iceberg', minHash: 250 },
+        { name: 'Avalanche', minHash: 800 },
+        { name: 'Polar Vortex', minHash: 1500 },
+      ],
+    };
+  })(),
 };
 
 /** Payouts only run when every required piece is present. */

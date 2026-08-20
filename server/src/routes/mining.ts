@@ -29,7 +29,24 @@ miningRouter.post('/buy', async (req, res) => {
       return res.status(400).json({
         error: 'below_minimum',
         minBuy: result.minBuy,
-        message: `Minimum purchase is ${result.minBuy.toFixed(2)} USD.`,
+        message: `Minimum purchase is $${result.minBuy.toFixed(2)}.`,
+      });
+    }
+    if (result.error === 'above_maximum') {
+      return res.status(400).json({
+        error: 'above_maximum',
+        maxBuy: result.maxBuy,
+        message: `Maximum single purchase is $${result.maxBuy.toFixed(2)}.`,
+      });
+    }
+    if (result.error === 'max_rate_reached') {
+      return res.status(400).json({
+        error: 'max_rate_reached',
+        capacityLeftPerDay: result.capacityLeftPerDay,
+        message:
+          result.capacityLeftPerDay > 0
+            ? `You're near the max mining rate — only ${result.capacityLeftPerDay} ICE USD/day of capacity left.`
+            : 'You have reached the maximum mining rate.',
       });
     }
     return res.status(400).json({
