@@ -35,7 +35,12 @@ cronRouter.get('/payouts', async (req, res) => {
     const legacy = await runPayouts();
     const dextopus = await runDextopusPayouts();
     const poll = await pollDextopusWithdrawals();
-    res.json({ ok: true, legacy, dextopus, poll });
+    // Daily mining-leaderboard rewards (idempotent per UTC day).
+    const { distributeMiningRewards } = await import('../services/mining');
+    const miningRewards = await distributeMiningRewards().catch((e) => ({
+      error: e instanceof Error ? e.message : String(e),
+    }));
+    res.json({ ok: true, legacy, dextopus, poll, miningRewards });
   } catch (e) {
     console.error('[cron] payout run failed', e);
     res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });

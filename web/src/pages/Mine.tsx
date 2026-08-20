@@ -319,6 +319,18 @@ export function Mine({ onDeposit }: Props) {
       {/* Top miners leaderboard */}
       <div className="space-y-2">
         <p className="text-sm font-bold uppercase tracking-wide text-white/40">Top miners</p>
+        {mining.rewards.enabled && (
+          <div className="rounded-2xl border border-usdt/25 bg-usdt/5 p-4 text-center">
+            <div className="text-sm font-extrabold">🏆 Daily mining rewards</div>
+            <p className="mt-1 text-xs text-white/60">
+              Top {mining.rewards.usdtTop} split{' '}
+              <b className="text-usdt">${mining.rewards.usdtPool} USDT</b> · Top{' '}
+              {mining.rewards.iceTop} split{' '}
+              <b className="text-ice-200">{mining.rewards.icePool.toLocaleString()} ICE USD</b> —
+              every day, by rank.
+            </p>
+          </div>
+        )}
         <div className="card divide-y divide-white/5 p-0">
           {board === null ? (
             <div className="px-4 py-6 text-center text-sm text-white/40">Loading…</div>

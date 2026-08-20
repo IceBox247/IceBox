@@ -407,6 +407,13 @@ export const config = {
     const maxIcePerDay = baseIcePerDay + maxDay;
     // Each referral who starts mining adds this to the referrer's daily rate.
     const referralBonusPerDay = num('MINE_REF_BONUS_PER_DAY', 0.1);
+    // Daily leaderboard rewards, split by rank: top N share a USDT pool
+    // (withdrawable) and top M share an ICE USD pool.
+    const rewardsEnabled = process.env.MINE_REWARDS_ENABLED !== 'false';
+    const usdtPool = num('MINE_DAILY_USDT_POOL', 5);
+    const usdtTop = Math.max(1, Math.floor(num('MINE_USDT_TOP', 10)));
+    const icePool = num('MINE_DAILY_ICE_POOL', 1000);
+    const iceTop = Math.max(1, Math.floor(num('MINE_ICE_TOP', 100)));
 
     return {
       enabled: process.env.MINING_ENABLED !== 'false',
@@ -415,6 +422,11 @@ export const config = {
       icePerHashDay,
       baseIcePerDay,
       referralBonusPerDay,
+      rewardsEnabled,
+      usdtPool,
+      usdtTop,
+      icePool,
+      iceTop,
       maxIcePerDay,
       minBuy,
       maxBuy,

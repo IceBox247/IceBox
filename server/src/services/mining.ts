@@ -115,6 +115,14 @@ export function serializeMining(user: User, miner: Miner, referralMiners: number
     referralMiners,
     referralBonusPerDay: config.mining.referralBonusPerDay,
     referralBonus: money(referralMiners * config.mining.referralBonusPerDay),
+    // Daily leaderboard reward pools.
+    rewards: {
+      enabled: config.mining.rewardsEnabled,
+      usdtPool: config.mining.usdtPool,
+      usdtTop: config.mining.usdtTop,
+      icePool: config.mining.icePool,
+      iceTop: config.mining.iceTop,
+    },
     // Remaining daily-earning capacity before hitting the per-user cap.
     capacityLeftPerDay: money(
       Math.max(0, config.mining.maxIcePerDay - icePerDay(miner.hashrate, referralMiners)),
@@ -278,6 +286,91 @@ export async function miningLeaderboard(meId: number, take = 100) {
     .map((r, i) => ({ rank: i + 1, ...r, isMe: r.userId === meId }));
 
   return { unit: config.mining.unit, leaderboard: rows };
+}
+
+/**
+ * Distribute the daily mining-leaderboard rewards, once per UTC day:
+ *  - Top `usdtTop` miners share the USDT pool (into the withdrawable bucket).
+ *  - Top `iceTop` miners share the ICE pool (into the earned bucket).
+ * Both are split by rank weight (higher rank → bigger share). Idempotent: a
+ * marker ledger row per day prevents a second run.
+ */
+export async function distributeMiningRewards(): Promise<{
+  ran: boolean;
+  day: string;
+  usdtPaid: number;
+  icePaid: number;
+  winners: number;
+}> {
+  const cfg = config.mining;
+  const day = new Date().toISOString().slice(0, 10); // UTC YYYY-MM-DD
+  const skip = { ran: false, day, usdtPaid: 0, icePaid: 0, winners: 0 };
+  if (!cfg.rewardsEnabled) return skip;
+
+  // Idempotency: bail if today's rewards already went out.
+  const already = await prisma.ledgerEntry.findFirst({
+    where: { reason: 'mining_reward', meta: { contains: `"day":"${day}"` } },
+    select: { id: true },
+  });
+  if (already) return skip;
+
+  const { leaderboard } = await miningLeaderboard(0, cfg.iceTop);
+  if (leaderboard.length === 0) return skip;
+
+  // Fixed weight denominators (rank 1 heaviest). Using the full top-N sum means
+  // that with fewer than N miners, the pool isn't fully spent.
+  const usdtDenom = (cfg.usdtTop * (cfg.usdtTop + 1)) / 2;
+  const iceDenom = (cfg.iceTop * (cfg.iceTop + 1)) / 2;
+
+  let usdtPaid = 0;
+  let icePaid = 0;
+  let winners = 0;
+
+  for (const row of leaderboard) {
+    const rank = row.rank;
+    const usdt =
+      rank <= cfg.usdtTop ? money((cfg.usdtPool * (cfg.usdtTop - rank + 1)) / usdtDenom) : 0;
+    const ice =
+      rank <= cfg.iceTop ? money((cfg.icePool * (cfg.iceTop - rank + 1)) / iceDenom) : 0;
+    if (usdt <= 0 && ice <= 0) continue;
+    winners++;
+    usdtPaid = money(usdtPaid + usdt);
+    icePaid = money(icePaid + ice);
+
+    await prisma.$transaction(async (tx) => {
+      // USDT reward → deposited bucket (withdrawable). ICE reward → earned bucket.
+      await tx.user.update({
+        where: { id: row.userId },
+        data: {
+          balance: { increment: money(usdt + ice) },
+          earnedBalance: { increment: ice },
+          totalEarned: { increment: ice },
+        },
+      });
+      if (usdt > 0) {
+        await tx.ledgerEntry.create({
+          data: {
+            userId: row.userId,
+            amount: usdt,
+            reason: 'mining_reward',
+            meta: JSON.stringify({ day, type: 'usdt', rank }),
+          },
+        });
+      }
+      if (ice > 0) {
+        await tx.ledgerEntry.create({
+          data: {
+            userId: row.userId,
+            amount: ice,
+            reason: 'mining_reward',
+            meta: JSON.stringify({ day, type: 'ice', rank }),
+          },
+        });
+      }
+    });
+  }
+
+  return { ran: true, day, usdtPaid, icePaid, winners };
 }
 
 export { MS_PER_DAY };

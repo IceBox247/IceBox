@@ -326,6 +326,13 @@ export interface MiningState {
   referralMiners: number;
   referralBonusPerDay: number;
   referralBonus: number;
+  rewards: {
+    enabled: boolean;
+    usdtPool: number;
+    usdtTop: number;
+    icePool: number;
+    iceTop: number;
+  };
   capacityLeftPerDay: number;
   packages: { price: number; ice: number }[];
 }
