@@ -98,6 +98,35 @@ cronRouter.get('/test-alert', async (req, res) => {
   res.json({ ok: true, hasImage: !!photo, image: photo || null, results });
 });
 
+/**
+ * GET /api/cron/config?secret=CRON_SECRET — echoes the staking specs the SERVER
+ * actually resolved from the environment, so "my APY isn't changing" can be told
+ * apart from a frontend cache vs. env-not-applied. If the numbers here match your
+ * Vercel env, the API is correct and the app just needs a hard reload; if they
+ * show the old defaults, the env isn't reaching this deployment.
+ */
+cronRouter.get('/config', (req, res) => {
+  if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
+  res.json({
+    ok: true,
+    stakingEnabled: config.staking.enabled,
+    tiers: config.staking.tiers.map((t) => ({
+      key: t.key,
+      name: t.name,
+      apy: t.apy,
+      dailyRate: t.dailyRate,
+      durationDays: t.durationDays,
+      min: t.minStake,
+      max: t.maxStake,
+    })),
+    earnedVault: {
+      apy: config.staking.earned.apy,
+      dailyRate: config.staking.earned.dailyRate,
+      durationDays: config.staking.earned.durationDays,
+    },
+  });
+});
+
 /** GET /api/cron/status — queue counts and hot-wallet balances. */
 cronRouter.get('/status', async (req, res) => {
   if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
