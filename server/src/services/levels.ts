@@ -1,7 +1,7 @@
 import type { Miner, User } from '@prisma/client';
 import { prisma, money } from '../db';
 import { config } from '../config';
-import { readIceHolding, refreshIceHolding, isEvmAddress } from './chain';
+import { readIceHolding, refreshIceHolding, isEvmAddress, getIcePriceUsd } from './chain';
 import {
   getOrCreateMiner,
   miningReferralCount,
@@ -37,11 +37,13 @@ export async function syncMinerLevel(
     verified && user.walletAddress
       ? await (opts.fresh ? refreshIceHolding : readIceHolding)(user.walletAddress)
       : { tokens: 0, usd: 0 };
-  const level = L().levelForHolding(holding.usd);
 
   return prisma.$transaction(async (tx) => {
     const miner = await tx.miner.findUniqueOrThrow({ where: { userId } });
     const refs = await miningReferralCount(tx as unknown as Db, userId);
+    // Effective holding = on-chain value + any goodwill holding credit.
+    const effUsd = money(holding.usd + miner.bonusHoldingUsd);
+    const level = L().levelForHolding(effUsd);
     // Settle pending at the current rate before the level (and thus rate) changes.
     const now = new Date();
     const hours = Math.max(0, (now.getTime() - miner.lastAccruedAt.getTime()) / 3_600_000);
@@ -51,14 +53,70 @@ export async function syncMinerLevel(
       data: {
         pending: money(miner.pending + accrued),
         level,
-        holdingUsd: holding.usd,
+        holdingUsd: effUsd,
         holdingTokens: holding.tokens,
         holdingCheckedAt: now,
         lastAccruedAt: now,
       },
     });
-    return { miner: updated, holdingUsd: holding.usd, holdingTokens: holding.tokens, level };
+    return { miner: updated, holdingUsd: effUsd, holdingTokens: holding.tokens, level };
   });
+}
+
+/**
+ * One-time migration: compensate users who spent REAL USD on the old bought-
+ * hashrate model. Each such user (miner.totalSpent > 0) gets, for the exact USD
+ * they spent: (a) an ICE token balance worth that USD at the live price, and
+ * (b) a holding credit so their spend still gives them a mining level.
+ * Idempotent per user via a 'hashrate_migration' ledger marker.
+ */
+export async function migrateHashrateSpenders() {
+  const price = await getIcePriceUsd();
+  const px = price > 0 ? price : L().price;
+  const miners = await prisma.miner.findMany({ where: { totalSpent: { gt: 0 } } });
+  let migrated = 0;
+  let skipped = 0;
+  let totalSpentUsd = 0;
+  let refundedIce = 0;
+  for (const m of miners) {
+    const already = await prisma.ledgerEntry.findFirst({
+      where: { userId: m.userId, reason: 'hashrate_migration' },
+      select: { id: true },
+    });
+    if (already) {
+      skipped++;
+      continue;
+    }
+    const spent = money(m.totalSpent);
+    const refundIce = money(spent / px);
+    const level = L().levelForHolding(spent);
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: m.userId },
+        data: {
+          balance: { increment: refundIce },
+          earnedBalance: { increment: refundIce },
+          totalEarned: { increment: refundIce },
+        },
+      });
+      await tx.miner.update({
+        where: { userId: m.userId },
+        data: { bonusHoldingUsd: spent, holdingUsd: spent, level },
+      });
+      await tx.ledgerEntry.create({
+        data: {
+          userId: m.userId,
+          amount: refundIce,
+          reason: 'hashrate_migration',
+          meta: JSON.stringify({ spentUsd: spent, refundIce, price: px, level }),
+        },
+      });
+    });
+    migrated++;
+    totalSpentUsd = money(totalSpentUsd + spent);
+    refundedIce = money(refundedIce + refundIce);
+  }
+  return { migrated, skipped, totalSpentUsd, refundedIce, price: px };
 }
 
 /** What it takes to reach a target level from the user's current holding. */

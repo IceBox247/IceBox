@@ -202,6 +202,21 @@ cronRouter.get('/task-verify', async (req, res) => {
   res.json({ ok: true, allReady: checks.every((c) => c.ready), checks });
 });
 
+/**
+ * GET /api/cron/migrate-hashrate?secret=CRON_SECRET — one-time: compensate users
+ * who spent real USD on the old bought-hashrate model with ICE tokens (at the
+ * live price) + a holding credit for their level. Idempotent — safe to re-run.
+ */
+cronRouter.get('/migrate-hashrate', async (req, res) => {
+  if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
+  try {
+    const { migrateHashrateSpenders } = await import('../services/levels');
+    res.json({ ok: true, ...(await migrateHashrateSpenders()) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
 /** GET /api/cron/status — queue counts and hot-wallet balances. */
 cronRouter.get('/status', async (req, res) => {
   if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
