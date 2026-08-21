@@ -22,13 +22,21 @@ function fmtPrice(n: number): string {
   if (!(n > 0)) return '—';
   return n >= 0.01 ? `$${n.toFixed(4)}` : `$${n.toPrecision(3)}`;
 }
+/** Tier name for a level, ice-themed (Frost → Polar Vortex). */
+function levelName(level: number, count: number): string {
+  const f = level / Math.max(1, count);
+  if (f < 0.1) return 'FROST';
+  if (f < 0.25) return 'GLACIER';
+  if (f < 0.45) return 'ICEBERG';
+  if (f < 0.7) return 'AVALANCHE';
+  return 'POLAR VORTEX';
+}
 
 interface Props {
   mining: LevelMiningState;
   onDeposit: () => void;
 }
 
-/** Avatar that falls back to the name initial. */
 function Avatar({ name, photoUrl }: { name: string; photoUrl: string | null }) {
   const [broken, setBroken] = useState(false);
   if (photoUrl && !broken)
@@ -43,6 +51,7 @@ function Avatar({ name, photoUrl }: { name: string; photoUrl: string | null }) {
 export function MineLevels({ mining, onDeposit }: Props) {
   const { refreshMining, collectMining } = useStore();
   const toast = useToast();
+  const c = mining.curve;
 
   const [tick, setTick] = useState(0);
   useEffect(() => {
@@ -51,6 +60,13 @@ export function MineLevels({ mining, onDeposit }: Props) {
   }, []);
   const livePool = mining.pool + (mining.perHour / 3600) * tick;
   const assets = mining.holding.tokens + livePool;
+
+  // Progress toward the next level, from the holding curve.
+  const holdRatio = useMemo(() => Math.pow(c.maxUsd / c.minUsd, 1 / (c.count - 1)), [c]);
+  const reqUsd = (lvl: number) => (lvl < 1 ? 0 : c.minUsd * Math.pow(holdRatio, lvl - 1));
+  const curReq = reqUsd(mining.level);
+  const nextReq = mining.nextLevel ? mining.nextLevel.requiredUsd : curReq;
+  const pct = nextReq > curReq ? Math.max(4, Math.min(100, ((mining.holding.usd - curReq) / (nextReq - curReq)) * 100)) : 100;
 
   const [busy, setBusy] = useState(false);
   const [storeOpen, setStoreOpen] = useState(false);
@@ -70,125 +86,138 @@ export function MineLevels({ mining, onDeposit }: Props) {
     }
   }
 
+  const card = 'rounded-2xl border border-ice-400/15 bg-white/[0.03]';
+
   return (
-    <div className="animate-fade-in space-y-4 px-5 pb-28 pt-3">
+    <div className="animate-fade-in space-y-3.5 px-4 pb-28 pt-1">
       <style>{`
-        @keyframes mineBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+        @keyframes mineBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
         @keyframes mineSpin{to{transform:rotate(360deg)}}
-        @keyframes minePulse{0%{transform:scale(.85);opacity:.55}100%{transform:scale(1.5);opacity:0}}
-        @keyframes mineShine{0%{transform:translateX(-140%) rotate(12deg)}60%,100%{transform:translateX(240%) rotate(12deg)}}
-        @keyframes minePop{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
-        @keyframes mineFloat{0%{transform:translateY(0);opacity:0}20%{opacity:1}100%{transform:translateY(-70px);opacity:0}}
+        @keyframes mineSpinR{to{transform:rotate(-360deg)}}
+        @keyframes minePulse{0%{transform:scale(.7);opacity:.5}100%{transform:scale(1.5);opacity:0}}
+        @keyframes minePop{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+        @keyframes mineGlow{0%,100%{box-shadow:0 0 40px -6px rgba(51,194,255,.6)}50%{box-shadow:0 0 70px 0 rgba(51,194,255,.9)}}
       `}</style>
-      {/* Top row: level + status + wallet */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="rounded-full bg-white/10 px-3 py-1 text-sm font-extrabold">Lvl {mining.level}</span>
-          <span className="flex items-center gap-1 text-xs font-bold text-emerald-400">
-            ● {mining.wallet.verified ? 'READY' : 'CONNECT'}
-          </span>
-        </div>
-        {mining.wallet.verified ? (
+
+      {/* Header */}
+      <div className="text-center text-[11px] font-extrabold uppercase tracking-[0.4em] text-ice-200/80">
+        ❄ Glacier Mine
+      </div>
+
+      {/* Level + connect + progress */}
+      <div className={`${card} p-3.5`}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-sm font-extrabold">
+              LVL <span className="text-ice-300">{mining.level}</span>{' '}
+              <span className="text-white/50">· {levelName(mining.level, c.count)}</span>
+            </span>
+            <span className="text-xs font-bold text-emerald-400">● {mining.wallet.verified ? 'READY' : 'CONNECT'}</span>
+          </div>
           <button
             onClick={() => setConnectOpen(true)}
-            className="rounded-full bg-white/5 px-3 py-1.5 text-xs font-bold text-white/70"
+            className={mining.wallet.verified ? 'rounded-full bg-white/5 px-3 py-1.5 text-xs font-bold text-white/70' : 'btn-primary px-3.5 py-2 text-xs uppercase'}
           >
-            {mining.wallet.address?.slice(0, 5)}…{mining.wallet.address?.slice(-3)}
+            {mining.wallet.verified ? `${mining.wallet.address?.slice(0, 5)}…${mining.wallet.address?.slice(-3)}` : 'Connect Wallet'}
           </button>
-        ) : (
-          <button onClick={() => setConnectOpen(true)} className="btn-primary px-4 py-2 text-sm">
-            Connect Wallet
-          </button>
+        </div>
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+          <div className="h-full rounded-full bg-gradient-to-r from-ice-300 to-ice-500" style={{ width: `${pct}%` }} />
+        </div>
+        {mining.nextLevel && mining.nextLevel.missingUsd > 0 && (
+          <div className="mt-2 text-center text-xs font-semibold uppercase tracking-wide text-ice-300">
+            {fmtUsd(mining.nextLevel.missingUsd)} left to level up
+          </div>
         )}
       </div>
-      {mining.nextLevel && mining.nextLevel.missingUsd > 0 && (
-        <div className="text-xs font-semibold text-emerald-300">
-          {fmtUsd(mining.nextLevel.missingUsd)} left to Level Up
-        </div>
-      )}
 
-      {/* Assets */}
-      <div className="text-center">
-        <div className="text-xs font-bold uppercase tracking-[0.3em] text-white/35">Assets</div>
-        <div className="mt-1 text-4xl font-extrabold tracking-tight">
+      {/* Total assets */}
+      <div className={`${card} p-3.5 text-center`}>
+        <div className="text-[11px] font-bold uppercase tracking-[0.3em] text-white/35">Total Assets</div>
+        <div className="mt-0.5 text-4xl font-extrabold tracking-tight">
           {ice(assets)} <span className="text-xl text-ice-300">ICE</span>
         </div>
-        <div className="mt-3 flex flex-col items-center gap-2">
-          <div className="rounded-full bg-white/5 px-4 py-1.5 text-xs">
-            <span className="text-white/45">HOLDING WALLET:</span> <b>{ice(mining.holding.tokens)}</b>{' '}
-            <span className="text-ice-300">ICE</span>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[11px]">
+            <div className="uppercase tracking-wide text-white/40">Holding Wallet</div>
+            <div className="mt-0.5"><b>{ice(mining.holding.tokens)}</b> <span className="text-ice-300">ICE</span></div>
           </div>
-          <div className="rounded-full bg-white/5 px-4 py-1.5 text-xs">
-            <span className="text-white/45">POOL WALLET:</span> <b>{ice(livePool)}</b>{' '}
-            <span className="text-ice-300">ICE</span>
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[11px]">
+            <div className="uppercase tracking-wide text-white/40">Pool Wallet</div>
+            <div className="mt-0.5"><b>{livePool.toFixed(4)}</b> <span className="text-ice-300">ICE</span></div>
           </div>
-        </div>
-        <div
-          className="mx-auto mt-3 w-fit rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-8 py-2.5 text-3xl font-extrabold tabular-nums text-emerald-400"
-          style={livePool > 0 ? { animation: 'minePop 1.6s ease-in-out infinite' } : undefined}
-        >
-          +{livePool.toFixed(4)}
         </div>
       </div>
 
-      {/* Animated coin — tap to claim */}
-      <div className="relative grid place-items-center py-6">
-        {/* pulsing glow rings */}
-        <span className="pointer-events-none absolute h-40 w-40 rounded-full bg-ice-400/25" style={{ animation: 'minePulse 2.4s ease-out infinite' }} />
-        <span className="pointer-events-none absolute h-40 w-40 rounded-full bg-ice-400/20" style={{ animation: 'minePulse 2.4s ease-out infinite', animationDelay: '1.2s' }} />
-        {/* rotating aura */}
-        <span
-          className="pointer-events-none absolute h-52 w-52 rounded-full opacity-70 blur-[2px]"
-          style={{ background: 'conic-gradient(from 0deg, transparent, rgba(51,194,255,.45), transparent 55%)', animation: 'mineSpin 6s linear infinite' }}
+      {/* Rig hero */}
+      <div className="relative overflow-hidden rounded-2xl border border-ice-400/20 bg-gradient-to-b from-[#06121f] via-[#08182b] to-night-900 p-4">
+        {/* starfield */}
+        <div
+          className="pointer-events-none absolute inset-0 opacity-40"
+          style={{ backgroundImage: 'radial-gradient(1px 1px at 20% 30%, #7fd8ff, transparent), radial-gradient(1px 1px at 70% 20%, #7fd8ff, transparent), radial-gradient(1px 1px at 40% 70%, #7fd8ff, transparent), radial-gradient(1px 1px at 85% 60%, #7fd8ff, transparent), radial-gradient(1px 1px at 55% 45%, #cdefff, transparent)' }}
         />
-        {/* floating sparkles */}
-        {[0, 1, 2].map((i) => (
+        <div className="relative mx-auto mb-1 w-fit rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-emerald-400">
+          ● Mining Active
+        </div>
+
+        {/* animated rig */}
+        <div className="relative mx-auto grid h-52 w-52 place-items-center">
+          <span className="pointer-events-none absolute h-40 w-40 rounded-full bg-ice-400/15" style={{ animation: 'minePulse 2.6s ease-out infinite' }} />
+          <span className="pointer-events-none absolute h-40 w-40 rounded-full bg-ice-400/15" style={{ animation: 'minePulse 2.6s ease-out infinite', animationDelay: '1.3s' }} />
           <span
-            key={i}
-            className="pointer-events-none absolute bottom-8 text-lg"
-            style={{ left: `${38 + i * 12}%`, animation: `mineFloat ${2.6 + i * 0.5}s ease-in ${i * 0.7}s infinite` }}
+            className="pointer-events-none absolute inset-0 rounded-full"
+            style={{ background: 'conic-gradient(from 0deg, transparent, rgba(51,194,255,.55), transparent 55%)', animation: 'mineSpin 8s linear infinite', WebkitMaskImage: 'radial-gradient(closest-side, transparent 70%, #000 72%)', maskImage: 'radial-gradient(closest-side, transparent 70%, #000 72%)' }}
+          />
+          <span className="pointer-events-none absolute inset-7 rounded-full border border-ice-300/40" style={{ animation: 'mineSpinR 6s linear infinite' }} />
+          <span className="pointer-events-none absolute inset-10 rounded-full border border-dashed border-ice-200/30" style={{ animation: 'mineSpin 10s linear infinite' }} />
+          {/* crystal */}
+          <button
+            onClick={collect}
+            disabled={busy}
+            className="relative grid h-24 w-24 rotate-45 place-items-center rounded-[1.6rem] bg-gradient-to-br from-white via-ice-300 to-ice-600 transition active:scale-95"
+            style={{ animation: 'mineBob 3.6s ease-in-out infinite, mineGlow 3s ease-in-out infinite' }}
           >
-            ❄️
-          </span>
-        ))}
-        {/* the coin */}
-        <button
-          onClick={collect}
-          disabled={busy}
-          className="relative grid h-40 w-40 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-ice-200 via-ice-400 to-ice-600 text-4xl font-black tracking-tight text-night-900 shadow-[0_0_60px_-4px_rgba(51,194,255,0.75)] transition active:scale-95"
-          style={{ animation: 'mineBob 3.2s ease-in-out infinite' }}
-        >
-          <span className="absolute inset-2 rounded-full ring-2 ring-white/25" />
-          <span className="pointer-events-none absolute -inset-y-2 left-0 w-1/3 bg-white/30 blur-md" style={{ animation: 'mineShine 3.5s ease-in-out infinite' }} />
-          <span className="relative">ICE</span>
-        </button>
+            <span className="absolute inset-2 rounded-[1.2rem] ring-1 ring-white/40" />
+            <span className="-rotate-45 text-3xl font-black text-night-900">❄</span>
+          </button>
+        </div>
+        {/* platform glow */}
+        <div className="mx-auto -mt-2 h-5 w-40 rounded-[50%] bg-ice-500/40 blur-md" />
+
+        <div className="relative mx-auto mt-2 w-fit rounded-xl border border-ice-400/20 bg-black/25 px-5 py-2">
+          <span className="text-xl font-extrabold tabular-nums text-ice-300">+{livePool.toFixed(4)}</span>
+          <span className="ml-2 text-[11px] font-semibold uppercase tracking-wide text-white/60">Ready to claim</span>
+        </div>
       </div>
 
       {/* CLAIM */}
       <button
         onClick={collect}
         disabled={busy || livePool <= 0}
-        className="btn-primary w-full py-4 text-lg font-extrabold shadow-[0_0_30px_-8px_rgba(51,194,255,0.8)] disabled:opacity-40"
+        className="w-full rounded-2xl bg-gradient-to-b from-ice-200 to-ice-500 py-4 text-lg font-black uppercase tracking-wide text-night-900 shadow-[0_0_34px_-6px_rgba(51,194,255,0.85)] transition active:scale-[0.98] disabled:opacity-40"
         style={!busy && livePool > 0 ? { animation: 'minePop 2s ease-in-out infinite' } : undefined}
       >
-        {busy ? 'Claiming…' : 'CLAIM'}
+        {busy ? 'Claiming…' : `Claim ${livePool.toFixed(4)} ICE`}
       </button>
 
-      {/* Buy Hashrate / Leaderboard */}
+      {/* Buy / Leaderboard */}
       <div className="grid grid-cols-2 gap-3">
-        <button onClick={() => setStoreOpen(true)} className="btn-ghost flex-col gap-1 py-3">
-          <span className="text-xl">⚡</span>
-          <span className="text-sm font-bold">Buy Hashrate</span>
+        <button onClick={() => setStoreOpen(true)} className={`${card} flex items-center justify-center gap-2 py-3.5 text-sm font-bold`}>
+          <span className="text-lg text-amber-300">⚡</span> Buy Hashrate
         </button>
-        <button onClick={() => setBoardOpen(true)} className="btn-ghost flex-col gap-1 py-3">
-          <span className="text-xl">🏆</span>
-          <span className="text-sm font-bold">Leaderboard</span>
+        <button onClick={() => setBoardOpen(true)} className={`${card} flex items-center justify-center gap-2 py-3.5 text-sm font-bold`}>
+          <span className="text-lg">🏆</span> Leaderboard
         </button>
       </div>
 
-      <p className="text-center text-[11px] text-white/40">
-        ICE price · live {fmtPrice(mining.price)} · {fmtSpeed(mining.speed, mining.speedUnit)}
-      </p>
+      {/* Price / hashrate strip */}
+      <div className={`${card} flex items-center justify-between px-4 py-3 text-xs`}>
+        <span className="text-white/60">💲 ICE PRICE <b className="text-emerald-300">{fmtPrice(mining.price)}</b></span>
+        <span className="flex items-center gap-1.5 text-white/60">
+          HASHRATE <b className="text-ice-300">{fmtSpeed(mining.speed, mining.speedUnit)}</b>
+          <span className="h-2 w-2 rounded-full bg-emerald-400" />
+        </span>
+      </div>
 
       {/* Sheets */}
       <StoreSheet
@@ -399,7 +428,7 @@ function StoreSheet({
   );
 }
 
-/** Top miners by level/holding. */
+/** Top miners by level/holding then ICE claimed. */
 function LeaderboardSheet({ open, onClose, unit }: { open: boolean; onClose: () => void; unit: string }) {
   const [board, setBoard] = useState<MinerRankRow[] | null>(null);
   useEffect(() => {
