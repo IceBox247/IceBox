@@ -154,35 +154,21 @@ export function MineLevels({ mining, onDeposit }: Props) {
         </div>
       </div>
 
-      {/* Rig hero */}
-      <div className="relative overflow-hidden rounded-2xl border border-ice-400/20 bg-gradient-to-b from-[#06121f] via-[#08182b] to-night-900 p-4">
-        {/* starfield */}
-        <div
-          className="pointer-events-none absolute inset-0 opacity-40"
-          style={{ backgroundImage: 'radial-gradient(1px 1px at 20% 30%, #7fd8ff, transparent), radial-gradient(1px 1px at 70% 20%, #7fd8ff, transparent), radial-gradient(1px 1px at 40% 70%, #7fd8ff, transparent), radial-gradient(1px 1px at 85% 60%, #7fd8ff, transparent), radial-gradient(1px 1px at 55% 45%, #cdefff, transparent)' }}
-        />
+      {/* Rig hero — the rig image is baked onto this exact background colour */}
+      <div className="relative overflow-hidden rounded-2xl border border-ice-400/20 p-4" style={{ background: '#08182b' }}>
         <div className="relative mx-auto mb-1 w-fit rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-emerald-400">
           ● Mining Active
         </div>
 
         {/* rig image — tap to claim */}
-        <div className="relative mx-auto w-full max-w-[300px]">
-          <span
-            className="pointer-events-none absolute left-1/2 top-[40%] h-44 w-44 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ice-400/25 blur-2xl"
-            style={{ animation: 'minePulse 2.8s ease-out infinite' }}
-          />
+        <div className="relative mx-auto w-full max-w-[320px]">
           <button
             onClick={collect}
             disabled={busy}
             className="relative block w-full select-none transition active:scale-95"
             style={{ animation: 'mineBob 4s ease-in-out infinite' }}
           >
-            <img
-              src="/rig.png"
-              alt="ICE mining rig"
-              draggable={false}
-              className="w-full drop-shadow-[0_0_45px_rgba(51,194,255,0.45)]"
-            />
+            <img src="/rig.png" alt="ICE mining rig" draggable={false} className="w-full" />
           </button>
         </div>
 
