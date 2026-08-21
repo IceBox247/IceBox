@@ -12,12 +12,13 @@ export const tasksRouter = Router();
 tasksRouter.get('/', async (req, res) => {
   const user = req.user!;
 
-  const [tasks, completions] = await Promise.all([
+  const [tasks, completions, mult] = await Promise.all([
     prisma.task.findMany({
       where: { active: true },
       orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
     }),
     prisma.taskCompletion.findMany({ where: { userId: user.id } }),
+    getEarnIceMultiplier(),
   ]);
 
   const byTask = new Map(completions.map((c) => [c.taskId, c]));
@@ -32,7 +33,8 @@ tasksRouter.get('/', async (req, res) => {
         key: t.key,
         title: t.title,
         subtitle: t.subtitle,
-        reward: t.reward,
+        // Show the actual ICE the user will receive (price-scaled multiplier).
+        reward: money(t.reward * mult),
         actionType: t.actionType,
         actionLabel: t.actionLabel,
         url: t.url,

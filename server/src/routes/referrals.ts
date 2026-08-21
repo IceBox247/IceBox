@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma, money } from '../db';
 import { config } from '../config';
+import { getEarnIceMultiplier } from '../services/chain';
 
 export const referralsRouter = Router();
 
@@ -100,7 +101,8 @@ referralsRouter.get('/', async (req, res) => {
   res.json({
     referralLink: `https://t.me/${config.botUsername}?startapp=ref_${user.referralCode}`,
     referralCode: user.referralCode,
-    perInvite: config.referralReward,
+    // Show the actual ICE per invite (price-scaled multiplier), matching what's credited.
+    perInvite: money(config.referralReward * (await getEarnIceMultiplier())),
     stats: {
       totalReferrals: myReferrals.length,
       activeReferrals: activeCount,

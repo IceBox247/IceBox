@@ -30,10 +30,6 @@ export function Home({ onWithdraw, onHistory, onDeposit, onCheckin, onLaunch, on
   if (!me) return null;
   const { overview } = me;
 
-  const min = me.config.minWithdrawal;
-  const canWithdraw = overview.available >= min;
-  const pct = min > 0 ? Math.min(100, (overview.available / min) * 100) : 100;
-
   const stats = [
     { icon: WalletIcon, label: 'Total Earned', value: `${usdt(overview.totalEarned)}`, unit: 'ICE', tint: 'text-ice-300 bg-ice-400/15' },
     { icon: ReferralsIcon, label: 'Total Referrals', value: `${overview.totalReferrals}`, unit: '', tint: 'text-usdt bg-usdt/15' },
@@ -84,31 +80,6 @@ export function Home({ onWithdraw, onHistory, onDeposit, onCheckin, onLaunch, on
           <button onClick={onWithdraw} className="btn-ghost mt-3 w-full py-4">
             <UpArrowIcon width={20} height={20} /> Withdraw to USDT
           </button>
-        )}
-
-        {/* Progress toward the withdrawal minimum, so the gate is never a surprise. */}
-        {canWithdraw ? (
-          <p className="mt-3 text-center text-sm font-semibold text-usdt">
-            ✓ You can withdraw now
-          </p>
-        ) : (
-          <div className="mt-4">
-            <div className="mb-1.5 flex items-center justify-between text-xs text-white/50">
-              <span>Progress to withdrawal</span>
-              <span>
-                <b className="text-white/80">{usdt(overview.available)}</b> / {usdt(min)} USDT
-              </span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-white/10">
-              <div
-                className="h-full rounded-full bg-ice-400 transition-all"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <p className="mt-1.5 text-xs text-white/40">
-              {usdt(Math.max(0, min - overview.available))} USDT more to unlock withdrawal
-            </p>
-          </div>
         )}
       </div>
 
