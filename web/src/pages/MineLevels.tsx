@@ -162,29 +162,26 @@ export function MineLevels({ mining, onDeposit }: Props) {
           ● Mining Active
         </div>
 
-        {/* animated rig */}
-        <div className="relative mx-auto grid h-52 w-52 place-items-center">
-          <span className="pointer-events-none absolute h-40 w-40 rounded-full bg-ice-400/15" style={{ animation: 'minePulse 2.6s ease-out infinite' }} />
-          <span className="pointer-events-none absolute h-40 w-40 rounded-full bg-ice-400/15" style={{ animation: 'minePulse 2.6s ease-out infinite', animationDelay: '1.3s' }} />
+        {/* rig image — tap to claim */}
+        <div className="relative mx-auto w-full max-w-[300px]">
           <span
-            className="pointer-events-none absolute inset-0 rounded-full"
-            style={{ background: 'conic-gradient(from 0deg, transparent, rgba(51,194,255,.55), transparent 55%)', animation: 'mineSpin 8s linear infinite', WebkitMaskImage: 'radial-gradient(closest-side, transparent 70%, #000 72%)', maskImage: 'radial-gradient(closest-side, transparent 70%, #000 72%)' }}
+            className="pointer-events-none absolute left-1/2 top-[40%] h-44 w-44 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ice-400/25 blur-2xl"
+            style={{ animation: 'minePulse 2.8s ease-out infinite' }}
           />
-          <span className="pointer-events-none absolute inset-7 rounded-full border border-ice-300/40" style={{ animation: 'mineSpinR 6s linear infinite' }} />
-          <span className="pointer-events-none absolute inset-10 rounded-full border border-dashed border-ice-200/30" style={{ animation: 'mineSpin 10s linear infinite' }} />
-          {/* crystal */}
           <button
             onClick={collect}
             disabled={busy}
-            className="relative grid h-24 w-24 rotate-45 place-items-center rounded-[1.6rem] bg-gradient-to-br from-white via-ice-300 to-ice-600 transition active:scale-95"
-            style={{ animation: 'mineBob 3.6s ease-in-out infinite, mineGlow 3s ease-in-out infinite' }}
+            className="relative block w-full select-none transition active:scale-95"
+            style={{ animation: 'mineBob 4s ease-in-out infinite' }}
           >
-            <span className="absolute inset-2 rounded-[1.2rem] ring-1 ring-white/40" />
-            <span className="-rotate-45 text-3xl font-black text-night-900">❄</span>
+            <img
+              src="/rig.png"
+              alt="ICE mining rig"
+              draggable={false}
+              className="w-full drop-shadow-[0_0_45px_rgba(51,194,255,0.45)]"
+            />
           </button>
         </div>
-        {/* platform glow */}
-        <div className="mx-auto -mt-2 h-5 w-40 rounded-[50%] bg-ice-500/40 blur-md" />
 
         <div className="relative mx-auto mt-2 w-fit rounded-xl border border-ice-400/20 bg-black/25 px-5 py-2">
           <span className="text-xl font-extrabold tabular-nums text-ice-300">+{pending.toFixed(4)}</span>
