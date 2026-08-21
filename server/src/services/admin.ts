@@ -1,5 +1,6 @@
 import { prisma, money } from '../db';
 import { config } from '../config';
+import { miningReferralCount } from './mining';
 
 /** Is this Telegram id an operator/admin? (ADMIN_TELEGRAM_IDS env, comma list) */
 export function isAdminTelegramId(telegramId: string | number | null | undefined): boolean {
@@ -57,6 +58,25 @@ export async function adminStats() {
     prisma.taskCompletion.count(),
   ]);
 
+  // Daily mining-leaderboard rewards actually paid out (from the ledger).
+  const [rwUsdt, rwIce, rwLast] = await Promise.all([
+    prisma.ledgerEntry.aggregate({
+      where: { reason: 'mining_reward', meta: { contains: '"type":"usdt"' } },
+      _sum: { amount: true },
+      _count: true,
+    }),
+    prisma.ledgerEntry.aggregate({
+      where: { reason: 'mining_reward', meta: { contains: '"type":"ice"' } },
+      _sum: { amount: true },
+      _count: true,
+    }),
+    prisma.ledgerEntry.findFirst({
+      where: { reason: 'mining_reward' },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    }),
+  ]);
+
   const paidByToken: Record<string, { amount: number; count: number }> = {};
   for (const g of withdrawalsPaid) {
     paidByToken[g.token] = { amount: money(g._sum.amount ?? 0), count: g._count };
@@ -98,7 +118,86 @@ export async function adminStats() {
     referrals: {
       depositCommissionPaid: money(refCommission._sum.amount ?? 0),
     },
+    miningRewards: {
+      usdtPaid: money(rwUsdt._sum.amount ?? 0),
+      usdtCount: rwUsdt._count,
+      icePaid: money(rwIce._sum.amount ?? 0),
+      iceCount: rwIce._count,
+      lastPaidAt: rwLast?.createdAt ? rwLast.createdAt.toISOString() : null,
+    },
     tasks: { completions: tasksDone },
     generatedAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Inspect one or more users by id / telegramId / username / first name — the
+ * full financial + mining breakdown, so the operator can see exactly where a
+ * user's balance and hashrate came from.
+ */
+export async function lookupUser(query: string) {
+  const q = (query ?? '').trim();
+  if (!q) return { count: 0, users: [] };
+  const idNum = Number(q);
+  const users = await prisma.user.findMany({
+    where: {
+      OR: [
+        Number.isInteger(idNum) ? { id: idNum } : {},
+        { telegramId: q },
+        { username: { contains: q, mode: 'insensitive' } },
+        { firstName: { contains: q, mode: 'insensitive' } },
+      ],
+    },
+    take: 15,
+    include: { miner: true },
+  });
+
+  const rows = await Promise.all(
+    users.map(async (u) => {
+      const [deposits, refCommission, miningReward, referrals, miningRefs] = await Promise.all([
+        prisma.deposit.aggregate({
+          where: { userId: u.id, credited: true },
+          _sum: { creditedAmount: true },
+          _count: true,
+        }),
+        prisma.ledgerEntry.aggregate({
+          where: { userId: u.id, reason: 'referral_deposit' },
+          _sum: { amount: true },
+        }),
+        prisma.ledgerEntry.aggregate({
+          where: { userId: u.id, reason: 'mining_reward' },
+          _sum: { amount: true },
+          _count: true,
+        }),
+        prisma.user.count({ where: { referredById: u.id } }),
+        miningReferralCount(prisma, u.id),
+      ]);
+      const deposited = money(Math.max(0, u.balance - u.earnedBalance));
+      return {
+        id: u.id,
+        name: u.firstName || u.username || `#${u.id}`,
+        username: u.username,
+        telegramId: u.telegramId,
+        balance: money(u.balance),
+        earnedBalance: money(u.earnedBalance),
+        deposited,
+        totalEarned: money(u.totalEarned),
+        creditedDeposits: money(deposits._sum.creditedAmount ?? 0),
+        depositCount: deposits._count,
+        referralCommissionEarned: money(refCommission._sum.amount ?? 0),
+        miningRewardReceived: money(miningReward._sum.amount ?? 0),
+        miningRewardEntries: miningReward._count,
+        referrals,
+        miningReferrals: miningRefs,
+        miner: u.miner
+          ? {
+              hashrate: money(u.miner.hashrate),
+              spentOnHashrate: money(u.miner.totalSpent),
+              totalMined: money(u.miner.totalMined),
+            }
+          : null,
+      };
+    }),
+  );
+  return { count: rows.length, users: rows };
 }

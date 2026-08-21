@@ -81,6 +81,13 @@ export interface AdminStats {
     lifetimeEarned: number;
   };
   referrals: { depositCommissionPaid: number };
+  miningRewards: {
+    usdtPaid: number;
+    usdtCount: number;
+    icePaid: number;
+    iceCount: number;
+    lastPaidAt: string | null;
+  };
   tasks: { completions: number };
   generatedAt: string;
 }

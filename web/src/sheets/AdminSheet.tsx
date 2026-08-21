@@ -65,6 +65,29 @@ export function AdminSheet({ open, onClose }: { open: boolean; onClose: () => vo
             <Stat label="Total hashrate" value={stats.mining.totalHashrate.toLocaleString()} sub="GH/s" />
           </div>
 
+          <p className="text-xs font-bold uppercase tracking-wide text-white/40">
+            Daily mining rewards paid
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <Stat
+              label="USDT rewards paid"
+              value={`$${usdt(stats.miningRewards.usdtPaid)}`}
+              sub={`${stats.miningRewards.usdtCount} payouts`}
+              tint="text-usdt"
+            />
+            <Stat
+              label="ICE rewards paid"
+              value={usdt(stats.miningRewards.icePaid)}
+              sub={`${stats.miningRewards.iceCount} payouts`}
+              tint="text-ice-300"
+            />
+          </div>
+          <p className="text-center text-[11px] text-white/40">
+            {stats.miningRewards.lastPaidAt
+              ? `Last distributed ${new Date(stats.miningRewards.lastPaidAt).toLocaleString()}`
+              : 'No daily rewards distributed yet.'}
+          </p>
+
           <div className="grid grid-cols-2 gap-3">
             <Stat label="Tasks completed" value={stats.tasks.completions.toLocaleString()} />
             <Stat label="Lifetime earned" value={usdt(stats.balances.lifetimeEarned)} sub="all users" />

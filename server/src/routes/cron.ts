@@ -142,6 +142,16 @@ cronRouter.get('/admin', async (req, res) => {
   res.json({ ok: true, ...(await adminStats()) });
 });
 
+/**
+ * GET /api/cron/user?secret=CRON_SECRET&query=<name|username|id> — inspect a
+ * user's full balance + mining breakdown to see where funds/hashrate came from.
+ */
+cronRouter.get('/user', async (req, res) => {
+  if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
+  const { lookupUser } = await import('../services/admin');
+  res.json({ ok: true, ...(await lookupUser(String(req.query.query ?? ''))) });
+});
+
 /** GET /api/cron/status — queue counts and hot-wallet balances. */
 cronRouter.get('/status', async (req, res) => {
   if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
