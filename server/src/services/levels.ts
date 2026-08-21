@@ -62,25 +62,33 @@ export async function syncMinerLevel(
 }
 
 /** What it takes to reach a target level from the user's current holding. */
-export function buyLevelInfo(targetLevel: number, holdingUsd: number) {
+export function buyLevelInfo(targetLevel: number, holdingUsd: number, price: number) {
   const c = L();
+  const px = price > 0 ? price : c.price;
   const level = Math.max(1, Math.min(c.count, Math.floor(targetLevel)));
   const requiredUsd = c.requiredUsdFor(level);
-  const requiredTokens = Math.ceil((requiredUsd / c.price) * 1e4) / 1e4;
+  const requiredTokens = Math.ceil((requiredUsd / px) * 1e4) / 1e4;
   const missingUsd = Math.max(0, Math.round((requiredUsd - holdingUsd) * 1e4) / 1e4);
-  const missingTokens = Math.ceil((missingUsd / c.price) * 1e4) / 1e4;
+  const missingTokens = Math.ceil((missingUsd / px) * 1e4) / 1e4;
   return { level, requiredUsd, requiredTokens, missingUsd, missingTokens };
 }
 
 /** Serialize the holding-based mining state for the client. */
-export function serializeLevelMining(user: User, miner: Miner, refs: number, now = new Date()) {
+export function serializeLevelMining(
+  user: User,
+  miner: Miner,
+  refs: number,
+  price: number,
+  now = new Date(),
+) {
   const c = L();
+  const px = price > 0 ? price : c.price;
   const pending = livePending(miner, refs, now);
   const level = miner.level;
   const dailyBase = c.yieldForLevel(level);
   const referralBonus = money(refs * c.referralYieldPerRef);
   const perDay = money(dailyBase + referralBonus);
-  const next = level < c.count ? buyLevelInfo(level + 1, miner.holdingUsd) : null;
+  const next = level < c.count ? buyLevelInfo(level + 1, miner.holdingUsd, px) : null;
   return {
     enabled: true,
     model: 'levels' as const,
@@ -90,6 +98,8 @@ export function serializeLevelMining(user: User, miner: Miner, refs: number, now
       address: user.walletAddress ?? null,
       verified: !!user.walletVerifiedAt && isEvmAddress(user.walletAddress),
     },
+    // Live ICE price in USD (read from the pool), so the client tracks on-chain.
+    price: px,
     // Holding Wallet (on-chain) vs Pool Wallet (earned on-platform, withdrawable).
     holding: { tokens: money(miner.holdingTokens), usd: money(miner.holdingUsd) },
     pool: pending,
@@ -109,7 +119,7 @@ export function serializeLevelMining(user: User, miner: Miner, refs: number, now
       maxYield: c.maxYield,
       minSpeed: c.minSpeed,
       maxSpeed: c.maxSpeed,
-      price: c.price,
+      price: px,
     },
     referral: { miners: refs, perRef: c.referralYieldPerRef, bonus: referralBonus },
     nextLevel: next,

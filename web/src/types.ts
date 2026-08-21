@@ -327,6 +327,7 @@ export interface LevelMiningState {
   name: string;
   unit: string;
   wallet: { address: string | null; verified: boolean };
+  price: number;
   holding: { tokens: number; usd: number };
   pool: number;
   level: number;
@@ -371,6 +372,7 @@ export interface BuyLevelInfo {
   requiredTokens: number;
   missingUsd: number;
   missingTokens: number;
+  price: number;
   token: string;
   swapUrl: string;
 }

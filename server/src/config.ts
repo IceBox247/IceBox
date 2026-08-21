@@ -476,7 +476,7 @@ export const config = {
   // wallet, not by bought hashrate. Every curve endpoint is env-tunable; the
   // client derives each of the `count` level cards from these params.
   miningLevels: (() => {
-    const model = str('MINING_MODEL', 'packages'); // 'levels' to switch engines
+    const model = str('MINING_MODEL', 'levels'); // holding-based levels are the default engine
     const count = Math.max(2, Math.floor(num('MINE_LEVEL_COUNT', 1000)));
     // Required on-chain holding (USD) — geometric from level 1 to level `count`.
     const minUsd = num('MINE_LEVEL_MIN_USD', 0.1);
@@ -487,9 +487,9 @@ export const config = {
     // Cosmetic hash speed (TH/s) shown on the level cards.
     const minSpeed = num('MINE_LEVEL_MIN_SPEED', 0.2);
     const maxSpeed = num('MINE_LEVEL_MAX_SPEED', 50_000);
-    // ICE USD token price in USD, to convert holding USD <-> token amount and
-    // show "exact tokens needed". Later this can be read live from the LP pool.
-    const price = num('ICE_USD_PRICE', 1);
+    // Fallback ICE price in USD, used only if the live pool read fails. Normally
+    // the price is read live from the LP pool (see services/chain getIcePriceUsd).
+    const price = num('ICE_USD_PRICE', 0.0004277);
     // Each referral who mines adds this much ICE USD/day on top of the level yield.
     const referralYieldPerRef = num('MINE_LEVEL_REF_YIELD', 0.1);
     // Where "Buy Level" sends the user to acquire ICE USD once liquidity is live.

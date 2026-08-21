@@ -18,6 +18,11 @@ function fmtUsd(n: number): string {
 function fmtSpeed(n: number, unit: string): string {
   return `${n.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${unit}`;
 }
+/** Live token price, keeping precision for tiny values ($0.000428). */
+function fmtPrice(n: number): string {
+  if (!(n > 0)) return '—';
+  return n >= 0.01 ? `$${n.toFixed(4)}` : `$${n.toPrecision(3)}`;
+}
 
 interface Props {
   mining: LevelMiningState;
@@ -57,7 +62,7 @@ export function MineLevels({ mining, onDeposit }: Props) {
     try {
       const r = await collectMining();
       haptic('success');
-      toast.show(`Collected ${usdt(r.collected)} ICE USD to your pool`, 'success');
+      toast.show(`Collected ${usdt(r.collected)} ICE to your pool`, 'success');
     } catch (e) {
       toast.show(e instanceof ApiError ? e.message : 'Nothing to collect', 'error');
     } finally {
@@ -99,7 +104,7 @@ export function MineLevels({ mining, onDeposit }: Props) {
           <div>
             <div className="text-xs text-white/45">Holding Wallet · on-chain</div>
             <div className="mt-0.5 text-2xl font-extrabold">
-              {usdt(mining.holding.tokens)} <span className="text-sm text-ice-300">ICE USD</span>
+              {usdt(mining.holding.tokens)} <span className="text-sm text-ice-300">ICE</span>
             </div>
             <div className="text-[11px] text-white/40">≈ {fmtUsd(mining.holding.usd)}</div>
           </div>
@@ -109,6 +114,12 @@ export function MineLevels({ mining, onDeposit }: Props) {
             <div className="text-[11px] text-white/40">{fmtSpeed(mining.speed, mining.speedUnit)}</div>
           </div>
         </div>
+      </div>
+
+      {/* Live on-chain price */}
+      <div className="flex items-center justify-between rounded-2xl bg-white/5 px-4 py-2.5 text-xs">
+        <span className="text-white/50">ICE price · live on-chain</span>
+        <span className="font-bold text-emerald-300">{fmtPrice(mining.price)}</span>
       </div>
 
       {/* Wallet connect / status */}
@@ -140,7 +151,7 @@ export function MineLevels({ mining, onDeposit }: Props) {
               {livePool.toFixed(4)}
             </div>
             <div className="text-[11px] text-white/40">
-              {usdt(mining.perDay)} ICE USD / day · {mining.referral.miners} ref boost (+{usdt(mining.referral.bonus)}/day)
+              {usdt(mining.perDay)} ICE / day · {mining.referral.miners} ref boost (+{usdt(mining.referral.bonus)}/day)
             </div>
           </div>
           <button
@@ -162,7 +173,7 @@ export function MineLevels({ mining, onDeposit }: Props) {
           <div>
             <div className="text-sm font-bold">Reach Level {mining.nextLevel.level}</div>
             <div className="text-[11px] text-white/50">
-              Need {usdt(mining.nextLevel.missingTokens)} more ICE USD ({fmtUsd(mining.nextLevel.missingUsd)})
+              Need {usdt(mining.nextLevel.missingTokens)} more ICE ({fmtUsd(mining.nextLevel.missingUsd)})
             </div>
           </div>
           <span className="rounded-full bg-ice-400 px-3 py-1 text-xs font-bold text-night-900">Buy</span>
@@ -185,7 +196,7 @@ export function MineLevels({ mining, onDeposit }: Props) {
         </div>
       </div>
       <p className="-mt-2 text-[11px] text-white/40">
-        Auto-unlocks from your on-chain ICE USD holding. Tap a locked level to buy in.
+        Auto-unlocks from your on-chain ICE holding. Tap a locked level to buy in.
       </p>
 
       <div className="grid grid-cols-2 gap-3">
@@ -234,11 +245,11 @@ export function MineLevels({ mining, onDeposit }: Props) {
       <Sheet open={!!buy} onClose={() => setBuy(null)} title={buy ? `Level ${buy.level}` : ''}>
         {buy && (
           <div className="space-y-4">
-            <Row label="Required holding" value={`${usdt(buy.requiredTokens)} ICE USD`} sub={fmtUsd(buy.requiredUsd)} />
-            <Row label="Your holding" value={`${usdt(mining.holding.tokens)} ICE USD`} sub={fmtUsd(mining.holding.usd)} />
+            <Row label="Required holding" value={`${usdt(buy.requiredTokens)} ICE`} sub={fmtUsd(buy.requiredUsd)} />
+            <Row label="Your holding" value={`${usdt(mining.holding.tokens)} ICE`} sub={fmtUsd(mining.holding.usd)} />
             <Row
               label="Missing to unlock"
-              value={`${usdt(buy.missingTokens)} ICE USD`}
+              value={`${usdt(buy.missingTokens)} ICE`}
               sub={fmtUsd(buy.missingUsd)}
               danger={buy.missingUsd > 0}
             />
@@ -249,7 +260,7 @@ export function MineLevels({ mining, onDeposit }: Props) {
             ) : (
               <>
                 <p className="text-center text-[11px] text-white/40">
-                  Buy {usdt(buy.missingTokens)} more ICE USD into your connected wallet to unlock. Sending tokens out
+                  Buy {usdt(buy.missingTokens)} more ICE into your connected wallet to unlock. Sending tokens out
                   later lowers your level.
                 </p>
                 <a
@@ -258,7 +269,7 @@ export function MineLevels({ mining, onDeposit }: Props) {
                   rel="noopener noreferrer"
                   className="btn-primary block w-full py-3 text-center"
                 >
-                  Buy ICE USD (swap)
+                  Buy ICE (swap)
                 </a>
                 <button onClick={() => { setBuy(null); onDeposit(); }} className="btn-ghost w-full py-3">
                   Deposit on IceBox instead
@@ -329,7 +340,7 @@ function ConnectWallet({
     <div className="card space-y-3 p-4">
       <div className="text-sm font-bold">Connect your BSC wallet</div>
       <p className="text-[11px] text-white/45">
-        Your on-chain ICE USD holding sets your mining level. Connect the wallet you hold ICE USD in.
+        Your on-chain ICE holding sets your mining level. Connect the wallet you hold ICE in.
       </p>
       <input
         value={address}

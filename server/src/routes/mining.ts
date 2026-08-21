@@ -11,7 +11,12 @@ import {
   miningLeaderboard,
 } from '../services/mining';
 import { serializeLevelMining, syncMinerLevel, buyLevelInfo } from '../services/levels';
-import { isEvmAddress, verifyWalletSignature, verificationMessage } from '../services/chain';
+import {
+  isEvmAddress,
+  verifyWalletSignature,
+  verificationMessage,
+  getIcePriceUsd,
+} from '../services/chain';
 
 export const miningRouter = Router();
 
@@ -24,9 +29,9 @@ async function currentState(userId: number) {
     getOrCreateMiner(userId),
     miningReferralCount(prisma, userId),
   ]);
-  return levelModel()
-    ? serializeLevelMining(user, miner, refs)
-    : serializeMining(user, miner, refs);
+  if (!levelModel()) return serializeMining(user, miner, refs);
+  const price = await getIcePriceUsd();
+  return serializeLevelMining(user, miner, refs, price);
 }
 
 /** GET /api/mining/leaderboard — top miners (by level or effective hashrate). */
@@ -112,12 +117,10 @@ miningRouter.post('/level/buy', async (req, res) => {
   if (!Number.isFinite(target) || target < 1) {
     return res.status(400).json({ error: 'invalid_level', message: 'Choose a valid level.' });
   }
-  const info = buyLevelInfo(target, miner.holdingUsd);
-  const wallet = user.walletAddress ?? '';
-  const swapUrl =
-    `${config.miningLevels.swapUrlBase}?outputCurrency=${config.token.address}` +
-    `&chain=bsc${wallet ? `&recipient=${wallet}` : ''}`;
-  res.json({ ok: true, ...info, token: config.token.address, swapUrl });
+  const price = await getIcePriceUsd();
+  const info = buyLevelInfo(target, miner.holdingUsd, price);
+  const swapUrl = `${config.miningLevels.swapUrlBase}?chain=bsc&outputCurrency=${config.token.address}`;
+  res.json({ ok: true, ...info, price, token: config.token.address, swapUrl });
 });
 
 /** POST /api/mining/buy { amount } — buy hashrate with deposited USD. */
