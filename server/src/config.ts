@@ -238,7 +238,7 @@ export const config = {
     // half-configured deployment can never start sending tokens.
     enabled: process.env.PAYOUT_ENABLED === 'true',
     // ICE USD token contract on BSC (defaults to the live ICE BOX USD contract).
-    tokenAddress: str('TOKEN_ADDRESS', '0xF26a32b8e14C463B57c189E462e13b10BD192b95'),
+    tokenAddress: str('TOKEN_ADDRESS', '0x4BDBDfF5e883b7fBE3b5Bc33ec33E4FC17774eD4'),
     // Hot wallet that holds the float and signs transfers. Keep it topped up
     // with only a few days of payouts — anyone with dashboard access can read
     // this value.
@@ -362,9 +362,9 @@ export const config = {
   // The ICE token (for the "import to MetaMask" guide + payouts). Address
   // defaults to the live ICE BOX USD contract on BSC.
   token: {
-    address: str('TOKEN_ADDRESS', '0xF26a32b8e14C463B57c189E462e13b10BD192b95'),
-    name: str('TOKEN_NAME', 'ICE USD'),
-    symbol: str('TOKEN_SYMBOL', 'USD'),
+    address: str('TOKEN_ADDRESS', '0x4BDBDfF5e883b7fBE3b5Bc33ec33E4FC17774eD4'),
+    name: str('TOKEN_NAME', 'ICE BOX'),
+    symbol: str('TOKEN_SYMBOL', 'ICE'),
     decimals: num('TOKEN_DECIMALS', 18),
     chainId: num('TOKEN_CHAIN_ID', 56),
     chainName: str('TOKEN_CHAIN_NAME', 'BNB Smart Chain (BSC)'),
