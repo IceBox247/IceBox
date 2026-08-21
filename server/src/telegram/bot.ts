@@ -84,11 +84,24 @@ export function createBot(): Bot | null {
 
     try {
       const photos = ctx.message?.photo;
-      if (photos && photos.length > 0) {
-        const fileId = photos[photos.length - 1].file_id;
+      const CAPTION_MAX = 1024; // Telegram photo-caption limit
+      const TEXT_MAX = 4096; // Telegram message limit
+      const fileId = photos && photos.length > 0 ? photos[photos.length - 1].file_id : null;
+
+      if (fileId && body.length <= CAPTION_MAX) {
+        // Fits as a captioned photo with the button.
         await ctx.api.sendPhoto(channel, fileId, {
           caption: body || undefined,
           parse_mode: 'HTML',
+          reply_markup: keyboard,
+        });
+      } else if (fileId) {
+        // Caption too long: post the image first, then the full text (with the
+        // button) as a separate message so nothing gets cut off.
+        await ctx.api.sendPhoto(channel, fileId, {});
+        await ctx.api.sendMessage(channel, body.slice(0, TEXT_MAX), {
+          parse_mode: 'HTML',
+          link_preview_options: { is_disabled: true },
           reply_markup: keyboard,
         });
       } else {
@@ -98,7 +111,7 @@ export function createBot(): Bot | null {
           });
           return;
         }
-        await ctx.api.sendMessage(channel, body, {
+        await ctx.api.sendMessage(channel, body.slice(0, TEXT_MAX), {
           parse_mode: 'HTML',
           link_preview_options: { is_disabled: true },
           reply_markup: keyboard,
