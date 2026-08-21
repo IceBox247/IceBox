@@ -10,9 +10,10 @@ interface Props {
   onClose: () => void;
   onHistory: () => void;
   onAdmin: () => void;
+  onImportToken: () => void;
 }
 
-export function MenuSheet({ open, onClose, onHistory, onAdmin }: Props) {
+export function MenuSheet({ open, onClose, onHistory, onAdmin, onImportToken }: Props) {
   const { me, refreshAll } = useStore();
   const toast = useToast();
 
@@ -59,6 +60,19 @@ export function MenuSheet({ open, onClose, onHistory, onAdmin }: Props) {
         onClose();
       },
     },
+    ...(me?.config.token?.address
+      ? [
+          {
+            icon: RefreshIcon,
+            title: `Import ${me.config.token.symbol} to MetaMask`,
+            subtitle: 'Add the ICE token to your wallet',
+            onClick: () => {
+              onClose();
+              setTimeout(onImportToken, 200);
+            },
+          },
+        ]
+      : []),
   ];
 
   return (

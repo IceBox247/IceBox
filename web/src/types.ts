@@ -50,6 +50,14 @@ export interface AppConfig {
   tokenLaunchLabel?: string;
   tokenTradeUrl?: string;
   isAdmin?: boolean;
+  token?: {
+    address: string;
+    symbol: string;
+    decimals: number;
+    chainId: number;
+    chainName: string;
+    explorerBase: string;
+  };
 }
 
 export interface AdminStats {

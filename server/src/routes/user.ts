@@ -53,6 +53,14 @@ userRouter.get('/me', async (req, res) => {
       tokenLaunchLabel: config.tokenLaunch.label,
       tokenTradeUrl: config.tokenLaunch.tradeUrl,
       isAdmin: isAdminTelegramId(user.telegramId),
+      token: {
+        address: config.token.address,
+        symbol: config.token.symbol,
+        decimals: config.token.decimals,
+        chainId: config.token.chainId,
+        chainName: config.token.chainName,
+        explorerBase: config.explorerBase,
+      },
     },
     referralLink: `https://t.me/${config.botUsername}?startapp=ref_${user.referralCode}`,
   });

@@ -237,8 +237,8 @@ export const config = {
     // Master switch. Payouts stay off until this is explicitly "true", so a
     // half-configured deployment can never start sending tokens.
     enabled: process.env.PAYOUT_ENABLED === 'true',
-    // ICE USD token contract on BSC.
-    tokenAddress: process.env.TOKEN_ADDRESS ?? '',
+    // ICE USD token contract on BSC (defaults to the live ICE BOX USD contract).
+    tokenAddress: str('TOKEN_ADDRESS', '0xF26a32b8e14C463B57c189E462e13b10BD192b95'),
     // Hot wallet that holds the float and signs transfers. Keep it topped up
     // with only a few days of payouts — anyone with dashboard access can read
     // this value.
@@ -359,6 +359,16 @@ export const config = {
     // "https://t.me/<username>?startapp".
     buttonUrl: telegramUrl(process.env.ALERT_BUTTON_URL, process.env.BOT_USERNAME ?? 'myIceBoxBot'),
   },
+  // The ICE token (for the "import to MetaMask" guide + payouts). Address
+  // defaults to the live ICE BOX USD contract on BSC.
+  token: {
+    address: str('TOKEN_ADDRESS', '0xF26a32b8e14C463B57c189E462e13b10BD192b95'),
+    symbol: str('TOKEN_SYMBOL', 'ICE'),
+    decimals: num('TOKEN_DECIMALS', 18),
+    chainId: num('TOKEN_CHAIN_ID', 56),
+    chainName: str('TOKEN_CHAIN_NAME', 'BNB Smart Chain (BSC)'),
+  },
+
   // Block explorer for tx links in alerts (BscScan by default).
   explorerBase: str('EXPLORER_BASE', 'https://bscscan.com'),
 
