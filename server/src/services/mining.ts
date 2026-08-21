@@ -103,6 +103,7 @@ export function serializeMining(user: User, miner: Miner, referralMiners: number
   const effHash = money(effectiveHashrate(miner.hashrate, referralMiners));
   return {
     enabled: config.mining.enabled,
+    model: 'packages' as const,
     name: config.mining.name,
     unit: config.mining.unit,
     // Total effective hashrate (bought + referral), with a breakdown.

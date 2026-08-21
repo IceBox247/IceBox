@@ -14,7 +14,7 @@ import type {
   StakingResponse,
   DepositInfo,
   CheckinState,
-  MiningState,
+  AnyMiningState,
 } from './types';
 
 interface Store {
@@ -25,7 +25,7 @@ interface Store {
   staking: StakingResponse | null;
   deposit: DepositInfo | null;
   checkin: CheckinState | null;
-  mining: MiningState | null;
+  mining: AnyMiningState | null;
   refreshAll: () => Promise<void>;
   refreshMe: () => Promise<void>;
   refreshTasks: () => Promise<void>;
@@ -52,7 +52,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [staking, setStaking] = useState<StakingResponse | null>(null);
   const [deposit, setDeposit] = useState<DepositInfo | null>(null);
   const [checkin, setCheckin] = useState<CheckinState | null>(null);
-  const [mining, setMining] = useState<MiningState | null>(null);
+  const [mining, setMining] = useState<AnyMiningState | null>(null);
 
   const refreshCheckin = useCallback(async () => {
     setCheckin(await api.checkin());

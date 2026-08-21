@@ -12,7 +12,8 @@ import type {
   DepositCatalog,
   DepositAddressInfo,
   CheckinState,
-  MiningState,
+  AnyMiningState,
+  BuyLevelInfo,
   MiningLeaderboard,
   AdminStats,
 } from './types';
@@ -117,16 +118,38 @@ export const api = {
     }),
   refreshDeposits: () =>
     request<{ ok: boolean; deposits: DepositRow[] }>('/deposits/refresh', { method: 'POST' }),
-  mining: () => request<MiningState>('/mining'),
+  mining: () => request<AnyMiningState>('/mining'),
+  refreshMiningChain: () =>
+    request<{ ok: boolean; mining: AnyMiningState }>('/mining/refresh', { method: 'POST' }),
   buyHashrate: (amount: number) =>
-    request<{ ok: boolean; mining: MiningState }>('/mining/buy', {
+    request<{ ok: boolean; mining: AnyMiningState }>('/mining/buy', {
       method: 'POST',
       body: JSON.stringify({ amount }),
     }),
   collectMining: () =>
-    request<{ ok: boolean; collected: number; mining: MiningState }>('/mining/collect', {
+    request<{ ok: boolean; collected: number; mining: AnyMiningState }>('/mining/collect', {
       method: 'POST',
     }),
   miningLeaderboard: () => request<MiningLeaderboard>('/mining/leaderboard'),
+  // Holding-based level model.
+  walletNonce: (address: string) =>
+    request<{ ok: boolean; address: string; nonce: string; message: string }>(
+      '/mining/wallet/nonce',
+      { method: 'POST', body: JSON.stringify({ address }) },
+    ),
+  walletConnect: (address: string, signature: string) =>
+    request<{ ok: boolean; mining: AnyMiningState }>('/mining/wallet/connect', {
+      method: 'POST',
+      body: JSON.stringify({ address, signature }),
+    }),
+  walletDisconnect: () =>
+    request<{ ok: boolean; mining: AnyMiningState }>('/mining/wallet/disconnect', {
+      method: 'POST',
+    }),
+  buyLevel: (level: number) =>
+    request<BuyLevelInfo & { ok: boolean }>('/mining/level/buy', {
+      method: 'POST',
+      body: JSON.stringify({ level }),
+    }),
   adminStats: () => request<AdminStats>('/admin/stats'),
 };

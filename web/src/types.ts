@@ -308,6 +308,8 @@ export interface MinerRankRow {
   name: string;
   photoUrl: string | null;
   hashrate: number;
+  level: number;
+  holdingUsd: number;
   totalMined: number;
   rewardIce: number;
   totalClaimed: number;
@@ -319,8 +321,64 @@ export interface MiningLeaderboard {
   leaderboard: MinerRankRow[];
 }
 
+export interface LevelMiningState {
+  enabled: boolean;
+  model: 'levels';
+  name: string;
+  unit: string;
+  wallet: { address: string | null; verified: boolean };
+  holding: { tokens: number; usd: number };
+  pool: number;
+  level: number;
+  speed: number;
+  perDay: number;
+  perHour: number;
+  dailyBase: number;
+  totalMined: number;
+  curve: {
+    count: number;
+    minUsd: number;
+    maxUsd: number;
+    minYield: number;
+    maxYield: number;
+    minSpeed: number;
+    maxSpeed: number;
+    price: number;
+  };
+  referral: { miners: number; perRef: number; bonus: number };
+  nextLevel: {
+    level: number;
+    requiredUsd: number;
+    requiredTokens: number;
+    missingUsd: number;
+    missingTokens: number;
+  } | null;
+  swapUrlBase: string;
+  rewards: {
+    enabled: boolean;
+    usdtPool: number;
+    usdtTop: number;
+    usdtPrizes: number[];
+    icePool: number;
+    iceTop: number;
+  };
+}
+
+export interface BuyLevelInfo {
+  level: number;
+  requiredUsd: number;
+  requiredTokens: number;
+  missingUsd: number;
+  missingTokens: number;
+  token: string;
+  swapUrl: string;
+}
+
+export type AnyMiningState = MiningState | LevelMiningState;
+
 export interface MiningState {
   enabled: boolean;
+  model: 'packages';
   name: string;
   unit: string;
   hashrate: number;

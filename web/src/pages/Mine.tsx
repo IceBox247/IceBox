@@ -5,6 +5,7 @@ import { api, ApiError } from '../api';
 import { haptic } from '../telegram';
 import { usdt } from '../lib/format';
 import { MineIcon } from '../components/icons';
+import { MineLevels } from './MineLevels';
 import type { MinerRankRow } from '../types';
 
 interface Props {
@@ -57,6 +58,8 @@ export function Mine({ onDeposit }: Props) {
   }, []);
 
   if (!mining) return null;
+  // Holding-based level engine renders its own store; package model continues below.
+  if (mining.model === 'levels') return <MineLevels mining={mining} onDeposit={onDeposit} />;
 
   // Estimate the live pending between refreshes (perHour → per second).
   const livePending = mining.pending + (mining.perHour / 3600) * tick;
