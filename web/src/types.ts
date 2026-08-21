@@ -372,6 +372,8 @@ export interface BuyLevelInfo {
   level: number;
   requiredUsd: number;
   requiredTokens: number;
+  yourUsd: number;
+  yourTokens: number;
   missingUsd: number;
   missingTokens: number;
   price: number;

@@ -61,10 +61,9 @@ export function MineLevels({ mining, onDeposit }: Props) {
   const pending = mining.pool + (mining.perHour / 3600) * tick; // "ready to claim"
   // Pool Wallet = total ICE the user holds on the platform (collected + pending).
   const poolWallet = mining.earnedBalance + pending;
-  // Effective holding in ICE = holding value / price (includes any holding credit),
-  // so it stays consistent with the USD value and the level math.
-  const holdTokens = mining.price > 0 ? mining.holding.usd / mining.price : mining.holding.tokens;
-  const assets = holdTokens + poolWallet;
+  // Holding Wallet = the real on-chain wallet balance (0 until a wallet with ICE
+  // is connected). A migration/holding credit powers the level only, not this.
+  const assets = mining.holding.tokens + poolWallet;
 
   // Progress toward the next level, from the holding curve.
   const holdRatio = useMemo(() => Math.pow(c.maxUsd / c.minUsd, 1 / (c.count - 1)), [c]);
@@ -112,18 +111,30 @@ export function MineLevels({ mining, onDeposit }: Props) {
       {/* Level + connect + progress */}
       <div className={`${card} p-3.5`}>
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-sm font-extrabold">
-              LVL <span className="text-ice-300">{mining.level}</span>{' '}
-              <span className="text-white/50">· {levelName(mining.level, c.count)}</span>
-            </span>
-            <span className="text-xs font-bold text-emerald-400">● {mining.wallet.verified ? 'READY' : 'CONNECT'}</span>
+          <div className="flex items-center gap-2.5">
+            <div className="grid h-11 w-11 place-items-center rounded-xl border border-ice-400/30 bg-gradient-to-br from-ice-400/25 to-ice-600/5 text-lg text-ice-100">
+              ❄
+            </div>
+            <div className="leading-none">
+              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">
+                Level {mining.level}
+              </div>
+              <div className="mt-1 text-lg font-extrabold tracking-tight text-ice-100">
+                {levelName(mining.level, c.count)}
+              </div>
+            </div>
           </div>
           <button
             onClick={() => setConnectOpen(true)}
-            className={mining.wallet.verified ? 'rounded-full bg-white/5 px-3 py-1.5 text-xs font-bold text-white/70' : 'btn-primary px-3.5 py-2 text-xs uppercase'}
+            className={
+              mining.wallet.verified
+                ? 'rounded-full bg-white/5 px-3 py-1.5 text-xs font-bold text-white/70'
+                : 'btn-primary px-4 py-2.5 text-xs font-bold uppercase tracking-wide'
+            }
           >
-            {mining.wallet.verified ? `${mining.wallet.address?.slice(0, 5)}…${mining.wallet.address?.slice(-3)}` : 'Connect Wallet'}
+            {mining.wallet.verified
+              ? `${mining.wallet.address?.slice(0, 5)}…${mining.wallet.address?.slice(-3)}`
+              : 'Connect Wallet'}
           </button>
         </div>
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
@@ -145,7 +156,7 @@ export function MineLevels({ mining, onDeposit }: Props) {
         <div className="mt-3 grid grid-cols-2 gap-2">
           <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[11px]">
             <div className="uppercase tracking-wide text-white/40">Holding Wallet</div>
-            <div className="mt-0.5"><b>{ice(holdTokens)}</b> <span className="text-ice-300">ICE</span></div>
+            <div className="mt-0.5"><b>{ice(mining.holding.tokens)}</b> <span className="text-ice-300">ICE</span></div>
           </div>
           <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[11px]">
             <div className="uppercase tracking-wide text-white/40">Pool Wallet</div>
@@ -389,7 +400,7 @@ function StoreSheet({
         {buy && (
           <div className="space-y-4">
             <Row label="Required holding" value={`${ice(buy.requiredTokens)} ICE`} sub={fmtUsd(buy.requiredUsd)} />
-            <Row label="Your holding" value={`${ice(mining.price > 0 ? mining.holding.usd / mining.price : mining.holding.tokens)} ICE`} sub={fmtUsd(mining.holding.usd)} />
+            <Row label="Your assets" value={`${ice(buy.yourTokens)} ICE`} sub={`${fmtUsd(buy.yourUsd)} · wallet + pool`} />
             <Row label="Missing to unlock" value={`${ice(buy.missingTokens)} ICE`} sub={fmtUsd(buy.missingUsd)} danger={buy.missingUsd > 0} />
             {buy.missingUsd <= 0 ? (
               <div className="rounded-xl bg-emerald-400/10 p-3 text-center text-sm text-emerald-300">

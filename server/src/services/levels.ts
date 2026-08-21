@@ -37,29 +37,34 @@ export async function syncMinerLevel(
     verified && user.walletAddress
       ? await (opts.fresh ? refreshIceHolding : readIceHolding)(user.walletAddress)
       : { tokens: 0, usd: 0 };
+  const price = await getIcePriceUsd();
 
   return prisma.$transaction(async (tx) => {
     const miner = await tx.miner.findUniqueOrThrow({ where: { userId } });
     const refs = await miningReferralCount(tx as unknown as Db, userId);
-    // Effective holding = on-chain value + any goodwill holding credit.
-    const effUsd = money(holding.usd + miner.bonusHoldingUsd);
-    const level = L().levelForHolding(effUsd);
     // Settle pending at the current rate before the level (and thus rate) changes.
     const now = new Date();
     const hours = Math.max(0, (now.getTime() - miner.lastAccruedAt.getTime()) / 3_600_000);
     const accrued = minerRatePerHour(miner, refs) * hours;
+    const pending = money(miner.pending + accrued);
+    // Level is driven by ASSETS = on-chain holding + pool wallet (earned + pending) —
+    // exactly what the buy sheet qualifies on. (Migration compensation already
+    // lives in the pool, so no separate holding credit is added here.)
+    const poolTokens = money(user.earnedBalance + pending);
+    const assetsUsd = money(holding.usd + poolTokens * price);
+    const level = L().levelForHolding(assetsUsd);
     const updated = await tx.miner.update({
       where: { userId },
       data: {
-        pending: money(miner.pending + accrued),
+        pending,
         level,
-        holdingUsd: effUsd,
+        holdingUsd: holding.usd, // Holding Wallet = on-chain value only
         holdingTokens: holding.tokens,
         holdingCheckedAt: now,
         lastAccruedAt: now,
       },
     });
-    return { miner: updated, holdingUsd: effUsd, holdingTokens: holding.tokens, level };
+    return { miner: updated, holdingUsd: holding.usd, holdingTokens: holding.tokens, level };
   });
 }
 
@@ -119,16 +124,19 @@ export async function migrateHashrateSpenders() {
   return { migrated, skipped, totalSpentUsd, refundedIce, price: px };
 }
 
-/** What it takes to reach a target level from the user's current holding. */
-export function buyLevelInfo(targetLevel: number, holdingUsd: number, price: number) {
+/** What it takes to reach a target level, qualified on the user's ASSETS
+ * (wallet holding + pool wallet), matching the ATF-style buy sheet. */
+export function buyLevelInfo(targetLevel: number, assetsUsd: number, price: number) {
   const c = L();
   const px = price > 0 ? price : c.price;
   const level = Math.max(1, Math.min(c.count, Math.floor(targetLevel)));
   const requiredUsd = c.requiredUsdFor(level);
   const requiredTokens = Math.ceil((requiredUsd / px) * 1e4) / 1e4;
-  const missingUsd = Math.max(0, Math.round((requiredUsd - holdingUsd) * 1e4) / 1e4);
+  const yourUsd = Math.round(assetsUsd * 1e4) / 1e4;
+  const yourTokens = Math.round((assetsUsd / px) * 1e4) / 1e4;
+  const missingUsd = Math.max(0, Math.round((requiredUsd - assetsUsd) * 1e4) / 1e4);
   const missingTokens = Math.ceil((missingUsd / px) * 1e4) / 1e4;
-  return { level, requiredUsd, requiredTokens, missingUsd, missingTokens };
+  return { level, requiredUsd, requiredTokens, yourUsd, yourTokens, missingUsd, missingTokens };
 }
 
 /** Serialize the holding-based mining state for the client. */
@@ -146,7 +154,9 @@ export function serializeLevelMining(
   const dailyBase = c.yieldForLevel(level);
   const referralBonus = money(refs * c.referralYieldPerRef);
   const perDay = money(dailyBase + referralBonus);
-  const next = level < c.count ? buyLevelInfo(level + 1, miner.holdingUsd, px) : null;
+  // Assets = on-chain holding + pool wallet (earned + live pending).
+  const assetsUsd = money(miner.holdingUsd + (user.earnedBalance + pending) * px);
+  const next = level < c.count ? buyLevelInfo(level + 1, assetsUsd, px) : null;
   return {
     enabled: true,
     model: 'levels' as const,
