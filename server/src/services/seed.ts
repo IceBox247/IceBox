@@ -1,6 +1,21 @@
 import { prisma } from '../db';
 
 /**
+ * Derive a public @username chat id from a t.me link so channel-join tasks can
+ * be membership-verified via the Bot API. Returns null for private invite links
+ * (t.me/+hash, t.me/joinchat/…) which have no public username — those need an
+ * explicit numeric chatId set on the task instead.
+ */
+function chatIdFromUrl(url?: string | null): string | null {
+  if (!url) return null;
+  const m = /(?:t\.me|telegram\.me)\/([A-Za-z0-9_]{4,})\/?$/.exec(url.trim());
+  if (!m) return null; // t.me/+abc or t.me/joinchat/abc → not a public username
+  const name = m[1];
+  if (name.toLowerCase() === 'joinchat') return null;
+  return '@' + name;
+}
+
+/**
  * Seed the default task list (mirrors the reference app's Tasks screen).
  * Idempotent: upserts by the stable `key`.
  */
@@ -64,6 +79,9 @@ const TASKS = [
     sortOrder: 4,
   },
   {
+    // Placeholder partner with no real channel — deactivated so users can't be
+    // paid for a "join" we can't verify. Re-enable with a real t.me link + the
+    // bot added as admin of that channel.
     key: 'join_sharkverse',
     title: 'Join SharkVerse',
     subtitle: 'Join our partner channel',
@@ -73,6 +91,7 @@ const TASKS = [
     url: 'https://t.me/telegram',
     icon: 'telegram',
     sortOrder: 5,
+    active: false,
   },
   {
     key: 'visit_website',
@@ -87,6 +106,7 @@ const TASKS = [
     sortOrder: 4,
   },
   {
+    // Placeholder partner with no real channel — deactivated (see SharkVerse).
     key: 'join_devlab',
     title: 'Join Dev Crypto Lab',
     subtitle: 'Join our partner channel',
@@ -96,6 +116,7 @@ const TASKS = [
     url: 'https://t.me/telegram',
     icon: 'telegram',
     sortOrder: 5,
+    active: false,
   },
   {
     key: 'join_whatsapp',
@@ -136,37 +157,30 @@ const TASKS = [
 
 export async function seedTasks() {
   for (const t of TASKS) {
+    // Every Telegram "join" task must be membership-verifiable: use an explicit
+    // chatId if given, otherwise derive @username from its t.me link. Non-join
+    // tasks (visit/watch) stay unverified by nature.
+    const explicit = 'chatId' in t ? (t.chatId as string | null) : null;
+    const chatId = explicit ?? (t.actionType === 'join' ? chatIdFromUrl(t.url) : null);
+    const active = 'active' in t ? (t.active as boolean) : true;
+    const fields = {
+      title: t.title,
+      subtitle: t.subtitle,
+      reward: t.reward,
+      actionType: t.actionType,
+      actionLabel: t.actionLabel,
+      url: t.url,
+      chatId,
+      icon: t.icon,
+      waitSeconds: 'waitSeconds' in t ? t.waitSeconds : 0,
+      maxCount: 'maxCount' in t ? t.maxCount : 1,
+      sortOrder: t.sortOrder,
+      active,
+    };
     await prisma.task.upsert({
       where: { key: t.key },
-      update: {
-        title: t.title,
-        subtitle: t.subtitle,
-        reward: t.reward,
-        actionType: t.actionType,
-        actionLabel: t.actionLabel,
-        url: t.url,
-        chatId: 'chatId' in t ? t.chatId : null,
-        icon: t.icon,
-        waitSeconds: 'waitSeconds' in t ? t.waitSeconds : 0,
-        maxCount: 'maxCount' in t ? t.maxCount : 1,
-        sortOrder: t.sortOrder,
-        active: true,
-      },
-      create: {
-        key: t.key,
-        title: t.title,
-        subtitle: t.subtitle,
-        reward: t.reward,
-        actionType: t.actionType,
-        actionLabel: t.actionLabel,
-        url: t.url,
-        chatId: 'chatId' in t ? t.chatId : null,
-        icon: t.icon,
-        waitSeconds: 'waitSeconds' in t ? t.waitSeconds : 0,
-        maxCount: 'maxCount' in t ? t.maxCount : 1,
-        sortOrder: t.sortOrder,
-        active: true,
-      },
+      update: fields,
+      create: { key: t.key, ...fields },
     });
   }
   console.log(`[seed] ${TASKS.length} tasks upserted.`);
