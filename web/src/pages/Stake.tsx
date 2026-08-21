@@ -51,7 +51,7 @@ export function StakePage() {
             <br />
             Earn
           </h1>
-          <p className="mt-1 text-white/50">Lock ICE USD and earn daily rewards</p>
+          <p className="mt-1 text-white/50">Stake USDT or lock earned ICE for daily rewards</p>
         </div>
         <Mascot size={110} />
       </div>
@@ -79,11 +79,11 @@ export function StakePage() {
         <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
           <div className="rounded-2xl bg-white/5 px-4 py-3">
             <div className="text-xs text-white/45">Deposited (stakeable)</div>
-            <div className="mt-0.5 font-bold">{usdt(stakeable)} USD</div>
+            <div className="mt-0.5 font-bold">{usdt(stakeable)} USDT</div>
           </div>
           <div className="rounded-2xl bg-white/5 px-4 py-3">
             <div className="text-xs text-white/45">Earned</div>
-            <div className="mt-0.5 font-bold">{usdt(earned)} USD</div>
+            <div className="mt-0.5 font-bold">{usdt(earned)} ICE</div>
           </div>
         </div>
       </div>
@@ -162,7 +162,7 @@ export function StakePage() {
               disabled={earned < et.minStake}
               className="btn-primary mt-4 w-full py-3 disabled:opacity-40"
             >
-              {earned >= et.minStake ? 'Lock earned ICE USD' : `Earn ${usdt(et.minStake)}+ to lock`}
+              {earned >= et.minStake ? 'Lock earned ICE' : `Earn ${usdt(et.minStake)}+ to lock`}
             </button>
             <p className="mt-2 text-center text-[11px] text-amber-200/70">
               🔒 Rewards release with your principal at maturity — and become USDT-withdrawable.
@@ -190,7 +190,7 @@ export function StakePage() {
                     <div>
                       <div className="text-lg font-extrabold">{tier.name}</div>
                       <div className="text-xs text-white/45">
-                        {usdt(tier.minStake)} – {usdt(tier.maxStake)} USD
+                        {usdt(tier.minStake)} – {usdt(tier.maxStake)} USDT
                       </div>
                     </div>
                   </div>
@@ -235,13 +235,13 @@ export function StakePage() {
                   disabled={!affordable}
                   className="btn-primary mt-4 w-full py-3 disabled:opacity-40"
                 >
-                  {affordable ? 'Stake' : `Deposit ${usdt(tier.minStake)}+ USD`}
+                  {affordable ? 'Stake' : `Deposit ${usdt(tier.minStake)}+ USDT`}
                 </button>
               </div>
             );
           })}
           <p className="text-center text-[11px] text-white/40">
-            Tiers accept deposited (bought) ICE USD only. Deposit to stake here.
+            Tiers accept deposited USDT only. Deposit to stake here.
           </p>
         </div>
       )}
