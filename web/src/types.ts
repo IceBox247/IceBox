@@ -331,6 +331,7 @@ export interface LevelMiningState {
   pool: number;
   level: number;
   speed: number;
+  speedUnit: string;
   perDay: number;
   perHour: number;
   dailyBase: number;

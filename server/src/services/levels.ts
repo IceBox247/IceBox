@@ -95,6 +95,7 @@ export function serializeLevelMining(user: User, miner: Miner, refs: number, now
     pool: pending,
     level,
     speed: speedForLevel(level),
+    speedUnit: c.speedUnit,
     perDay,
     perHour: money(perDay / 24),
     dailyBase,

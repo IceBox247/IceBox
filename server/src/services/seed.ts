@@ -79,6 +79,17 @@ const TASKS = [
     sortOrder: 4,
   },
   {
+    key: 'join_airdropverified',
+    title: 'Join Airdrop Verified Update',
+    subtitle: 'Join our partner channel',
+    reward: 0.5,
+    actionType: 'join',
+    actionLabel: 'Join',
+    url: 'https://t.me/Airdropverifiedupdate',
+    icon: 'telegram',
+    sortOrder: 4,
+  },
+  {
     // Placeholder partner with no real channel — deactivated so users can't be
     // paid for a "join" we can't verify. Re-enable with a real t.me link + the
     // bot added as admin of that channel.

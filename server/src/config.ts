@@ -494,6 +494,8 @@ export const config = {
     const referralYieldPerRef = num('MINE_LEVEL_REF_YIELD', 0.1);
     // Where "Buy Level" sends the user to acquire ICE USD once liquidity is live.
     const swapUrlBase = str('SWAP_URL_BASE', 'https://pancakeswap.finance/swap');
+    // Native ice-themed speed unit (ATF used TH/s; ours is Ice Hashrate).
+    const speedUnit = str('MINE_LEVEL_SPEED_UNIT', 'IH/s');
 
     const holdRatio = Math.pow(maxUsd / minUsd, 1 / (count - 1));
     const round4 = (n: number) => Math.round(n * 1e4) / 1e4;
@@ -524,6 +526,7 @@ export const config = {
       price,
       referralYieldPerRef,
       swapUrlBase,
+      speedUnit,
       requiredUsdFor,
       levelForHolding,
       yieldForLevel,

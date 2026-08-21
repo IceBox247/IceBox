@@ -15,8 +15,8 @@ function fmtUsd(n: number): string {
   if (n >= 1) return `$${n.toFixed(2)}`;
   return `$${n.toFixed(3)}`;
 }
-function fmtSpeed(n: number): string {
-  return `${n.toLocaleString(undefined, { maximumFractionDigits: 2 })} TH/s`;
+function fmtSpeed(n: number, unit: string): string {
+  return `${n.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${unit}`;
 }
 
 interface Props {
@@ -106,7 +106,7 @@ export function MineLevels({ mining, onDeposit }: Props) {
           <div className="text-right">
             <div className="text-xs text-white/45">Level</div>
             <div className="text-3xl font-extrabold text-ice-300">{mining.level}</div>
-            <div className="text-[11px] text-white/40">{fmtSpeed(mining.speed)}</div>
+            <div className="text-[11px] text-white/40">{fmtSpeed(mining.speed, mining.speedUnit)}</div>
           </div>
         </div>
       </div>
@@ -209,7 +209,7 @@ export function MineLevels({ mining, onDeposit }: Props) {
               <div className={`mt-1 text-xl font-extrabold ${unlocked ? 'text-emerald-300' : 'text-white/80'}`}>
                 {fmtUsd(requiredUsd(lvl))}
               </div>
-              <div className="mt-0.5 text-[10px] text-white/40">Speed {fmtSpeed(speedFor(lvl))}</div>
+              <div className="mt-0.5 text-[10px] text-white/40">Speed {fmtSpeed(speedFor(lvl), mining.speedUnit)}</div>
               <div className="mt-2 text-center text-xs font-bold">
                 {active ? (
                   <span className="text-ice-300">● ACTIVE</span>
