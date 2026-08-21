@@ -11,7 +11,7 @@ import {
   StakeIcon,
   IceUsdCoin,
 } from '../components/icons';
-import { usdt } from '../lib/format';
+import { usdt, ice } from '../lib/format';
 import { useCountdown, CountdownDigits } from '../components/Countdown';
 import type { Tab } from '../components/BottomNav';
 
@@ -29,6 +29,12 @@ export function Home({ onWithdraw, onHistory, onDeposit, onCheckin, onLaunch, on
   const launch = useCountdown(me?.config.tokenLaunchAt);
   if (!me) return null;
   const { overview } = me;
+
+  // ICE balance (earned, token-denominated) shown big; deposited USDT + total USD beneath.
+  const iceBalance = overview.earnedBalance;
+  const deposited = overview.stakeable;
+  const price = me.config.icePrice ?? 0;
+  const usdValue = deposited + iceBalance * price;
 
   const stats = [
     { icon: WalletIcon, label: 'Total Earned', value: `${usdt(overview.totalEarned)}`, unit: 'ICE', tint: 'text-ice-300 bg-ice-400/15' },
@@ -53,13 +59,19 @@ export function Home({ onWithdraw, onHistory, onDeposit, onCheckin, onLaunch, on
           <IceUsdCoin size={46} />
           <div>
             <div className="text-5xl font-extrabold leading-none tracking-tight">
-              {usdt(overview.balance)}
+              {ice(iceBalance)}
             </div>
-            <div className="mt-1 text-sm font-bold tracking-widest text-white/40">USD</div>
+            <div className="mt-1 text-sm font-bold tracking-widest text-white/40">ICE</div>
           </div>
         </div>
-        <div className="mt-3 inline-block rounded-full bg-ice-400/10 px-3 py-1 text-sm font-semibold text-ice-200">
-          ICE · BSC (BEP-20)
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+          <span className="rounded-full bg-white/5 px-3 py-1 text-white/60">≈ ${usdt(usdValue)}</span>
+          <span className="rounded-full bg-usdt/10 px-3 py-1 font-semibold text-usdt">
+            {usdt(deposited)} USDT deposited
+          </span>
+          <span className="rounded-full bg-ice-400/10 px-3 py-1 font-semibold text-ice-200">
+            ICE · BSC (BEP-20)
+          </span>
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-3">

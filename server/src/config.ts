@@ -144,7 +144,7 @@ export const config = {
     basePrice: num('EARN_ICE_BASE_PRICE', 0.0000428),
     divisorPer10x: Math.max(1, num('EARN_ICE_DIVISOR_PER_10X', 4)),
   },
-  minWithdrawal: num('MIN_WITHDRAWAL', 18), // ICE-token rail minimum
+  minWithdrawal: num('MIN_WITHDRAWAL', 1), // ICE-token rail minimum
   minWithdrawalUsdt: num('MIN_WITHDRAWAL_USDT', 0.5), // USDT rail minimum
   signupBonus: num('SIGNUP_BONUS', 0.3),
 
