@@ -40,7 +40,12 @@ cronRouter.get('/payouts', async (req, res) => {
     const miningRewards = await distributeMiningRewards().catch((e) => ({
       error: e instanceof Error ? e.message : String(e),
     }));
-    res.json({ ok: true, legacy, dextopus, poll, miningRewards });
+    // One-time compensation for old bought-hashrate spenders (idempotent per user).
+    const { migrateHashrateSpenders } = await import('../services/levels');
+    const hashrateMigration = await migrateHashrateSpenders().catch((e) => ({
+      error: e instanceof Error ? e.message : String(e),
+    }));
+    res.json({ ok: true, legacy, dextopus, poll, miningRewards, hashrateMigration });
   } catch (e) {
     console.error('[cron] payout run failed', e);
     res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
