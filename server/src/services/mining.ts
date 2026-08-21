@@ -5,7 +5,7 @@ import { config } from '../config';
 const MS_PER_DAY = 86_400_000;
 
 /** Prisma-like client (the base client or a transaction handle). */
-type Db = { user: { count: (args: any) => Promise<number> } };
+export type Db = { user: { count: (args: any) => Promise<number> } };
 
 /**
  * How many of a user's referrals have started mining (bought hashrate or
@@ -43,6 +43,21 @@ function ratePerHour(boughtHashrate: number, referralMiners: number): number {
   return icePerDay(boughtHashrate, referralMiners) / 24;
 }
 
+/**
+ * ICE mined per HOUR for a miner, honoring the active engine. In the holding-
+ * based level model the daily yield comes from the wallet's level (+ referrals);
+ * otherwise it's the bought-hashrate model.
+ */
+export function minerRatePerHour(miner: Miner, referralMiners: number): number {
+  if (config.miningLevels.enabled) {
+    const daily =
+      config.miningLevels.yieldForLevel(miner.level) +
+      referralMiners * config.miningLevels.referralYieldPerRef;
+    return daily / 24;
+  }
+  return ratePerHour(miner.hashrate, referralMiners);
+}
+
 /** Deposited (USDT-withdrawable) portion of a balance — the only USD that can buy hashrate. */
 function depositedOf(u: { balance: number; earnedBalance: number }): number {
   return money(Math.max(0, u.balance - u.earnedBalance));
@@ -58,7 +73,7 @@ export async function getOrCreateMiner(userId: number): Promise<Miner> {
 /** Live-accrued pending ICE for a miner as of `now` (does not persist). */
 export function livePending(miner: Miner, referralMiners: number, now = new Date()): number {
   const hours = Math.max(0, (now.getTime() - miner.lastAccruedAt.getTime()) / 3_600_000);
-  return money(miner.pending + ratePerHour(miner.hashrate, referralMiners) * hours);
+  return money(miner.pending + minerRatePerHour(miner, referralMiners) * hours);
 }
 
 /** Which level a hashrate falls into, with progress toward the next. */
@@ -214,7 +229,7 @@ export async function collectMined(userId: number) {
     const refs = await miningReferralCount(tx as unknown as Db, userId);
     const now = new Date();
     const hours = Math.max(0, (now.getTime() - miner.lastAccruedAt.getTime()) / 3_600_000);
-    const accrued = ratePerHour(miner.hashrate, refs) * hours;
+    const accrued = minerRatePerHour(miner, refs) * hours;
     const total = money(miner.pending + accrued);
 
     if (total <= 0) {
@@ -250,7 +265,7 @@ export async function collectMined(userId: number) {
 export async function miningLeaderboard(meId: number, take = 100) {
   const [miners, refGroups, rewardIceGroups] = await Promise.all([
     prisma.miner.findMany({
-      where: { OR: [{ hashrate: { gt: 0 } }, { totalMined: { gt: 0 } }] },
+      where: { OR: [{ hashrate: { gt: 0 } }, { totalMined: { gt: 0 } }, { level: { gt: 0 } }] },
       take: 300,
       orderBy: { hashrate: 'desc' },
       include: { user: { select: { id: true, firstName: true, username: true, photoUrl: true } } },
@@ -280,6 +295,7 @@ export async function miningLeaderboard(meId: number, take = 100) {
   const rewardIce = new Map<number, number>();
   for (const g of rewardIceGroups) rewardIce.set(g.userId, g._sum.amount ?? 0);
 
+  const levelModel = config.miningLevels.enabled;
   const rows = miners
     .map((m) => {
       const refs = refCount.get(m.userId) ?? 0;
@@ -291,17 +307,24 @@ export async function miningLeaderboard(meId: number, take = 100) {
         name: m.user.firstName || m.user.username || 'Miner',
         photoUrl: m.user.photoUrl,
         hashrate,
+        level: m.level,
+        holdingUsd: money(m.holdingUsd),
         totalMined: mined,
         rewardIce: rewards,
         // Total ICE USD this miner has claimed: collected mining + daily ICE rewards.
         totalClaimed: money(mined + rewards),
       };
     })
-    .sort((a, b) => b.hashrate - a.hashrate || b.totalMined - a.totalMined)
+    // Rank by level (holding) in the level model, by effective hashrate otherwise.
+    .sort((a, b) =>
+      levelModel
+        ? b.level - a.level || b.holdingUsd - a.holdingUsd || b.totalMined - a.totalMined
+        : b.hashrate - a.hashrate || b.totalMined - a.totalMined,
+    )
     .slice(0, take)
     .map((r, i) => ({ rank: i + 1, ...r, isMe: r.userId === meId }));
 
-  return { unit: config.mining.unit, leaderboard: rows };
+  return { unit: levelModel ? 'Lvl' : config.mining.unit, leaderboard: rows };
 }
 
 /**

@@ -470,6 +470,65 @@ export const config = {
       ],
     };
   })(),
+
+  // Holding-based mining levels (ATF-style). When MINING_MODEL=levels, a user's
+  // mining level is set by the on-chain ICE USD balance in their connected
+  // wallet, not by bought hashrate. Every curve endpoint is env-tunable; the
+  // client derives each of the `count` level cards from these params.
+  miningLevels: (() => {
+    const model = str('MINING_MODEL', 'packages'); // 'levels' to switch engines
+    const count = Math.max(2, Math.floor(num('MINE_LEVEL_COUNT', 1000)));
+    // Required on-chain holding (USD) — geometric from level 1 to level `count`.
+    const minUsd = num('MINE_LEVEL_MIN_USD', 0.1);
+    const maxUsd = num('MINE_LEVEL_MAX_USD', 5_000_000);
+    // Real daily ICE USD yield into the pool wallet at each end (conservative).
+    const minYield = num('MINE_LEVEL_MIN_YIELD', 0.02);
+    const maxYield = num('MINE_LEVEL_MAX_YIELD', 5000);
+    // Cosmetic hash speed (TH/s) shown on the level cards.
+    const minSpeed = num('MINE_LEVEL_MIN_SPEED', 0.2);
+    const maxSpeed = num('MINE_LEVEL_MAX_SPEED', 50_000);
+    // ICE USD token price in USD, to convert holding USD <-> token amount and
+    // show "exact tokens needed". Later this can be read live from the LP pool.
+    const price = num('ICE_USD_PRICE', 1);
+    // Each referral who mines adds this much ICE USD/day on top of the level yield.
+    const referralYieldPerRef = num('MINE_LEVEL_REF_YIELD', 0.1);
+    // Where "Buy Level" sends the user to acquire ICE USD once liquidity is live.
+    const swapUrlBase = str('SWAP_URL_BASE', 'https://pancakeswap.finance/swap');
+
+    const holdRatio = Math.pow(maxUsd / minUsd, 1 / (count - 1));
+    const round4 = (n: number) => Math.round(n * 1e4) / 1e4;
+
+    // Required holding (USD) to unlock a given level (1-based).
+    const requiredUsdFor = (lvl: number) =>
+      round4(minUsd * Math.pow(holdRatio, Math.max(0, Math.min(count, lvl) - 1)));
+    // Highest level a holding (USD) unlocks — 0 means below level 1.
+    const levelForHolding = (holdingUsd: number) => {
+      if (!(holdingUsd >= minUsd)) return 0;
+      const l = 1 + Math.floor(Math.log(holdingUsd / minUsd) / Math.log(holdRatio) + 1e-9);
+      return Math.max(0, Math.min(count, l));
+    };
+    const yieldRatio = Math.pow(maxYield / minYield, 1 / (count - 1));
+    const yieldForLevel = (lvl: number) =>
+      lvl < 1 ? 0 : round4(minYield * Math.pow(yieldRatio, Math.min(count, lvl) - 1));
+
+    return {
+      enabled: model === 'levels',
+      model,
+      count,
+      minUsd,
+      maxUsd,
+      minYield,
+      maxYield,
+      minSpeed,
+      maxSpeed,
+      price,
+      referralYieldPerRef,
+      swapUrlBase,
+      requiredUsdFor,
+      levelForHolding,
+      yieldForLevel,
+    };
+  })(),
 };
 
 /** Payouts only run when every required piece is present. */

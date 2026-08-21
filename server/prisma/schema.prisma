@@ -41,6 +41,13 @@ model User {
   referredBy    User?    @relation("Referrals", fields: [referredById], references: [id])
   referrals     User[]   @relation("Referrals")
 
+  // Connected BSC wallet for holding-based mining levels. The wallet's on-chain
+  // ICE USD balance sets the mining level. Only counts once verified (the user
+  // signed `walletNonce` to prove control), to stop pasting a whale's address.
+  walletAddress   String?
+  walletVerifiedAt DateTime?
+  walletNonce     String?
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -63,10 +70,16 @@ model User {
 model Miner {
   id            Int      @id @default(autoincrement())
   userId        Int      @unique
-  hashrate      Float    @default(0) // total mining power owned (GH/s)
+  hashrate      Float    @default(0) // total mining power owned (GH/s) — package model
   pending       Float    @default(0) // accrued, uncollected ICE as of lastAccruedAt
   totalMined    Float    @default(0) // lifetime ICE collected
   totalSpent    Float    @default(0) // lifetime USD spent buying hashrate
+  // Holding-based level model (MINING_MODEL=levels): the level is derived from the
+  // connected wallet's on-chain ICE USD holding, cached here for accrual + ranking.
+  level         Int      @default(0)
+  holdingUsd    Float    @default(0) // on-chain ICE USD holding value in USD
+  holdingTokens Float    @default(0) // on-chain ICE USD token amount
+  holdingCheckedAt DateTime?
   lastAccruedAt DateTime @default(now())
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

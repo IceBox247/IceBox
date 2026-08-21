@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import { prisma, money } from '../db';
 import { config } from '../config';
 import {
@@ -9,28 +10,125 @@ import {
   miningReferralCount,
   miningLeaderboard,
 } from '../services/mining';
+import { serializeLevelMining, syncMinerLevel, buyLevelInfo } from '../services/levels';
+import { isEvmAddress, verifyWalletSignature, verificationMessage } from '../services/chain';
 
 export const miningRouter = Router();
 
-/** GET /api/mining/leaderboard — top miners by effective hashrate. */
+const levelModel = () => config.miningLevels.enabled;
+
+/** Build the client mining state under whichever engine is active. */
+async function currentState(userId: number) {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  const [miner, refs] = await Promise.all([
+    getOrCreateMiner(userId),
+    miningReferralCount(prisma, userId),
+  ]);
+  return levelModel()
+    ? serializeLevelMining(user, miner, refs)
+    : serializeMining(user, miner, refs);
+}
+
+/** GET /api/mining/leaderboard — top miners (by level or effective hashrate). */
 miningRouter.get('/leaderboard', async (req, res) => {
   const user = req.user!;
   res.json(await miningLeaderboard(user.id));
 });
 
-/** GET /api/mining — the user's rig + config. */
+/** GET /api/mining — the user's rig + config (auto-syncs level from chain). */
 miningRouter.get('/', async (req, res) => {
   const user = req.user!;
-  const [miner, refs] = await Promise.all([
-    getOrCreateMiner(user.id),
-    miningReferralCount(prisma, user.id),
-  ]);
-  res.json(serializeMining(user, miner, refs));
+  if (levelModel()) await syncMinerLevel(user.id).catch(() => {});
+  res.json(await currentState(user.id));
+});
+
+/** POST /api/mining/refresh — force a fresh on-chain holding/level re-read. */
+miningRouter.post('/refresh', async (req, res) => {
+  const user = req.user!;
+  if (levelModel()) await syncMinerLevel(user.id, { fresh: true }).catch(() => {});
+  res.json({ ok: true, mining: await currentState(user.id) });
+});
+
+/**
+ * POST /api/mining/wallet/nonce — issue a one-time nonce for the given address.
+ * The user signs `verificationMessage(address, nonce)` to prove wallet control.
+ */
+miningRouter.post('/wallet/nonce', async (req, res) => {
+  const user = req.user!;
+  const address = String(req.body?.address ?? '').trim();
+  if (!isEvmAddress(address)) {
+    return res.status(400).json({ error: 'bad_address', message: 'Enter a valid BSC (0x…) address.' });
+  }
+  const nonce = crypto.randomBytes(16).toString('hex');
+  await prisma.user.update({ where: { id: user.id }, data: { walletNonce: nonce } });
+  res.json({ ok: true, address, nonce, message: verificationMessage(address, nonce) });
+});
+
+/**
+ * POST /api/mining/wallet/connect { address, signature } — verify the signature
+ * over the issued nonce, bind the wallet, and sync the level from its holding.
+ */
+miningRouter.post('/wallet/connect', async (req, res) => {
+  const user = req.user!;
+  const address = String(req.body?.address ?? '').trim();
+  const signature = String(req.body?.signature ?? '').trim();
+  const fresh = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+  if (!fresh.walletNonce) {
+    return res.status(400).json({ error: 'no_nonce', message: 'Request a nonce first.' });
+  }
+  if (!verifyWalletSignature(address, fresh.walletNonce, signature)) {
+    return res.status(400).json({ error: 'bad_signature', message: 'Signature did not match this wallet.' });
+  }
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { walletAddress: address, walletVerifiedAt: new Date(), walletNonce: null },
+  });
+  await syncMinerLevel(user.id, { fresh: true }).catch(() => {});
+  res.json({ ok: true, mining: await currentState(user.id) });
+});
+
+/** POST /api/mining/wallet/disconnect — unbind the wallet (level drops to 0). */
+miningRouter.post('/wallet/disconnect', async (req, res) => {
+  const user = req.user!;
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { walletAddress: null, walletVerifiedAt: null, walletNonce: null },
+  });
+  await syncMinerLevel(user.id, { fresh: true }).catch(() => {});
+  res.json({ ok: true, mining: await currentState(user.id) });
+});
+
+/**
+ * POST /api/mining/level/buy { level } — return exactly what it takes to reach a
+ * chosen level and where to acquire the ICE USD (swap link once liquidity is on).
+ */
+miningRouter.post('/level/buy', async (req, res) => {
+  const user = req.user!;
+  if (!levelModel()) {
+    return res.status(403).json({ error: 'not_level_model', message: 'Level mining is off.' });
+  }
+  const miner = await getOrCreateMiner(user.id);
+  const target = Number(req.body?.level);
+  if (!Number.isFinite(target) || target < 1) {
+    return res.status(400).json({ error: 'invalid_level', message: 'Choose a valid level.' });
+  }
+  const info = buyLevelInfo(target, miner.holdingUsd);
+  const wallet = user.walletAddress ?? '';
+  const swapUrl =
+    `${config.miningLevels.swapUrlBase}?outputCurrency=${config.token.address}` +
+    `&chain=bsc${wallet ? `&recipient=${wallet}` : ''}`;
+  res.json({ ok: true, ...info, token: config.token.address, swapUrl });
 });
 
 /** POST /api/mining/buy { amount } — buy hashrate with deposited USD. */
 miningRouter.post('/buy', async (req, res) => {
   const user = req.user!;
+  if (levelModel()) {
+    return res.status(403).json({
+      error: 'level_model',
+      message: 'Mining power now comes from your wallet holding — buy a level instead.',
+    });
+  }
   if (!config.mining.enabled) {
     return res.status(403).json({ error: 'mining_disabled', message: 'Mining is currently off.' });
   }
@@ -82,13 +180,5 @@ miningRouter.post('/collect', async (req, res) => {
   if (!result.ok) {
     return res.status(400).json({ error: 'nothing_to_collect', message: 'Nothing to collect yet.' });
   }
-  const [miner, refs] = await Promise.all([
-    getOrCreateMiner(user.id),
-    miningReferralCount(prisma, user.id),
-  ]);
-  res.json({
-    ok: true,
-    collected: result.collected,
-    mining: serializeMining(result.user, miner, refs),
-  });
+  res.json({ ok: true, collected: result.collected, mining: await currentState(user.id) });
 });
