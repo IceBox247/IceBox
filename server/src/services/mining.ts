@@ -248,7 +248,7 @@ export async function collectMined(userId: number) {
  * lifetime mined for display, and flags the requesting user's own row.
  */
 export async function miningLeaderboard(meId: number, take = 100) {
-  const [miners, refGroups] = await Promise.all([
+  const [miners, refGroups, rewardIceGroups] = await Promise.all([
     prisma.miner.findMany({
       where: { OR: [{ hashrate: { gt: 0 } }, { totalMined: { gt: 0 } }] },
       take: 300,
@@ -264,23 +264,37 @@ export async function miningLeaderboard(meId: number, take = 100) {
       },
       _count: { referredById: true },
     }),
+    // Daily ICE-reward payouts per user (leaderboard prizes), to add to what
+    // each miner has actually claimed from mining overall.
+    prisma.ledgerEntry.groupBy({
+      by: ['userId'],
+      where: { reason: 'mining_reward', meta: { contains: '"type":"ice"' } },
+      _sum: { amount: true },
+    }),
   ]);
 
   const refCount = new Map<number, number>();
   for (const g of refGroups) {
     if (g.referredById != null) refCount.set(g.referredById, g._count.referredById);
   }
+  const rewardIce = new Map<number, number>();
+  for (const g of rewardIceGroups) rewardIce.set(g.userId, g._sum.amount ?? 0);
 
   const rows = miners
     .map((m) => {
       const refs = refCount.get(m.userId) ?? 0;
       const hashrate = money(effectiveHashrate(m.hashrate, refs));
+      const mined = money(m.totalMined);
+      const rewards = money(rewardIce.get(m.userId) ?? 0);
       return {
         userId: m.userId,
         name: m.user.firstName || m.user.username || 'Miner',
         photoUrl: m.user.photoUrl,
         hashrate,
-        totalMined: money(m.totalMined),
+        totalMined: mined,
+        rewardIce: rewards,
+        // Total ICE USD this miner has claimed: collected mining + daily ICE rewards.
+        totalClaimed: money(mined + rewards),
       };
     })
     .sort((a, b) => b.hashrate - a.hashrate || b.totalMined - a.totalMined)

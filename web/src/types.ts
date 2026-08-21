@@ -309,6 +309,8 @@ export interface MinerRankRow {
   photoUrl: string | null;
   hashrate: number;
   totalMined: number;
+  rewardIce: number;
+  totalClaimed: number;
   isMe: boolean;
 }
 

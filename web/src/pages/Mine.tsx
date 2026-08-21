@@ -407,20 +407,21 @@ export function Mine({ onDeposit }: Props) {
                       {r.name}
                       {r.isMe && <span className="ml-1 text-[10px] text-ice-300">(You)</span>}
                     </div>
+                    {/* Total ICE USD claimed so far (mined + daily rewards). */}
+                    <div className="text-[11px] text-white/45">
+                      {usdt(r.totalClaimed)} ICE claimed
+                    </div>
+                    {/* Daily prize this rank is currently winning, if any. */}
                     {(() => {
                       const p = rewardFor(r.rank);
-                      if (p.usdt > 0 || p.ice > 0) {
-                        return (
-                          <div className="text-[11px] font-semibold">
-                            {p.usdt > 0 && <span className="text-usdt">🏆 ${p.usdt.toFixed(2)}</span>}
-                            {p.usdt > 0 && p.ice > 0 && <span className="text-white/30"> · </span>}
-                            {p.ice > 0 && <span className="text-ice-300">{p.ice.toFixed(2)} ICE</span>}
-                            <span className="text-white/30"> /day</span>
-                          </div>
-                        );
-                      }
+                      if (p.usdt <= 0 && p.ice <= 0) return null;
                       return (
-                        <div className="text-[11px] text-white/40">{usdt(r.totalMined)} ICE mined</div>
+                        <div className="text-[11px] font-semibold">
+                          {p.usdt > 0 && <span className="text-usdt">🏆 ${p.usdt.toFixed(2)}</span>}
+                          {p.usdt > 0 && p.ice > 0 && <span className="text-white/30"> · </span>}
+                          {p.ice > 0 && <span className="text-ice-300">{p.ice.toFixed(2)} ICE</span>}
+                          <span className="text-white/30"> /day</span>
+                        </div>
                       );
                     })()}
                   </div>
