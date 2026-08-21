@@ -39,23 +39,25 @@ export function ImportTokenSheet({ open, onClose }: { open: boolean; onClose: ()
           after withdrawing.
         </p>
 
+        {/* Contract address + copy — first, so it's always visible */}
+        <div className="rounded-2xl border border-ice-400/25 bg-ice-400/5 p-4">
+          <div className="text-[11px] uppercase tracking-wide text-white/45">
+            {token.name} token contract
+          </div>
+          <div className="mt-2 select-all break-all rounded-xl bg-black/30 p-3 font-mono text-[13px] leading-relaxed text-ice-100">
+            {token.address}
+          </div>
+          <button onClick={copy} className="btn-primary mt-3 w-full py-3">
+            {copied ? '✓ Copied' : 'Copy contract address'}
+          </button>
+        </div>
+
         {/* Token facts */}
         <div className="card space-y-2 p-4 text-sm">
           <Row label="Token name" value={token.name} />
           <Row label="Network" value={token.chainName} />
           <Row label="Symbol" value={token.symbol} />
           <Row label="Decimals" value={String(token.decimals)} />
-        </div>
-
-        {/* Contract address + copy */}
-        <div className="rounded-2xl border border-ice-400/25 bg-ice-400/5 p-4">
-          <div className="text-[11px] uppercase tracking-wide text-white/45">
-            {token.name} token contract
-          </div>
-          <div className="mt-1 break-all font-mono text-sm text-ice-100">{token.address}</div>
-          <button onClick={copy} className="btn-primary mt-3 w-full py-3">
-            {copied ? '✓ Copied' : 'Copy contract address'}
-          </button>
         </div>
 
         {/* Steps */}
