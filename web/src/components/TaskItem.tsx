@@ -53,7 +53,7 @@ export function TaskItem({ task }: { task: Task }) {
     try {
       const res = await claimTask(task.id);
       haptic('success');
-      toast.show(`+${usdt(res.reward)} USD earned!`, 'success');
+      toast.show(`+${usdt(res.reward)} ICE earned!`, 'success');
       setPhase('idle');
     } catch (e) {
       haptic('error');
@@ -98,7 +98,7 @@ export function TaskItem({ task }: { task: Task }) {
       <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-3">
         <div className="flex items-center gap-2">
           <IceUsdCoin size={20} />
-          <span className="font-bold text-usdt">+{usdt(task.reward)} USD</span>
+          <span className="font-bold text-usdt">+{usdt(task.reward)} ICE</span>
           {task.maxCount > 1 && (
             <span className="ml-1 text-xs text-white/40">
               {task.count}/{task.maxCount}

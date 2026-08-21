@@ -205,7 +205,7 @@ export function DepositSheet({ open, onClose }: { open: boolean; onClose: () => 
         <div className="space-y-4">
           <div className="rounded-2xl bg-ice-400/10 p-3 text-center text-xs text-white/60">
             Deposit <b className="text-ice-200">any crypto</b>. It’s credited as{' '}
-            <b className="text-ice-200">ICE USD</b> (1:1) to stake.
+            <b className="text-ice-200">USDT</b> to stake.
           </div>
           <input
             value={query}
@@ -343,7 +343,7 @@ export function DepositSheet({ open, onClose }: { open: boolean; onClose: () => 
         </div>
         <div className="rounded-2xl bg-ice-400/10 p-3 text-center text-xs text-white/60">
           Send <b className="text-ice-200">{picked.symbol}</b> (on {picked.chainName}) to this address.
-          It’s credited as <b className="text-ice-200">ICE USD</b> (1:1) once it settles.
+          It’s credited as <b className="text-ice-200">USDT</b> once it settles.
         </div>
         {addrLoading || !addr ? (
           <div className="py-8 text-center text-white/50">Generating your address…</div>
@@ -363,7 +363,7 @@ export function DepositSheet({ open, onClose }: { open: boolean; onClose: () => 
             </button>
             {addr.minDeposit ? (
               <p className="mt-2 text-xs text-white/40">
-                ⚠️ Send only {picked.symbol} on {picked.chainName}. Min ≈ {usdt(addr.minDeposit)} USD.
+                ⚠️ Send only {picked.symbol} on {picked.chainName}. Min ≈ {usdt(addr.minDeposit)} USDT.
               </p>
             ) : null}
           </div>
@@ -388,7 +388,7 @@ export function DepositSheet({ open, onClose }: { open: boolean; onClose: () => 
                     <DownArrowIcon width={16} height={16} />
                   </span>
                   <div>
-                    <div className="font-semibold">{usdt(d.amount)} ICE USD</div>
+                    <div className="font-semibold">{usdt(d.amount)} USDT</div>
                     <div className="text-xs text-white/40">
                       {d.credited ? 'Credited' : d.status || 'pending'}
                       {d.originTxHash ? ` · ${shortAddress(d.originTxHash)}` : ''}

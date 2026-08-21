@@ -134,6 +134,16 @@ export const config = {
   // the age check entirely (default). Set INITDATA_MAX_AGE_SECONDS to re-enable.
   initDataMaxAge: num('INITDATA_MAX_AGE_SECONDS', 0),
   referralReward: num('REFERRAL_REWARD', 2),
+  // Free-money earnings (tasks, referral signup reward, check-in) are credited as
+  // ICE tokens — NOT the dollar value — so giving them away doesn't cost real
+  // value. The multiplier is the base (at basePrice); as the price rises it
+  // shrinks so the ICE quantity divides by `divisorPer10x` for every 10x in
+  // price (e.g. base 20 -> a 2 reward is 40 ICE at launch, 10 ICE after a 10x).
+  earnIce: {
+    base: num('EARN_ICE_MULTIPLIER', 20),
+    basePrice: num('EARN_ICE_BASE_PRICE', 0.0000428),
+    divisorPer10x: Math.max(1, num('EARN_ICE_DIVISOR_PER_10X', 4)),
+  },
   minWithdrawal: num('MIN_WITHDRAWAL', 18), // ICE-token rail minimum
   minWithdrawalUsdt: num('MIN_WITHDRAWAL_USDT', 0.5), // USDT rail minimum
   signupBonus: num('SIGNUP_BONUS', 0.3),

@@ -3,6 +3,7 @@ import type { User } from '@prisma/client';
 import { prisma, money } from '../db';
 import { config } from '../config';
 import type { TelegramUser } from '../telegram/initData';
+import { getEarnIceMultiplier } from './chain';
 
 /** Generate a short, URL-safe referral code. */
 function generateReferralCode(): string {
@@ -60,6 +61,9 @@ export async function findOrCreateUser(
     referralCode = generateReferralCode();
   }
 
+  // Price-scaled ICE multiplier for the signup bonus + referral reward.
+  const mult = await getEarnIceMultiplier();
+
   return prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
@@ -70,22 +74,27 @@ export async function findOrCreateUser(
         photoUrl: tgUser.photo_url,
         referralCode,
         referredById: referrer?.id ?? null,
-        balance: money(config.signupBonus),
+        // Free money is credited as ICE tokens at the fixed multiplier (not $ value).
+        balance: money(config.signupBonus * mult),
         // Signup bonus is earned (not deposited), so it can't go into the tiers.
-        earnedBalance: money(config.signupBonus),
-        totalEarned: money(config.signupBonus),
+        earnedBalance: money(config.signupBonus * mult),
+        totalEarned: money(config.signupBonus * mult),
       },
     });
 
     if (config.signupBonus > 0) {
       await tx.ledgerEntry.create({
-        data: { userId: user.id, amount: money(config.signupBonus), reason: 'signup_bonus' },
+        data: {
+          userId: user.id,
+          amount: money(config.signupBonus * mult),
+          reason: 'signup_bonus',
+        },
       });
     }
 
     // Reward the referrer once, at signup.
     if (referrer) {
-      const reward = money(config.referralReward);
+      const reward = money(config.referralReward * mult);
       await tx.user.update({
         where: { id: referrer.id },
         data: {

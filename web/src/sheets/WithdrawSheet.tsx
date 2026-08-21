@@ -33,6 +33,7 @@ export function WithdrawSheet({
   const enough = available >= min;
   const needed = Math.max(0, min - available);
   const label = rail === 'usdt' ? 'USDT' : 'ICE token';
+  const unit = rail === 'usdt' ? 'USDT' : 'ICE';
 
   async function submit() {
     const amt = Number(amount || min);
@@ -42,7 +43,7 @@ export function WithdrawSheet({
       return;
     }
     if (!Number.isFinite(amt) || amt < min) {
-      toast.show(`Minimum withdrawal is ${usdt(min)} USD`, 'error');
+      toast.show(`Minimum withdrawal is ${usdt(min)} ${unit}`, 'error');
       return;
     }
     if (amt > available) {
@@ -107,7 +108,7 @@ export function WithdrawSheet({
         <div className="rounded-2xl bg-white/5 p-4">
           <div className="flex items-center justify-between text-sm">
             <span className="text-white/50">{label} available</span>
-            <span className="font-bold">{usdt(available)} USD</span>
+            <span className="font-bold">{usdt(available)} {unit}</span>
           </div>
         </div>
 
@@ -115,8 +116,8 @@ export function WithdrawSheet({
           <div className="py-2 text-center">
             <p className="text-lg font-extrabold">Not enough on the {label} rail</p>
             <p className="mx-auto mt-2 max-w-xs text-sm text-white/55">
-              Minimum is <b className="text-white">{usdt(min)} USD</b>. You need{' '}
-              <b className="text-ice-300">{usdt(needed)} USD</b> more here.
+              Minimum is <b className="text-white">{usdt(min)} {unit}</b>. You need{' '}
+              <b className="text-ice-300">{usdt(needed)} {unit}</b> more here.
               {rail === 'usdt' && ' Deposit or stake to build this rail.'}
             </p>
             <button
@@ -145,7 +146,7 @@ export function WithdrawSheet({
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-sm text-white/50">Amount (min {usdt(min)} USD)</span>
+              <span className="mb-1 block text-sm text-white/50">Amount (min {usdt(min)} {unit})</span>
               <input
                 value={amount}
                 onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}

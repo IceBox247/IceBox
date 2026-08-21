@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma, money } from '../db';
 import { config } from '../config';
+import { getEarnIceMultiplier } from '../services/chain';
 
 export const checkinRouter = Router();
 
@@ -48,6 +49,8 @@ checkinRouter.post('/claim', async (req, res) => {
   if (!config.checkin.enabled) return res.status(403).json({ error: 'checkin_disabled' });
 
   const now = new Date();
+  // Price-scaled ICE multiplier, fetched before the transaction (network I/O).
+  const mult = await getEarnIceMultiplier();
   try {
     const result = await prisma.$transaction(async (tx) => {
       const fresh = await tx.user.findUniqueOrThrow({ where: { id: user.id } });
@@ -56,13 +59,14 @@ checkinRouter.post('/claim', async (req, res) => {
       if (last === today) return { already: true as const };
 
       const streak = last === today - 1 ? fresh.checkInStreak + 1 : 1;
-      const reward = rewardForStreak(streak);
+      const baseReward = rewardForStreak(streak);
 
       // Reward rail depends on whether the user has staked funds: stakers get
-      // it as USDT-withdrawable (deposited bucket); everyone else gets ICE USD
-      // (earned bucket, ICE-token-only until they stake).
+      // it as USDT-withdrawable (deposited bucket, real $ value); everyone else
+      // gets ICE (earned bucket) at the price-scaled free-money multiplier.
       const activeStakes = await tx.stake.count({ where: { userId: user.id, status: 'active' } });
       const asUsdt = activeStakes > 0;
+      const reward = asUsdt ? baseReward : money(baseReward * mult);
 
       const updated = await tx.user.update({
         where: { id: user.id },

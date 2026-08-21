@@ -59,7 +59,7 @@ export function AdminSheet({ open, onClose }: { open: boolean; onClose: () => vo
 
           <p className="text-xs font-bold uppercase tracking-wide text-white/40">Liabilities (balances held)</p>
           <div className="grid grid-cols-2 gap-3">
-            <Stat label="Total balance" value={usdt(stats.balances.totalBalance)} sub="ICE USD" />
+            <Stat label="Total balance" value={usdt(stats.balances.totalBalance)} sub="ICE" />
             <Stat label="Deposited bucket" value={usdt(stats.balances.depositedBucket)} sub="USDT-withdrawable" tint="text-usdt" />
             <Stat label="Earned bucket" value={usdt(stats.balances.earnedBalance)} sub="ICE-token only" tint="text-ice-300" />
             <Stat label="Total hashrate" value={stats.mining.totalHashrate.toLocaleString()} sub="GH/s" />

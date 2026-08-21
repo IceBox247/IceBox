@@ -65,7 +65,7 @@ export function LaunchSheet({ open, onClose }: { open: boolean; onClose: () => v
           <ul className="mt-2 space-y-1.5 text-white/55">
             <li>❄️ ICE becomes a live, tradeable token on-chain.</li>
             <li>💧 Liquidity opens so ICE can be bought and sold.</li>
-            <li>🔓 Your earned & staked ICE USD converts to the ICE token.</li>
+            <li>🔓 Your earned & staked ICE converts to the ICE token.</li>
           </ul>
         </div>
 

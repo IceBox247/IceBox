@@ -35,10 +35,10 @@ export function Home({ onWithdraw, onHistory, onDeposit, onCheckin, onLaunch, on
   const pct = min > 0 ? Math.min(100, (overview.available / min) * 100) : 100;
 
   const stats = [
-    { icon: WalletIcon, label: 'Total Earned', value: `${usdt(overview.totalEarned)}`, unit: 'USD', tint: 'text-ice-300 bg-ice-400/15' },
+    { icon: WalletIcon, label: 'Total Earned', value: `${usdt(overview.totalEarned)}`, unit: 'ICE', tint: 'text-ice-300 bg-ice-400/15' },
     { icon: ReferralsIcon, label: 'Total Referrals', value: `${overview.totalReferrals}`, unit: '', tint: 'text-usdt bg-usdt/15' },
     { icon: TasksIcon, label: 'Tasks Done', value: `${overview.tasksDone}`, unit: '', tint: 'text-violet-300 bg-violet-400/15' },
-    { icon: WalletIcon, label: 'Available', value: `${usdt(overview.available)}`, unit: 'USD', tint: 'text-sky-300 bg-sky-400/15' },
+    { icon: WalletIcon, label: 'Available', value: `${usdt(overview.available)}`, unit: 'USDT', tint: 'text-sky-300 bg-sky-400/15' },
   ];
 
   return (
@@ -63,7 +63,7 @@ export function Home({ onWithdraw, onHistory, onDeposit, onCheckin, onLaunch, on
           </div>
         </div>
         <div className="mt-3 inline-block rounded-full bg-ice-400/10 px-3 py-1 text-sm font-semibold text-ice-200">
-          ICE USD · BSC (BEP-20)
+          ICE · BSC (BEP-20)
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-3">
@@ -96,7 +96,7 @@ export function Home({ onWithdraw, onHistory, onDeposit, onCheckin, onLaunch, on
             <div className="mb-1.5 flex items-center justify-between text-xs text-white/50">
               <span>Progress to withdrawal</span>
               <span>
-                <b className="text-white/80">{usdt(overview.available)}</b> / {usdt(min)} USD
+                <b className="text-white/80">{usdt(overview.available)}</b> / {usdt(min)} USDT
               </span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-white/10">
@@ -106,7 +106,7 @@ export function Home({ onWithdraw, onHistory, onDeposit, onCheckin, onLaunch, on
               />
             </div>
             <p className="mt-1.5 text-xs text-white/40">
-              {usdt(Math.max(0, min - overview.available))} USD more to unlock withdrawal
+              {usdt(Math.max(0, min - overview.available))} USDT more to unlock withdrawal
             </p>
           </div>
         )}
@@ -144,7 +144,7 @@ export function Home({ onWithdraw, onHistory, onDeposit, onCheckin, onLaunch, on
             <h3 className="text-lg font-extrabold leading-tight">Daily Check-in</h3>
             <p className="text-sm text-white/50">
               {checkin.canClaim
-                ? `Day ${checkin.nextStreak} · claim ${usdt(checkin.reward)} USD`
+                ? `Day ${checkin.nextStreak} · claim ${usdt(checkin.reward)} ICE`
                 : `Day ${checkin.streak} streak · claimed today ✓`}
             </p>
           </div>
@@ -171,8 +171,8 @@ export function Home({ onWithdraw, onHistory, onDeposit, onCheckin, onLaunch, on
             <h3 className="text-lg font-extrabold leading-tight">Stake to Earn</h3>
             <p className="text-sm text-white/50">
               {overview.totalStaked > 0
-                ? `${usdt(overview.totalStaked)} USD staked · earning daily`
-                : 'Lock ICE USD and earn daily rewards'}
+                ? `${usdt(overview.totalStaked)} USDT staked · earning daily`
+                : 'Lock ICE and earn daily rewards'}
             </p>
           </div>
           <ChevronRightIcon width={18} height={18} />

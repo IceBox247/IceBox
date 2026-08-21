@@ -64,6 +64,22 @@ export async function getIcePriceUsd(): Promise<number> {
   return priceCache.usd > 0 ? priceCache.usd : config.miningLevels.price;
 }
 
+/**
+ * Multiplier that turns a free-money reward into ICE tokens, scaled by price so
+ * the ICE quantity divides by `divisorPer10x` for every 10x the price rises
+ * above basePrice (and multiplies as it falls). Keeps free gifts from ballooning
+ * in dollar value while still growing modestly. Fetch once before a transaction.
+ */
+export async function getEarnIceMultiplier(): Promise<number> {
+  const { base, basePrice, divisorPer10x } = config.earnIce;
+  const price = await getIcePriceUsd();
+  if (!(price > 0) || !(basePrice > 0)) return base;
+  // factor = (basePrice/price) ^ log10(divisorPer10x): at 10x price -> 1/divisor.
+  const exp = Math.log10(divisorPer10x);
+  const factor = Math.pow(basePrice / price, exp);
+  return Math.max(0.0001, base * factor);
+}
+
 /** Is this a well-formed EVM address? */
 export function isEvmAddress(addr: string | null | undefined): boolean {
   return !!addr && /^0x[a-fA-F0-9]{40}$/.test(addr);

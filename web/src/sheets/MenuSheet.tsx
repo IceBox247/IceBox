@@ -56,7 +56,7 @@ export function MenuSheet({ open, onClose, onHistory, onAdmin, onImportToken }: 
       title: 'Invite friends',
       subtitle: 'Share your referral link',
       onClick: () => {
-        if (me) shareReferral(me.referralLink, '❄️ Join IceBox Wallet and earn USD with me!');
+        if (me) shareReferral(me.referralLink, '❄️ Join IceBox Wallet and earn ICE with me!');
         onClose();
       },
     },
@@ -65,7 +65,7 @@ export function MenuSheet({ open, onClose, onHistory, onAdmin, onImportToken }: 
           {
             icon: RefreshIcon,
             title: `Import ${me.config.token.name} to MetaMask`,
-            subtitle: 'Add the ICE USD token to your wallet',
+            subtitle: 'Add the ICE token to your wallet',
             onClick: () => {
               onClose();
               setTimeout(onImportToken, 200);

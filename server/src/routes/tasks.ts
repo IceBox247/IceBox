@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma, money } from '../db';
 import { checkMembership } from '../telegram/verify';
+import { getEarnIceMultiplier } from '../services/chain';
 
 export const tasksRouter = Router();
 
@@ -77,6 +78,8 @@ tasksRouter.post('/:id/claim', async (req, res) => {
     }
   }
 
+  // Price-scaled ICE multiplier, fetched before the transaction (network I/O).
+  const mult = await getEarnIceMultiplier();
   try {
     const result = await prisma.$transaction(async (tx) => {
       const existing = await tx.taskCompletion.findUnique({
@@ -88,7 +91,8 @@ tasksRouter.post('/:id/claim', async (req, res) => {
         return { alreadyDone: true as const };
       }
 
-      const reward = money(task.reward);
+      // Free money is credited as ICE tokens at the price-scaled multiplier (not $ value).
+      const reward = money(task.reward * mult);
 
       const completion = existing
         ? await tx.taskCompletion.update({
@@ -103,7 +107,7 @@ tasksRouter.post('/:id/claim', async (req, res) => {
         where: { id: user.id },
         data: {
           balance: { increment: reward },
-          earnedBalance: { increment: reward }, // task reward is earned, not deposited
+          earnedBalance: { increment: reward }, // task reward is earned ICE, not deposited
           totalEarned: { increment: reward },
         },
       });

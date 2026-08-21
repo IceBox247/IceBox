@@ -36,6 +36,7 @@ export function StakeSheet({
 
   if (!pick) return null;
   const a = accent(pick.accent);
+  const unit = pick.earned ? 'ICE' : 'USDT';
 
   const amt = Number(amount);
   const hardMax = pick.maxStake ?? Infinity;
@@ -49,14 +50,14 @@ export function StakeSheet({
       const range = pick.maxStake
         ? `${usdt(pick.minStake)}–${usdt(pick.maxStake)}`
         : `min ${usdt(pick.minStake)}`;
-      toast.show(`${pick.name} accepts ${range} ICE USD`, 'error');
+      toast.show(`${pick.name} accepts ${range} ${unit}`, 'error');
       return;
     }
     if (amt > balance) {
       toast.show(
         pick.earned
-          ? `You only have ${usdt(balance)} earned ICE USD`
-          : `You only have ${usdt(balance)} deposited ICE USD`,
+          ? `You only have ${usdt(balance)} earned ICE`
+          : `You only have ${usdt(balance)} deposited USDT`,
         'error',
       );
       return;
@@ -65,7 +66,7 @@ export function StakeSheet({
     try {
       await stake(pick.key, amt);
       haptic('success');
-      toast.show(`Staked ${usdt(amt)} ICE USD in ${pick.name} 🔒`, 'success');
+      toast.show(`Staked ${usdt(amt)} ${unit} in ${pick.name} 🔒`, 'success');
       setAmount('');
       onClose();
     } catch (e) {
@@ -103,19 +104,19 @@ export function StakeSheet({
         <div className="rounded-2xl bg-white/5 p-4 text-sm">
           <div className="flex items-center justify-between">
             <span className="text-white/50">{pick.earned ? 'Earned available' : 'Deposited available'}</span>
-            <span className="font-bold">{usdt(balance)} ICE USD</span>
+            <span className="font-bold">{usdt(balance)} {unit}</span>
           </div>
           <div className="mt-1 flex items-center justify-between">
             <span className="text-white/50">Range</span>
             <span className="font-bold">
               {usdt(pick.minStake)}
-              {pick.maxStake ? ` – ${usdt(pick.maxStake)}` : '+'} USD
+              {pick.maxStake ? ` – ${usdt(pick.maxStake)}` : '+'} {unit}
             </span>
           </div>
         </div>
 
         <label className="block">
-          <span className="mb-1 block text-sm text-white/50">Amount to stake (ICE USD)</span>
+          <span className="mb-1 block text-sm text-white/50">Amount to stake ({unit})</span>
           <input
             value={amount}
             onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
@@ -145,7 +146,7 @@ export function StakeSheet({
           <div className="text-xs uppercase tracking-wide text-white/40">
             {pick.earned ? 'Reward released' : 'Projected reward'} over {pick.durationDays} days
           </div>
-          <div className={`mt-1 text-3xl font-extrabold ${a.text}`}>+{usdt(projected)} USD</div>
+          <div className={`mt-1 text-3xl font-extrabold ${a.text}`}>+{usdt(projected)} {unit}</div>
           <div className="mt-1 text-xs text-white/40">
             {pick.earned
               ? 'Principal + reward unlock together at maturity'
@@ -158,7 +159,7 @@ export function StakeSheet({
           disabled={submitting || !valid}
           className="btn-primary w-full py-4 text-lg disabled:opacity-40"
         >
-          {submitting ? 'Staking…' : valid ? `Stake ${usdt(amt)} USD` : 'Enter an amount'}
+          {submitting ? 'Staking…' : valid ? `Stake ${usdt(amt)} ${unit}` : 'Enter an amount'}
         </button>
         <button onClick={onClose} className="btn-ghost w-full py-4">
           Cancel

@@ -258,10 +258,10 @@ export function StakePage() {
                 </span>
                 <div>
                   <div className="font-bold">{nameFor(staking, s)}</div>
-                  <div className="text-xs text-white/45">Unstaked · earned {usdt(s.claimed)} USD</div>
+                  <div className="text-xs text-white/45">Unstaked · earned {usdt(s.claimed)} USDT</div>
                 </div>
               </div>
-              <div className="text-right font-bold">{usdt(s.principal)} USD</div>
+              <div className="text-right font-bold">{usdt(s.principal)} USDT</div>
             </div>
           ))}
         </div>
@@ -289,7 +289,7 @@ function PositionCard({ stake, name }: { stake: Stake; name: string }) {
     try {
       const { reward } = await claimStake(stake.id);
       haptic('success');
-      toast.show(`Claimed ${usdt(reward)} USD`, 'success');
+      toast.show(`Claimed ${usdt(reward)} USDT`, 'success');
     } catch (e) {
       haptic('error');
       toast.show(e instanceof ApiError ? e.message : 'Claim failed', 'error');
@@ -303,7 +303,7 @@ function PositionCard({ stake, name }: { stake: Stake; name: string }) {
     try {
       const { payout } = await unstake(stake.id);
       haptic('success');
-      toast.show(`Unstaked — ${usdt(payout)} USD released`, 'success');
+      toast.show(`Unstaked — ${usdt(payout)} USDT released`, 'success');
     } catch (e) {
       haptic('error');
       toast.show(e instanceof ApiError ? e.message : 'Unstake failed', 'error');
@@ -325,7 +325,7 @@ function PositionCard({ stake, name }: { stake: Stake; name: string }) {
               {isEarned && <span className="ml-2 text-[10px] font-bold text-amber-300">LOCKED</span>}
             </div>
             <div className="text-xs text-white/45">
-              {usdt(stake.principal)} USD · {stake.dailyRate}%/day
+              {usdt(stake.principal)} USDT · {stake.dailyRate}%/day
             </div>
           </div>
         </div>
@@ -339,7 +339,7 @@ function PositionCard({ stake, name }: { stake: Stake; name: string }) {
 
       <div className="mt-3 flex items-center justify-between rounded-2xl bg-white/5 px-4 py-3">
         <span className="text-sm text-white/50">{isEarned ? 'Locked reward' : 'Pending reward'}</span>
-        <span className={`text-lg font-extrabold ${a.text}`}>+{usdt(stake.pending)} USD</span>
+        <span className={`text-lg font-extrabold ${a.text}`}>+{usdt(stake.pending)} USDT</span>
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2">

@@ -103,7 +103,7 @@ export function Mine({ onDeposit }: Props) {
     try {
       const { collected } = await collectMining();
       haptic('success');
-      toast.show(`Collected ${usdt(collected)} ICE USD ❄️`, 'success');
+      toast.show(`Collected ${usdt(collected)} ICE ❄️`, 'success');
     } catch (e) {
       haptic('error');
       toast.show(e instanceof ApiError ? e.message : 'Nothing to collect yet', 'error');
@@ -116,7 +116,7 @@ export function Mine({ onDeposit }: Props) {
     <div className="animate-fade-in space-y-5 px-5 pb-28 pt-2">
       <div>
         <h1 className="text-3xl font-extrabold leading-tight">{mining.name}</h1>
-        <p className="mt-1 text-white/50">Mine ICE USD with hashrate</p>
+        <p className="mt-1 text-white/50">Mine ICE with hashrate</p>
       </div>
 
       {/* Rig card */}
@@ -138,7 +138,7 @@ export function Mine({ onDeposit }: Props) {
             <div className="text-xs text-white/50">Mined & ready to collect</div>
             <div className="mt-1 text-4xl font-extrabold tabular-nums text-ice-100">
               {livePending.toFixed(4)}
-              <span className="ml-2 text-base font-bold text-white/40">ICE USD</span>
+              <span className="ml-2 text-base font-bold text-white/40">ICE</span>
             </div>
           </div>
 
@@ -187,7 +187,7 @@ export function Mine({ onDeposit }: Props) {
           disabled={busy !== null || livePending <= 0}
           className="btn-primary w-full rounded-none py-4 text-lg disabled:opacity-40"
         >
-          {busy === 'collect' ? 'Collecting…' : `Collect ${livePending.toFixed(4)} ICE USD`}
+          {busy === 'collect' ? 'Collecting…' : `Collect ${livePending.toFixed(4)} ICE`}
         </button>
       </div>
 
@@ -217,16 +217,16 @@ export function Mine({ onDeposit }: Props) {
         <div>
           <h2 className="text-lg font-extrabold">Boost your hashrate</h2>
           <p className="mt-1 text-sm text-white/55">
-            You mine <b className="text-ice-200">{mining.baseIcePerDay} ICE USD/day</b> free. Buy
-            more power with <b className="text-ice-200">deposited</b> USD — from ${mining.minBuy} up
+            You mine <b className="text-ice-200">{mining.baseIcePerDay} ICE/day</b> free. Buy
+            more power with <b className="text-ice-200">deposited</b> USDT — from ${mining.minBuy} up
             to ${mining.maxBuy.toLocaleString()}, growing to as much as{' '}
-            {mining.maxIcePerDay.toLocaleString()} ICE USD/day.
+            {mining.maxIcePerDay.toLocaleString()} ICE/day.
           </p>
         </div>
 
         <div className="flex items-center justify-between rounded-2xl bg-white/5 px-4 py-3 text-sm">
           <span className="text-white/50">Deposited available</span>
-          <b>{usdt(mining.spendable)} USD</b>
+          <b>{usdt(mining.spendable)} USDT</b>
         </div>
 
         {/* 100-step hashrate ladder */}
@@ -276,7 +276,7 @@ export function Mine({ onDeposit }: Props) {
           />
           {mining.spendable < mining.minBuy ? (
             <button onClick={onDeposit} className="btn-ghost w-full py-3">
-              Deposit USD to buy hashrate
+              Deposit USDT to buy hashrate
             </button>
           ) : (
             <button
@@ -299,12 +299,12 @@ export function Mine({ onDeposit }: Props) {
         <div className="card p-4">
           <div className="text-xs text-white/45">Total mined</div>
           <div className="mt-1 text-2xl font-extrabold text-ice-300">{usdt(mining.totalMined)}</div>
-          <div className="text-[11px] text-white/40">ICE USD</div>
+          <div className="text-[11px] text-white/40">ICE</div>
         </div>
         <div className="card p-4">
           <div className="text-xs text-white/45">Invested</div>
           <div className="mt-1 text-2xl font-extrabold">{usdt(mining.totalSpent)}</div>
-          <div className="text-[11px] text-white/40">USD</div>
+          <div className="text-[11px] text-white/40">ICE</div>
         </div>
       </div>
 
@@ -364,7 +364,7 @@ export function Mine({ onDeposit }: Props) {
               Top {mining.rewards.usdtTop} split{' '}
               <b className="text-usdt">${mining.rewards.usdtPool} USDT</b> · Top{' '}
               {mining.rewards.iceTop} split{' '}
-              <b className="text-ice-200">{mining.rewards.icePool.toLocaleString()} ICE USD</b> —
+              <b className="text-ice-200">{mining.rewards.icePool.toLocaleString()} ICE</b> —
               every day, by rank.
             </p>
             {myRow &&
@@ -381,7 +381,7 @@ export function Mine({ onDeposit }: Props) {
                     You're <b className="text-white">#{myRow.rank}</b> today — you'd win{' '}
                     {p.usdt > 0 && <b className="text-usdt">${p.usdt.toFixed(2)} USDT</b>}
                     {p.usdt > 0 && p.ice > 0 && ' + '}
-                    {p.ice > 0 && <b className="text-ice-200">{p.ice.toFixed(2)} ICE USD</b>}
+                    {p.ice > 0 && <b className="text-ice-200">{p.ice.toFixed(2)} ICE</b>}
                   </div>
                 );
               })()}
@@ -410,7 +410,7 @@ export function Mine({ onDeposit }: Props) {
                       {r.name}
                       {r.isMe && <span className="ml-1 text-[10px] text-ice-300">(You)</span>}
                     </div>
-                    {/* Total ICE USD claimed so far (mined + daily rewards). */}
+                    {/* Total ICE claimed so far (mined + daily rewards). */}
                     <div className="text-[11px] text-white/45">
                       {usdt(r.totalClaimed)} ICE claimed
                     </div>
@@ -442,7 +442,7 @@ export function Mine({ onDeposit }: Props) {
       </div>
 
       <p className="text-center text-[11px] text-white/40">
-        Mined ICE USD lands in your earned balance — withdraw as the ICE token or lock it in the
+        Mined ICE lands in your earned balance — withdraw as the ICE token or lock it in the
         Earned Vault.
       </p>
     </div>
