@@ -316,10 +316,11 @@ export async function miningLeaderboard(meId: number, take = 100) {
         totalClaimed: money(mined + rewards),
       };
     })
-    // Rank by level (holding) in the level model, by effective hashrate otherwise.
+    // Level model: rank by level (holding), then by ICE actually claimed so the
+    // board stays meaningful before wallets/holdings come online. Otherwise by hashrate.
     .sort((a, b) =>
       levelModel
-        ? b.level - a.level || b.holdingUsd - a.holdingUsd || b.totalMined - a.totalMined
+        ? b.level - a.level || b.totalClaimed - a.totalClaimed || b.holdingUsd - a.holdingUsd
         : b.hashrate - a.hashrate || b.totalMined - a.totalMined,
     )
     .slice(0, take)

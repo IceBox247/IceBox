@@ -427,18 +427,22 @@ function LeaderboardSheet({ open, onClose, unit }: { open: boolean; onClose: () 
                     {r.name}
                     {r.isMe && <span className="ml-1 text-[10px] text-ice-300">(You)</span>}
                   </div>
-                  <div className="text-[11px] text-white/45">{usdt(r.totalClaimed)} ICE claimed</div>
+                  <div className="text-[11px] text-white/45">
+                    {r.level > 0 ? `Lvl ${r.level} · ${fmtUsd(r.holdingUsd)} held` : 'Mining rewards'}
+                  </div>
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-sm font-extrabold text-ice-300">Lvl {r.level}</div>
-                <div className="text-[10px] text-white/40">{fmtUsd(r.holdingUsd)}</div>
+                <div className="text-sm font-extrabold text-ice-300">{ice(r.totalClaimed)} ICE</div>
+                <div className="text-[10px] text-white/40">claimed</div>
               </div>
             </div>
           ))}
         </div>
       )}
-      <p className="mt-3 text-center text-[11px] text-white/40">Ranked by level ({unit} from holding).</p>
+      <p className="mt-3 text-center text-[11px] text-white/40">
+        Ranked by level, then ICE claimed. Higher {unit} (holding) climbs the board.
+      </p>
     </Sheet>
   );
 }
