@@ -10,7 +10,7 @@ import {
   miningReferralCount,
   miningLeaderboard,
 } from '../services/mining';
-import { serializeLevelMining, syncMinerLevel, buyLevelInfo } from '../services/levels';
+import { serializeLevelMining, syncMinerLevel, buyLevelInfo, minerJourney } from '../services/levels';
 import {
   isEvmAddress,
   verifyWalletSignature,
@@ -45,6 +45,15 @@ miningRouter.get('/', async (req, res) => {
   const user = req.user!;
   if (levelModel()) await syncMinerLevel(user.id).catch(() => {});
   res.json(await currentState(user.id));
+});
+
+/** GET /api/mining/journey — the user's Level Journey stats (Miner Store card). */
+miningRouter.get('/journey', async (req, res) => {
+  const user = req.user!;
+  if (!levelModel()) return res.json({ enabled: false });
+  await syncMinerLevel(user.id).catch(() => {});
+  const price = await getIcePriceUsd();
+  res.json({ enabled: true, ...(await minerJourney(user.id, price)) });
 });
 
 /** POST /api/mining/refresh — force a fresh on-chain holding/level re-read. */

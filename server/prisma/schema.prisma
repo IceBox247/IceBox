@@ -77,6 +77,7 @@ model Miner {
   // Holding-based level model (MINING_MODEL=levels): the level is derived from the
   // connected wallet's on-chain ICE USD holding, cached here for accrual + ranking.
   level         Int      @default(0)
+  peakLevel     Int      @default(0) // highest level ever reached (Level Journey)
   holdingUsd    Float    @default(0) // effective holding value in USD (on-chain + bonus)
   holdingTokens Float    @default(0) // on-chain ICE token amount
   // Goodwill holding credit (USD) — e.g. migrating early users who spent real
@@ -88,6 +89,18 @@ model Miner {
   updatedAt     DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id])
+}
+
+// A point in a user's "Level Journey" — recorded when their level changes (and a
+// periodic keep-alive), so the Miner Store can chart their progress over time.
+model MinerLevelPoint {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  level     Int
+  assetsUsd Float
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model Task {

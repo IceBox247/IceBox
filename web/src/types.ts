@@ -368,6 +368,23 @@ export interface LevelMiningState {
   };
 }
 
+export interface JourneyPoint {
+  at: string;
+  level: number;
+  assetsUsd: number;
+}
+
+export interface MinerJourney {
+  enabled: boolean;
+  current: number;
+  peak: number;
+  assetsUsd: number;
+  price: number;
+  todayChangeUsd: number;
+  todayChangePct: number;
+  points: JourneyPoint[];
+}
+
 export interface BuyLevelInfo {
   level: number;
   requiredUsd: number;

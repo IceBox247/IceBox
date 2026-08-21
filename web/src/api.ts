@@ -15,6 +15,7 @@ import type {
   AnyMiningState,
   BuyLevelInfo,
   MiningLeaderboard,
+  MinerJourney,
   AdminStats,
 } from './types';
 
@@ -131,6 +132,7 @@ export const api = {
       method: 'POST',
     }),
   miningLeaderboard: () => request<MiningLeaderboard>('/mining/leaderboard'),
+  miningJourney: () => request<MinerJourney>('/mining/journey'),
   // Holding-based level model.
   walletNonce: (address: string) =>
     request<{ ok: boolean; address: string; nonce: string; message: string }>(

@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { useToast } from '../components/Toast';
 import { api, ApiError } from '../api';
 import { haptic } from '../telegram';
 import { usdt, ice } from '../lib/format';
 import { Sheet } from '../components/Sheet';
-import type { LevelMiningState, BuyLevelInfo, MinerRankRow } from '../types';
+import { sfx, isMuted, toggleMuted } from '../lib/sound';
+import type { LevelMiningState, BuyLevelInfo, MinerRankRow, MinerJourney } from '../types';
 
 /** Compact USD: $0.13 · $103K · $3.25M. */
 function fmtUsd(n: number): string {
@@ -76,14 +77,27 @@ export function MineLevels({ mining, onDeposit }: Props) {
   const [storeOpen, setStoreOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
+  const [soundOff, setSoundOff] = useState(isMuted);
+
+  // Celebrate whenever the mining level ticks up (chime + haptic).
+  const prevLevel = useRef(mining.level);
+  useEffect(() => {
+    if (mining.level > prevLevel.current) {
+      sfx.levelUp();
+      haptic('success');
+    }
+    prevLevel.current = mining.level;
+  }, [mining.level]);
 
   async function collect() {
     setBusy(true);
     try {
       const r = await collectMining();
+      sfx.claim();
       haptic('success');
       toast.show(`Collected ${usdt(r.collected)} ICE`, 'success');
     } catch (e) {
+      sfx.error();
       toast.show(e instanceof ApiError ? e.message : 'Nothing to collect', 'error');
     } finally {
       setBusy(false);
@@ -104,8 +118,21 @@ export function MineLevels({ mining, onDeposit }: Props) {
       `}</style>
 
       {/* Header */}
-      <div className="text-center text-[11px] font-extrabold uppercase tracking-[0.4em] text-ice-200/80">
-        ❄ Glacier Mine
+      <div className="relative flex items-center justify-center">
+        <div className="text-[11px] font-extrabold uppercase tracking-[0.4em] text-ice-200/80">
+          ❄ Glacier Mine
+        </div>
+        <button
+          onClick={() => {
+            const off = toggleMuted();
+            setSoundOff(off);
+            if (!off) sfx.click();
+          }}
+          aria-label={soundOff ? 'Unmute sounds' : 'Mute sounds'}
+          className="absolute right-0 grid h-7 w-7 place-items-center rounded-full bg-white/5 text-sm text-white/60"
+        >
+          {soundOff ? '🔇' : '🔊'}
+        </button>
       </div>
 
       {/* Level + connect + progress */}
@@ -174,7 +201,7 @@ export function MineLevels({ mining, onDeposit }: Props) {
         {/* rig image — tap to claim */}
         <div className="relative mx-auto w-full max-w-[320px]">
           <button
-            onClick={collect}
+            onClick={() => { sfx.tap(); collect(); }}
             disabled={busy}
             className="relative block w-full select-none transition active:scale-95"
             style={{ animation: 'mineBob 4s ease-in-out infinite' }}
@@ -201,10 +228,10 @@ export function MineLevels({ mining, onDeposit }: Props) {
 
       {/* Buy / Leaderboard */}
       <div className="grid grid-cols-2 gap-3">
-        <button onClick={() => setStoreOpen(true)} className={`${card} flex items-center justify-center gap-2 py-3.5 text-sm font-bold`}>
+        <button onClick={() => { sfx.click(); setStoreOpen(true); }} className={`${card} flex items-center justify-center gap-2 py-3.5 text-sm font-bold`}>
           <span className="text-lg text-amber-300">⚡</span> Buy Hashrate
         </button>
-        <button onClick={() => setBoardOpen(true)} className={`${card} flex items-center justify-center gap-2 py-3.5 text-sm font-bold`}>
+        <button onClick={() => { sfx.click(); setBoardOpen(true); }} className={`${card} flex items-center justify-center gap-2 py-3.5 text-sm font-bold`}>
           <span className="text-lg">🏆</span> Leaderboard
         </button>
       </div>
@@ -263,6 +290,101 @@ export function MineLevels({ mining, onDeposit }: Props) {
   );
 }
 
+/**
+ * "Level Journey" stats card — an ExpertOption-style trading panel showing the
+ * user's level over time as a glowing area chart, with current/peak levels and
+ * today's P&L (change in total assets). Refetches each time the store opens.
+ */
+function JourneyCard({ open, level, speedUnit }: { open: boolean; level: number; speedUnit: string }) {
+  const [j, setJ] = useState<MinerJourney | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    setJ(null);
+    api.miningJourney().then(setJ).catch(() => setJ(null));
+  }, [open, level]);
+
+  // Build the area path from the recorded points (fallback: a flat line at the
+  // current level so the card still renders on a brand-new miner).
+  const W = 300;
+  const H = 96;
+  const pts = j?.points?.length ? j.points : [{ level, assetsUsd: 0, at: '' }];
+  const series = pts.length === 1 ? [pts[0], pts[0]] : pts;
+  const vals = series.map((p) => p.level);
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const span = max - min || 1;
+  const up = (j?.todayChangeUsd ?? 0) >= 0;
+  const stroke = up ? '#34d399' : '#f87171';
+  const coords = series.map((p, i) => {
+    const x = (i / (series.length - 1)) * W;
+    // Leave 12px headroom top/bottom so the line never clips.
+    const y = 12 + (1 - (p.level - min) / span) * (H - 24);
+    return [x, y] as const;
+  });
+  const line = coords.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const area = `${line} L${W},${H} L0,${H} Z`;
+  const [ex, ey] = coords[coords.length - 1];
+
+  const changeUsd = j?.todayChangeUsd ?? 0;
+  const changePct = j?.todayChangePct ?? 0;
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-ice-400/15 bg-gradient-to-b from-white/[0.05] to-transparent">
+      <div className="flex items-start justify-between px-4 pt-3.5">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/40">Level Journey</div>
+          <div className="mt-0.5 flex items-end gap-1.5">
+            <span className="text-3xl font-black leading-none text-ice-100">Lv {j?.current ?? level}</span>
+          </div>
+          <div className="mt-1 text-[11px] text-white/45">
+            Peak <b className="text-ice-200">Lv {j?.peak ?? level}</b>
+          </div>
+        </div>
+        <div className="text-right">
+          <div
+            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold tabular-nums ${
+              up ? 'bg-emerald-400/15 text-emerald-300' : 'bg-red-400/15 text-red-300'
+            }`}
+          >
+            {up ? '▲' : '▼'} {changePct >= 0 ? '+' : ''}{changePct.toFixed(2)}%
+          </div>
+          <div className={`mt-1 text-[11px] font-semibold tabular-nums ${up ? 'text-emerald-300/80' : 'text-red-300/80'}`}>
+            {changeUsd >= 0 ? '+' : '−'}{fmtUsd(Math.abs(changeUsd))} today
+          </div>
+        </div>
+      </div>
+
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="mt-2 block h-24 w-full">
+        <defs>
+          <linearGradient id="jArea" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={stroke} stopOpacity="0.35" />
+            <stop offset="100%" stopColor={stroke} stopOpacity="0" />
+          </linearGradient>
+          <filter id="jGlow" x="-20%" y="-40%" width="140%" height="180%">
+            <feGaussianBlur stdDeviation="2.5" result="b" />
+            <feMerge>
+              <feMergeNode in="b" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        <path d={area} fill="url(#jArea)" />
+        <path d={line} fill="none" stroke={stroke} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" filter="url(#jGlow)" />
+        <circle cx={ex} cy={ey} r="3.5" fill={stroke} filter="url(#jGlow)" />
+        <circle cx={ex} cy={ey} r="3.5" fill={stroke}>
+          <animate attributeName="r" values="3.5;7;3.5" dur="1.8s" repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0.9;0;0.9" dur="1.8s" repeatCount="indefinite" />
+        </circle>
+      </svg>
+
+      <div className="flex items-center justify-between border-t border-white/5 px-4 py-2 text-[10px] text-white/40">
+        <span>{j ? `${series.length} snapshots` : 'Loading…'}</span>
+        <span>{speedUnit} climbs as your holding grows</span>
+      </div>
+    </div>
+  );
+}
+
 /** The Miner Store — 1..count level cards, jump-to-level, and buy-level flow. */
 function StoreSheet({
   open,
@@ -316,6 +438,8 @@ function StoreSheet({
   return (
     <Sheet open={open} onClose={onClose} title="Miner Store">
       <div className="space-y-4">
+        <JourneyCard open={open} level={mining.level} speedUnit={mining.speedUnit} />
+
         {!mining.wallet.verified && (
           <button onClick={onConnect} className="w-full rounded-2xl border border-ice-400/30 bg-ice-400/10 px-4 py-3 text-left text-sm">
             <b>Connect your BSC wallet</b>

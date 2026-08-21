@@ -53,17 +53,24 @@ export async function syncMinerLevel(
     const poolTokens = money(user.earnedBalance + pending);
     const assetsUsd = money(holding.usd + poolTokens * price);
     const level = L().levelForHolding(assetsUsd);
+    const peakLevel = Math.max(miner.peakLevel, level);
+    const changed = level !== miner.level;
     const updated = await tx.miner.update({
       where: { userId },
       data: {
         pending,
         level,
+        peakLevel,
         holdingUsd: holding.usd, // Holding Wallet = on-chain value only
         holdingTokens: holding.tokens,
         holdingCheckedAt: now,
         lastAccruedAt: now,
       },
     });
+    // Record a Level-Journey point when the level moves (or on the first sync).
+    if (changed || miner.peakLevel === 0) {
+      await tx.minerLevelPoint.create({ data: { userId, level, assetsUsd } });
+    }
     return { miner: updated, holdingUsd: holding.usd, holdingTokens: holding.tokens, level };
   });
 }
@@ -122,6 +129,54 @@ export async function migrateHashrateSpenders() {
     refundedIce = money(refundedIce + refundIce);
   }
   return { migrated, skipped, totalSpentUsd, refundedIce, price: px };
+}
+
+/**
+ * A user's "Level Journey" for the Miner Store stats card: their current level,
+ * the peak they've ever hit, a time series of recorded points (level + assets),
+ * and how their assets moved over the last 24h (the trading-style P&L number).
+ */
+export async function minerJourney(userId: number, price: number) {
+  const [user, miner, points] = await Promise.all([
+    prisma.user.findUniqueOrThrow({ where: { id: userId } }),
+    getOrCreateMiner(userId),
+    prisma.minerLevelPoint.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'asc' },
+      take: 200,
+    }),
+  ]);
+  const px = price > 0 ? price : L().price;
+  const refs = await miningReferralCount(prisma, userId);
+  const pending = livePending(miner, refs);
+  const assetsUsd = money(miner.holdingUsd + (user.earnedBalance + pending) * px);
+
+  // Always end the series on the live "now" point so the chart tracks live.
+  const series = points.map((p) => ({
+    at: p.createdAt.toISOString(),
+    level: p.level,
+    assetsUsd: money(p.assetsUsd),
+  }));
+  series.push({ at: new Date().toISOString(), level: miner.level, assetsUsd });
+
+  // Today's P&L = change in assets vs. the earliest point in the last 24h.
+  const dayAgo = Date.now() - 86_400_000;
+  const base =
+    [...points].reverse().find((p) => p.createdAt.getTime() <= dayAgo)?.assetsUsd ??
+    points[0]?.assetsUsd ??
+    assetsUsd;
+  const todayChangeUsd = money(assetsUsd - base);
+  const todayChangePct = base > 0 ? Math.round((todayChangeUsd / base) * 10000) / 100 : 0;
+
+  return {
+    current: miner.level,
+    peak: Math.max(miner.peakLevel, miner.level),
+    assetsUsd,
+    price: px,
+    todayChangeUsd,
+    todayChangePct,
+    points: series,
+  };
 }
 
 /** What it takes to reach a target level, qualified on the user's ASSETS
