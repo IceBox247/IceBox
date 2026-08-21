@@ -3,11 +3,11 @@ import { useStore } from '../store';
 import { useToast } from '../components/Toast';
 import { api, ApiError } from '../api';
 import { haptic } from '../telegram';
-import { usdt } from '../lib/format';
+import { usdt, ice } from '../lib/format';
 import { Sheet } from '../components/Sheet';
-import type { LevelMiningState, BuyLevelInfo } from '../types';
+import type { LevelMiningState, BuyLevelInfo, MinerRankRow } from '../types';
 
-/** Compact USD: $0.13 · $103K · $3.25M · $5M. */
+/** Compact USD: $0.13 · $103K · $3.25M. */
 function fmtUsd(n: number): string {
   if (n >= 1e9) return `$${(n / 1e9).toFixed(2).replace(/\.00$/, '')}B`;
   if (n >= 1e6) return `$${(n / 1e6).toFixed(2).replace(/\.00$/, '')}M`;
@@ -18,7 +18,6 @@ function fmtUsd(n: number): string {
 function fmtSpeed(n: number, unit: string): string {
   return `${n.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${unit}`;
 }
-/** Live token price, keeping precision for tiny values ($0.000428). */
 function fmtPrice(n: number): string {
   if (!(n > 0)) return '—';
   return n >= 0.01 ? `$${n.toFixed(4)}` : `$${n.toPrecision(3)}`;
@@ -29,66 +28,201 @@ interface Props {
   onDeposit: () => void;
 }
 
+/** Avatar that falls back to the name initial. */
+function Avatar({ name, photoUrl }: { name: string; photoUrl: string | null }) {
+  const [broken, setBroken] = useState(false);
+  if (photoUrl && !broken)
+    return <img src={photoUrl} alt="" onError={() => setBroken(true)} className="h-8 w-8 rounded-full object-cover" />;
+  return (
+    <span className="grid h-8 w-8 place-items-center rounded-full bg-ice-400/20 text-xs font-bold text-ice-200">
+      {name.slice(0, 1).toUpperCase()}
+    </span>
+  );
+}
+
 export function MineLevels({ mining, onDeposit }: Props) {
   const { refreshMining, collectMining } = useStore();
   const toast = useToast();
-  const c = mining.curve;
 
-  // Client mirror of the server curve so we can render every level card.
-  const holdRatio = useMemo(() => Math.pow(c.maxUsd / c.minUsd, 1 / (c.count - 1)), [c]);
-  const speedRatio = useMemo(() => Math.pow(c.maxSpeed / c.minSpeed, 1 / (c.count - 1)), [c]);
-  const requiredUsd = (lvl: number) => c.minUsd * Math.pow(holdRatio, lvl - 1);
-  const speedFor = (lvl: number) => c.minSpeed * Math.pow(speedRatio, lvl - 1);
-
-  // Live-ticking pool so the counter climbs between refreshes.
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(id);
   }, []);
   const livePool = mining.pool + (mining.perHour / 3600) * tick;
+  const assets = mining.holding.tokens + livePool;
 
-  // Windowed level list (1..count). Start near the user's current level.
-  const start = Math.max(1, mining.level - 2);
-  const [shown, setShown] = useState(30);
-  useEffect(() => setShown(30), [mining.level]);
-  const [jump, setJump] = useState('');
-
-  const [busy, setBusy] = useState<'collect' | 'connect' | 'buy' | null>(null);
-  const [buy, setBuy] = useState<BuyLevelInfo | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [storeOpen, setStoreOpen] = useState(false);
+  const [boardOpen, setBoardOpen] = useState(false);
+  const [connectOpen, setConnectOpen] = useState(false);
 
   async function collect() {
-    setBusy('collect');
+    setBusy(true);
     try {
       const r = await collectMining();
       haptic('success');
-      toast.show(`Collected ${usdt(r.collected)} ICE to your pool`, 'success');
+      toast.show(`Collected ${usdt(r.collected)} ICE`, 'success');
     } catch (e) {
       toast.show(e instanceof ApiError ? e.message : 'Nothing to collect', 'error');
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   }
 
-  async function openBuy(level: number) {
-    haptic('light');
-    try {
-      const info = await api.buyLevel(level);
-      setBuy(info);
-    } catch (e) {
-      toast.show(e instanceof ApiError ? e.message : 'Could not open level', 'error');
-    }
-  }
+  return (
+    <div className="animate-fade-in space-y-4 px-5 pb-28 pt-3">
+      {/* Top row: level + status + wallet */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-white/10 px-3 py-1 text-sm font-extrabold">Lvl {mining.level}</span>
+          <span className="flex items-center gap-1 text-xs font-bold text-emerald-400">
+            ● {mining.wallet.verified ? 'READY' : 'CONNECT'}
+          </span>
+        </div>
+        {mining.wallet.verified ? (
+          <button
+            onClick={() => setConnectOpen(true)}
+            className="rounded-full bg-white/5 px-3 py-1.5 text-xs font-bold text-white/70"
+          >
+            {mining.wallet.address?.slice(0, 5)}…{mining.wallet.address?.slice(-3)}
+          </button>
+        ) : (
+          <button onClick={() => setConnectOpen(true)} className="btn-primary px-4 py-2 text-sm">
+            Connect Wallet
+          </button>
+        )}
+      </div>
+      {mining.nextLevel && mining.nextLevel.missingUsd > 0 && (
+        <div className="text-xs font-semibold text-emerald-300">
+          {fmtUsd(mining.nextLevel.missingUsd)} left to Level Up
+        </div>
+      )}
 
-  const jumpTo = () => {
-    const n = Math.floor(Number(jump));
-    if (Number.isFinite(n) && n >= 1 && n <= c.count) {
-      // Grow the window so the target is included.
-      setShown(Math.max(shown, n - start + 3));
-      setTimeout(() => document.getElementById(`lvl-${n}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
-    }
-    setJump('');
-  };
+      {/* Assets */}
+      <div className="text-center">
+        <div className="text-xs font-bold uppercase tracking-[0.3em] text-white/35">Assets</div>
+        <div className="mt-1 text-4xl font-extrabold tracking-tight">
+          {ice(assets)} <span className="text-xl text-ice-300">ICE</span>
+        </div>
+        <div className="mt-3 flex flex-col items-center gap-2">
+          <div className="rounded-full bg-white/5 px-4 py-1.5 text-xs">
+            <span className="text-white/45">HOLDING WALLET:</span> <b>{ice(mining.holding.tokens)}</b>{' '}
+            <span className="text-ice-300">ICE</span>
+          </div>
+          <div className="rounded-full bg-white/5 px-4 py-1.5 text-xs">
+            <span className="text-white/45">POOL WALLET:</span> <b>{ice(livePool)}</b>{' '}
+            <span className="text-ice-300">ICE</span>
+          </div>
+        </div>
+        <div className="mx-auto mt-3 w-fit rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-8 py-2.5 text-3xl font-extrabold tabular-nums text-emerald-400">
+          +{livePool.toFixed(4)}
+        </div>
+      </div>
+
+      {/* Coin */}
+      <div className="grid place-items-center py-3">
+        <div className="grid h-40 w-40 place-items-center rounded-full bg-gradient-to-br from-ice-300 via-ice-400 to-ice-600 text-4xl font-black tracking-tight text-night-900 shadow-[0_0_50px_-8px_rgba(51,194,255,0.6)]">
+          ICE
+        </div>
+      </div>
+
+      {/* CLAIM */}
+      <button
+        onClick={collect}
+        disabled={busy || livePool <= 0}
+        className="btn-primary w-full py-4 text-lg font-extrabold disabled:opacity-40"
+      >
+        {busy ? 'Claiming…' : 'CLAIM'}
+      </button>
+
+      {/* Buy Hashrate / Leaderboard */}
+      <div className="grid grid-cols-2 gap-3">
+        <button onClick={() => setStoreOpen(true)} className="btn-ghost flex-col gap-1 py-3">
+          <span className="text-xl">⚡</span>
+          <span className="text-sm font-bold">Buy Hashrate</span>
+        </button>
+        <button onClick={() => setBoardOpen(true)} className="btn-ghost flex-col gap-1 py-3">
+          <span className="text-xl">🏆</span>
+          <span className="text-sm font-bold">Leaderboard</span>
+        </button>
+      </div>
+
+      <p className="text-center text-[11px] text-white/40">
+        ICE price · live {fmtPrice(mining.price)} · {fmtSpeed(mining.speed, mining.speedUnit)}
+      </p>
+
+      {/* Sheets */}
+      <StoreSheet
+        open={storeOpen}
+        onClose={() => setStoreOpen(false)}
+        mining={mining}
+        onDeposit={onDeposit}
+        onConnect={() => {
+          setStoreOpen(false);
+          setConnectOpen(true);
+        }}
+      />
+      <LeaderboardSheet open={boardOpen} onClose={() => setBoardOpen(false)} unit={mining.speedUnit} />
+      <Sheet open={connectOpen} onClose={() => setConnectOpen(false)} title="Connect Wallet">
+        {mining.wallet.verified ? (
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-white/5 p-4 text-center text-sm">
+              Connected <b className="text-ice-200">{mining.wallet.address?.slice(0, 8)}…{mining.wallet.address?.slice(-6)}</b>
+              <div className="mt-1 text-[11px] text-white/40">Holding {ice(mining.holding.tokens)} ICE · Level {mining.level}</div>
+            </div>
+            <button
+              onClick={async () => {
+                setBusy(true);
+                await api.walletDisconnect().catch(() => {});
+                await refreshMining();
+                setBusy(false);
+                setConnectOpen(false);
+              }}
+              className="btn-ghost w-full py-3 text-red-300"
+            >
+              Disconnect wallet
+            </button>
+          </div>
+        ) : (
+          <ConnectWallet
+            onConnected={async () => {
+              await refreshMining();
+              setConnectOpen(false);
+            }}
+          />
+        )}
+      </Sheet>
+    </div>
+  );
+}
+
+/** The Miner Store — 1..count level cards, jump-to-level, and buy-level flow. */
+function StoreSheet({
+  open,
+  onClose,
+  mining,
+  onDeposit,
+  onConnect,
+}: {
+  open: boolean;
+  onClose: () => void;
+  mining: LevelMiningState;
+  onDeposit: () => void;
+  onConnect: () => void;
+}) {
+  const toast = useToast();
+  const c = mining.curve;
+  const holdRatio = useMemo(() => Math.pow(c.maxUsd / c.minUsd, 1 / (c.count - 1)), [c]);
+  const speedRatio = useMemo(() => Math.pow(c.maxSpeed / c.minSpeed, 1 / (c.count - 1)), [c]);
+  const requiredUsd = (lvl: number) => c.minUsd * Math.pow(holdRatio, lvl - 1);
+  const speedFor = (lvl: number) => c.minSpeed * Math.pow(speedRatio, lvl - 1);
+
+  const start = Math.max(1, mining.level - 2);
+  const [shown, setShown] = useState(30);
+  useEffect(() => setShown(30), [mining.level, open]);
+  const [jump, setJump] = useState('');
+  const [buy, setBuy] = useState<BuyLevelInfo | null>(null);
 
   const levels = useMemo(() => {
     const out: number[] = [];
@@ -96,163 +230,112 @@ export function MineLevels({ mining, onDeposit }: Props) {
     return out;
   }, [shown, start, c.count]);
 
+  async function openBuy(level: number) {
+    haptic('light');
+    try {
+      setBuy(await api.buyLevel(level));
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.message : 'Could not open level', 'error');
+    }
+  }
+  const jumpTo = () => {
+    const n = Math.floor(Number(jump));
+    if (Number.isFinite(n) && n >= 1 && n <= c.count) {
+      setShown((s) => Math.max(s, n - start + 3));
+      setTimeout(() => document.getElementById(`lvl-${n}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+    }
+    setJump('');
+  };
+
   return (
-    <div className="space-y-4 pb-24">
-      {/* Wallets */}
-      <div className="card p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-xs text-white/45">Holding Wallet · on-chain</div>
-            <div className="mt-0.5 text-2xl font-extrabold">
-              {usdt(mining.holding.tokens)} <span className="text-sm text-ice-300">ICE</span>
-            </div>
-            <div className="text-[11px] text-white/40">≈ {fmtUsd(mining.holding.usd)}</div>
-          </div>
-          <div className="text-right">
-            <div className="text-xs text-white/45">Level</div>
-            <div className="text-3xl font-extrabold text-ice-300">{mining.level}</div>
-            <div className="text-[11px] text-white/40">{fmtSpeed(mining.speed, mining.speedUnit)}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Live on-chain price */}
-      <div className="flex items-center justify-between rounded-2xl bg-white/5 px-4 py-2.5 text-xs">
-        <span className="text-white/50">ICE price · live on-chain</span>
-        <span className="font-bold text-emerald-300">{fmtPrice(mining.price)}</span>
-      </div>
-
-      {/* Wallet connect / status */}
-      {mining.wallet.verified ? (
-        <div className="flex items-center justify-between rounded-2xl bg-white/5 px-4 py-3 text-xs">
-          <span className="text-white/60">
-            Wallet <b className="text-white/80">{mining.wallet.address?.slice(0, 6)}…{mining.wallet.address?.slice(-4)}</b>
-          </span>
-          <button
-            onClick={async () => {
-              await api.walletDisconnect().catch(() => {});
-              await refreshMining();
-            }}
-            className="text-red-300"
-          >
-            Disconnect
+    <Sheet open={open} onClose={onClose} title="Miner Store">
+      <div className="space-y-4">
+        {!mining.wallet.verified && (
+          <button onClick={onConnect} className="w-full rounded-2xl border border-ice-400/30 bg-ice-400/10 px-4 py-3 text-left text-sm">
+            <b>Connect your BSC wallet</b>
+            <div className="text-[11px] text-white/50">Your on-chain ICE holding sets your level.</div>
           </button>
-        </div>
-      ) : (
-        <ConnectWallet onConnected={refreshMining} busy={busy === 'connect'} setBusy={(b) => setBusy(b ? 'connect' : null)} />
-      )}
+        )}
 
-      {/* Pool wallet + collect */}
-      <div className="card p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-xs text-white/45">Pool Wallet · earned</div>
-            <div className="mt-0.5 text-2xl font-extrabold tabular-nums text-usdt">
-              {livePool.toFixed(4)}
-            </div>
-            <div className="text-[11px] text-white/40">
-              {usdt(mining.perDay)} ICE / day · {mining.referral.miners} ref boost (+{usdt(mining.referral.bonus)}/day)
-            </div>
-          </div>
+        {mining.nextLevel && mining.nextLevel.missingUsd > 0 && (
           <button
-            disabled={busy === 'collect' || livePool <= 0}
-            onClick={collect}
-            className="btn-primary px-5 py-2.5 text-sm disabled:opacity-40"
+            onClick={() => openBuy(mining.nextLevel!.level)}
+            className="flex w-full items-center justify-between rounded-2xl border border-ice-400/30 bg-ice-400/10 px-4 py-3 text-left"
           >
-            {busy === 'collect' ? '…' : 'Claim'}
-          </button>
-        </div>
-      </div>
-
-      {/* Next level nudge */}
-      {mining.nextLevel && (
-        <button
-          onClick={() => openBuy(mining.nextLevel!.level)}
-          className="flex w-full items-center justify-between rounded-2xl border border-ice-400/30 bg-ice-400/10 px-4 py-3 text-left"
-        >
-          <div>
-            <div className="text-sm font-bold">Reach Level {mining.nextLevel.level}</div>
-            <div className="text-[11px] text-white/50">
-              Need {usdt(mining.nextLevel.missingTokens)} more ICE ({fmtUsd(mining.nextLevel.missingUsd)})
+            <div>
+              <div className="text-sm font-bold">Reach Level {mining.nextLevel.level}</div>
+              <div className="text-[11px] text-white/50">
+                Need {ice(mining.nextLevel.missingTokens)} more ICE ({fmtUsd(mining.nextLevel.missingUsd)})
+              </div>
             </div>
+            <span className="rounded-full bg-ice-400 px-3 py-1 text-xs font-bold text-night-900">Buy</span>
+          </button>
+        )}
+
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] text-white/40">Auto-unlocks from your on-chain ICE holding.</p>
+          <div className="flex items-center gap-1">
+            <input
+              value={jump}
+              onChange={(e) => setJump(e.target.value.replace(/[^0-9]/g, ''))}
+              onKeyDown={(e) => e.key === 'Enter' && jumpTo()}
+              placeholder="Lvl #"
+              inputMode="numeric"
+              className="w-16 rounded-lg bg-white/5 px-2 py-1 text-xs outline-none"
+            />
+            <button onClick={jumpTo} className="rounded-lg bg-white/10 px-2 py-1 text-xs">Go</button>
           </div>
-          <span className="rounded-full bg-ice-400 px-3 py-1 text-xs font-bold text-night-900">Buy</span>
-        </button>
-      )}
-
-      {/* Miner store */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-extrabold">Miner Store</h3>
-        <div className="flex items-center gap-1">
-          <input
-            value={jump}
-            onChange={(e) => setJump(e.target.value.replace(/[^0-9]/g, ''))}
-            onKeyDown={(e) => e.key === 'Enter' && jumpTo()}
-            placeholder="Level #"
-            inputMode="numeric"
-            className="w-20 rounded-lg bg-white/5 px-2 py-1 text-xs outline-none"
-          />
-          <button onClick={jumpTo} className="rounded-lg bg-white/10 px-2 py-1 text-xs">Go</button>
         </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          {levels.map((lvl) => {
+            const active = lvl === mining.level;
+            const unlocked = lvl <= mining.level;
+            return (
+              <button
+                key={lvl}
+                id={`lvl-${lvl}`}
+                onClick={() => !unlocked && openBuy(lvl)}
+                className={`rounded-2xl border p-3 text-left ${
+                  active
+                    ? 'border-ice-400 bg-ice-400/10'
+                    : unlocked
+                      ? 'border-emerald-400/30 bg-emerald-400/5'
+                      : 'border-white/10 bg-white/[0.03]'
+                }`}
+              >
+                <div className="text-[11px] text-white/50">Lvl {lvl}</div>
+                <div className={`mt-1 text-xl font-extrabold ${unlocked ? 'text-emerald-300' : 'text-white/80'}`}>
+                  {fmtUsd(requiredUsd(lvl))}
+                </div>
+                <div className="mt-0.5 text-[10px] text-white/40">Speed {fmtSpeed(speedFor(lvl), mining.speedUnit)}</div>
+                <div className="mt-2 text-center text-xs font-bold">
+                  {active ? (
+                    <span className="text-ice-300">● ACTIVE</span>
+                  ) : unlocked ? (
+                    <span className="text-emerald-300">Unlocked</span>
+                  ) : (
+                    <span className="text-white/40">🔒 Locked</span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        {start + shown <= c.count && (
+          <button onClick={() => setShown((s) => s + 30)} className="btn-ghost w-full py-3">
+            Show more levels
+          </button>
+        )}
       </div>
-      <p className="-mt-2 text-[11px] text-white/40">
-        Auto-unlocks from your on-chain ICE holding. Tap a locked level to buy in.
-      </p>
 
-      <div className="grid grid-cols-2 gap-3">
-        {levels.map((lvl) => {
-          const active = lvl === mining.level;
-          const unlocked = lvl <= mining.level;
-          return (
-            <button
-              key={lvl}
-              id={`lvl-${lvl}`}
-              onClick={() => !unlocked && openBuy(lvl)}
-              className={`rounded-2xl border p-3 text-left ${
-                active
-                  ? 'border-ice-400 bg-ice-400/10'
-                  : unlocked
-                    ? 'border-emerald-400/30 bg-emerald-400/5'
-                    : 'border-white/10 bg-white/[0.03]'
-              }`}
-            >
-              <div className="text-[11px] text-white/50">Lvl {lvl}</div>
-              <div className={`mt-1 text-xl font-extrabold ${unlocked ? 'text-emerald-300' : 'text-white/80'}`}>
-                {fmtUsd(requiredUsd(lvl))}
-              </div>
-              <div className="mt-0.5 text-[10px] text-white/40">Speed {fmtSpeed(speedFor(lvl), mining.speedUnit)}</div>
-              <div className="mt-2 text-center text-xs font-bold">
-                {active ? (
-                  <span className="text-ice-300">● ACTIVE</span>
-                ) : unlocked ? (
-                  <span className="text-emerald-300">Unlocked</span>
-                ) : (
-                  <span className="text-white/40">🔒 Locked</span>
-                )}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
-      {start + shown <= c.count && (
-        <button onClick={() => setShown((s) => s + 30)} className="btn-ghost w-full py-3">
-          Show more levels
-        </button>
-      )}
-
-      {/* Buy-level sheet */}
+      {/* Buy-level confirm */}
       <Sheet open={!!buy} onClose={() => setBuy(null)} title={buy ? `Level ${buy.level}` : ''}>
         {buy && (
           <div className="space-y-4">
-            <Row label="Required holding" value={`${usdt(buy.requiredTokens)} ICE`} sub={fmtUsd(buy.requiredUsd)} />
-            <Row label="Your holding" value={`${usdt(mining.holding.tokens)} ICE`} sub={fmtUsd(mining.holding.usd)} />
-            <Row
-              label="Missing to unlock"
-              value={`${usdt(buy.missingTokens)} ICE`}
-              sub={fmtUsd(buy.missingUsd)}
-              danger={buy.missingUsd > 0}
-            />
+            <Row label="Required holding" value={`${ice(buy.requiredTokens)} ICE`} sub={fmtUsd(buy.requiredUsd)} />
+            <Row label="Your holding" value={`${ice(mining.holding.tokens)} ICE`} sub={fmtUsd(mining.holding.usd)} />
+            <Row label="Missing to unlock" value={`${ice(buy.missingTokens)} ICE`} sub={fmtUsd(buy.missingUsd)} danger={buy.missingUsd > 0} />
             {buy.missingUsd <= 0 ? (
               <div className="rounded-xl bg-emerald-400/10 p-3 text-center text-sm text-emerald-300">
                 You already hold enough — this level is unlocked.
@@ -260,18 +343,13 @@ export function MineLevels({ mining, onDeposit }: Props) {
             ) : (
               <>
                 <p className="text-center text-[11px] text-white/40">
-                  Buy {usdt(buy.missingTokens)} more ICE into your connected wallet to unlock. Sending tokens out
-                  later lowers your level.
+                  Buy {ice(buy.missingTokens)} more ICE into your connected wallet to unlock. Sending tokens out later
+                  lowers your level.
                 </p>
-                <a
-                  href={buy.swapUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn-primary block w-full py-3 text-center"
-                >
+                <a href={buy.swapUrl} target="_blank" rel="noopener noreferrer" className="btn-primary block w-full py-3 text-center">
                   Buy ICE (swap)
                 </a>
-                <button onClick={() => { setBuy(null); onDeposit(); }} className="btn-ghost w-full py-3">
+                <button onClick={() => { setBuy(null); onClose(); onDeposit(); }} className="btn-ghost w-full py-3">
                   Deposit on IceBox instead
                 </button>
               </>
@@ -279,7 +357,51 @@ export function MineLevels({ mining, onDeposit }: Props) {
           </div>
         )}
       </Sheet>
-    </div>
+    </Sheet>
+  );
+}
+
+/** Top miners by level/holding. */
+function LeaderboardSheet({ open, onClose, unit }: { open: boolean; onClose: () => void; unit: string }) {
+  const [board, setBoard] = useState<MinerRankRow[] | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    setBoard(null);
+    api.miningLeaderboard().then((r) => setBoard(r.leaderboard)).catch(() => setBoard([]));
+  }, [open]);
+  return (
+    <Sheet open={open} onClose={onClose} title="Top Miners">
+      {board === null ? (
+        <div className="py-10 text-center text-white/40">Loading…</div>
+      ) : board.length === 0 ? (
+        <div className="py-10 text-center text-white/40">No miners yet — be the first!</div>
+      ) : (
+        <div className="divide-y divide-white/5">
+          {board.slice(0, 100).map((r) => (
+            <div key={r.userId} className={`flex items-center justify-between py-3 ${r.isMe ? 'rounded-xl bg-ice-400/10 px-2' : ''}`}>
+              <div className="flex items-center gap-3">
+                <span className="w-6 text-center text-sm font-extrabold text-white/50">
+                  {r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : r.rank}
+                </span>
+                <Avatar name={r.name} photoUrl={r.photoUrl} />
+                <div>
+                  <div className="text-sm font-bold">
+                    {r.name}
+                    {r.isMe && <span className="ml-1 text-[10px] text-ice-300">(You)</span>}
+                  </div>
+                  <div className="text-[11px] text-white/45">{usdt(r.totalClaimed)} ICE claimed</div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-sm font-extrabold text-ice-300">Lvl {r.level}</div>
+                <div className="text-[10px] text-white/40">{fmtUsd(r.holdingUsd)}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="mt-3 text-center text-[11px] text-white/40">Ranked by level ({unit} from holding).</p>
+    </Sheet>
   );
 }
 
@@ -296,19 +418,12 @@ function Row({ label, value, sub, danger }: { label: string; value: string; sub?
 }
 
 /** Paste address → sign the issued message in your wallet → paste signature. */
-function ConnectWallet({
-  onConnected,
-  busy,
-  setBusy,
-}: {
-  onConnected: () => Promise<void>;
-  busy: boolean;
-  setBusy: (b: boolean) => void;
-}) {
+function ConnectWallet({ onConnected }: { onConnected: () => Promise<void> }) {
   const toast = useToast();
   const [address, setAddress] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [signature, setSignature] = useState('');
+  const [busy, setBusy] = useState(false);
 
   async function getMessage() {
     setBusy(true);
@@ -337,8 +452,7 @@ function ConnectWallet({
   }
 
   return (
-    <div className="card space-y-3 p-4">
-      <div className="text-sm font-bold">Connect your BSC wallet</div>
+    <div className="space-y-3">
       <p className="text-[11px] text-white/45">
         Your on-chain ICE holding sets your mining level. Connect the wallet you hold ICE in.
       </p>
