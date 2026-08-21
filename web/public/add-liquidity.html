@@ -7,6 +7,7 @@
 <div id="tokinfo" class="muted" style="font-size:12px;margin-top:6px"></div>
 <label>Amount of your token to add</label><input id="amtToken" inputmode="decimal" placeholder="e.g. 1000000"/>
 <label>Amount of BNB to pair</label><input id="amtBnb" inputmode="decimal" placeholder="e.g. 0.5"/>
+<div id="pairhint" class="muted" style="font-size:12px;margin-top:6px"></div>
 <label>Slippage tolerance (%)</label><input id="slip" value="5" inputmode="decimal"/>
 <button id="approve" class="ghost" disabled>1 · Approve token</button>
 <button id="add" class="primary" disabled>2 · Add Liquidity</button>
@@ -23,8 +24,41 @@ const $=(id)=>document.getElementById(id);let provider,signer,me,decimals=18;con
 function set(m,c){statusEl.className='status '+(c||'muted');statusEl.innerHTML=m;}
 async function connect(){const eth=window.ethereum;if(!eth){set('No wallet found. Open this page inside <b>MetaMask → Browser</b>.','err');return;}try{set('Connecting…');await eth.request({method:'eth_requestAccounts'});await ensureBsc(eth);provider=new ethers.BrowserProvider(eth);signer=await provider.getSigner();me=await signer.getAddress();const b=await provider.getBalance(me);$('net').innerHTML='Wallet: <code>'+me.slice(0,6)+'…'+me.slice(-4)+'</code> · '+Number(ethers.formatEther(b)).toFixed(4)+' BNB';$('approve').disabled=false;$('add').disabled=false;set('Connected. Enter your token + amounts.','ok');eth.on&&eth.on('chainChanged',()=>location.reload());eth.on&&eth.on('accountsChanged',()=>location.reload());await loadToken();}catch(e){set('Connect failed: '+(e.message||e),'err');}}
 async function loadToken(){try{const t=$('token').value.trim();if(!ethers.isAddress(t)){$('tokinfo').textContent='';return;}const c=new ethers.Contract(t,ERC20_ABI,provider);decimals=Number(await c.decimals());const sym=await c.symbol();const bal=await c.balanceOf(me);$('tokinfo').innerHTML='Token: <b>'+sym+'</b> · your balance '+ethers.formatUnits(bal,decimals);}catch(e){$('tokinfo').textContent='Could not read token (check address).';}}
-$('token').addEventListener('change',()=>{if(provider)loadToken();});
+$('token').addEventListener('change',async()=>{if(provider){await loadToken();refreshPair();}});
+$('amtToken').addEventListener('input',()=>syncFrom('token'));
+$('amtBnb').addEventListener('input',()=>syncFrom('bnb'));
 function mins(amount,slipPct){const bps=BigInt(Math.round((100-Number(slipPct))*100));return amount*bps/10000n;}
+/* Auto-pairing: read the existing pool's reserves and keep the two amounts at
+   the pool ratio, so adding to an existing pool never reverts with
+   INSUFFICIENT_A_AMOUNT. If no pool exists yet, the entered amounts set price. */
+const FACTORY='0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73';
+const WBNB='0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c';
+const PAIR_ABI=['function getReserves() view returns (uint112,uint112,uint32)','function token0() view returns (address)'];
+let pairInfo=null; // {tokRes,bnbRes} human units, or null when no pool
+async function refreshPair(){
+  pairInfo=null;const hint=$('pairhint');
+  try{
+    const t=$('token').value.trim();
+    if(!provider||!ethers.isAddress(t)){if(hint)hint.textContent='';return;}
+    const f=new ethers.Contract(FACTORY,['function getPair(address,address) view returns (address)'],provider);
+    const pair=await f.getPair(t,WBNB);
+    if(!pair||pair===ethers.ZeroAddress){if(hint)hint.innerHTML='🆕 <b>No pool yet</b> — the amounts you enter set the starting price.';return;}
+    const pc=new ethers.Contract(pair,PAIR_ABI,provider);
+    const rs=await pc.getReserves();const t0=await pc.token0();
+    const tokIs0=t0.toLowerCase()===t.toLowerCase();
+    const tokRes=Number(ethers.formatUnits(tokIs0?rs[0]:rs[1],decimals));
+    const bnbRes=Number(ethers.formatEther(tokIs0?rs[1]:rs[0]));
+    if(tokRes<=0||bnbRes<=0){if(hint)hint.innerHTML='🆕 <b>No pool yet</b> — the amounts you enter set the starting price.';return;}
+    pairInfo={tokRes,bnbRes};
+    if(hint)hint.innerHTML='✅ <b>Pool exists</b> · 1 BNB ≈ '+(tokRes/bnbRes).toLocaleString(undefined,{maximumFractionDigits:4})+' token. Enter one side — the other auto-fills to match the pool.';
+    syncFrom('token');
+  }catch(e){if(hint)hint.textContent='';}
+}
+function syncFrom(which){
+  if(!pairInfo)return;
+  if(which==='token'){const a=Number(($('amtToken').value||'').replace(/,/g,''));if(a>0)$('amtBnb').value=(a*pairInfo.bnbRes/pairInfo.tokRes).toFixed(8).replace(/\.?0+$/,'');}
+  else{const b=Number(($('amtBnb').value||'').replace(/,/g,''));if(b>0)$('amtToken').value=(b*pairInfo.tokRes/pairInfo.bnbRes).toFixed(6).replace(/\.?0+$/,'');}
+}
 async function approve(){try{const t=$('token').value.trim();if(!ethers.isAddress(t)){set('Enter a valid token address.','err');return;}const amt=ethers.parseUnits(($('amtToken').value||'0').replace(/,/g,''),decimals);if(amt<=0n){set('Enter a token amount.','err');return;}$('approve').disabled=true;set('Approving token for the router… confirm in wallet.');const c=new ethers.Contract(t,ERC20_ABI,signer);const tx=await c.approve(ROUTER,amt);await tx.wait();set('✅ Approved. Now tap <b>Add Liquidity</b>.','ok');$('approve').disabled=false;}catch(e){set('Approve failed: '+(e.shortMessage||e.message||e),'err');$('approve').disabled=false;}}
 async function add(){try{const t=$('token').value.trim();if(!ethers.isAddress(t)){set('Enter a valid token address.','err');return;}const amtT=ethers.parseUnits(($('amtToken').value||'0').replace(/,/g,''),decimals);const amtB=ethers.parseEther(($('amtBnb').value||'0').replace(/,/g,''));if(amtT<=0n||amtB<=0n){set('Enter both token and BNB amounts.','err');return;}const slip=$('slip').value||'5';$('add').disabled=true;set('Adding liquidity… confirm in wallet.');const r=new ethers.Contract(ROUTER,ROUTER_ABI,signer);const deadline=Math.floor(Date.now()/1000)+1200;const tx=await r.addLiquidityETH(t,amtT,mins(amtT,slip),mins(amtB,slip),me,deadline,{value:amtB});set('Waiting for confirmation…<br><span class="muted">tx: '+tx.hash+'</span>');await tx.wait();set('✅ <b>Liquidity added!</b> Your token now trades on PancakeSwap.<br><a href="https://pancakeswap.finance/swap?outputCurrency='+t+'" target="_blank" rel="noopener">Open on PancakeSwap ↗</a>','ok');$('add').disabled=false;}catch(e){set('Add liquidity failed: '+(e.shortMessage||e.message||e),'err');$('add').disabled=false;}}
 $('connect').addEventListener('click',connect);$('approve').addEventListener('click',approve);$('add').addEventListener('click',add);if(window.ethereum)connect();
