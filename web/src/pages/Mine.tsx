@@ -70,6 +70,16 @@ export function Mine({ onDeposit }: Props) {
   const iceForUsd = (usd: number) =>
     mining.minDay * Math.pow(Math.max(usd, mining.minBuy) / mining.minBuy, mining.yieldExp);
 
+  // The daily reward a given rank wins (same rank-weight split the server uses).
+  const rw = mining.rewards;
+  const usdtDenom = (rw.usdtTop * (rw.usdtTop + 1)) / 2;
+  const iceDenom = (rw.iceTop * (rw.iceTop + 1)) / 2;
+  const rewardFor = (rank: number) => ({
+    usdt: rank <= rw.usdtTop ? (rw.usdtPool * (rw.usdtTop - rank + 1)) / usdtDenom : 0,
+    ice: rank <= rw.iceTop ? (rw.icePool * (rw.iceTop - rank + 1)) / iceDenom : 0,
+  });
+  const myRow = board?.find((r) => r.isMe) ?? null;
+
   async function buy(v: number) {
     setBusy('buy');
     try {
@@ -354,6 +364,24 @@ export function Mine({ onDeposit }: Props) {
               <b className="text-ice-200">{mining.rewards.icePool.toLocaleString()} ICE USD</b> —
               every day, by rank.
             </p>
+            {myRow &&
+              (() => {
+                const p = rewardFor(myRow.rank);
+                if (p.usdt <= 0 && p.ice <= 0)
+                  return (
+                    <p className="mt-2 text-[11px] text-white/45">
+                      You're #{myRow.rank} — reach Top {mining.rewards.iceTop} to earn a daily prize.
+                    </p>
+                  );
+                return (
+                  <div className="mt-3 rounded-xl bg-black/25 px-3 py-2 text-xs">
+                    You're <b className="text-white">#{myRow.rank}</b> today — you'd win{' '}
+                    {p.usdt > 0 && <b className="text-usdt">${p.usdt.toFixed(2)} USDT</b>}
+                    {p.usdt > 0 && p.ice > 0 && ' + '}
+                    {p.ice > 0 && <b className="text-ice-200">{p.ice.toFixed(2)} ICE USD</b>}
+                  </div>
+                );
+              })()}
           </div>
         )}
         <div className="card divide-y divide-white/5 p-0">
@@ -379,9 +407,22 @@ export function Mine({ onDeposit }: Props) {
                       {r.name}
                       {r.isMe && <span className="ml-1 text-[10px] text-ice-300">(You)</span>}
                     </div>
-                    <div className="text-[11px] text-white/40">
-                      {usdt(r.totalMined)} ICE mined
-                    </div>
+                    {(() => {
+                      const p = rewardFor(r.rank);
+                      if (p.usdt > 0 || p.ice > 0) {
+                        return (
+                          <div className="text-[11px] font-semibold">
+                            {p.usdt > 0 && <span className="text-usdt">🏆 ${p.usdt.toFixed(2)}</span>}
+                            {p.usdt > 0 && p.ice > 0 && <span className="text-white/30"> · </span>}
+                            {p.ice > 0 && <span className="text-ice-300">{p.ice.toFixed(2)} ICE</span>}
+                            <span className="text-white/30"> /day</span>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="text-[11px] text-white/40">{usdt(r.totalMined)} ICE mined</div>
+                      );
+                    })()}
                   </div>
                 </div>
                 <div className="text-right">
