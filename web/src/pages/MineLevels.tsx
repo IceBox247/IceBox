@@ -58,8 +58,10 @@ export function MineLevels({ mining, onDeposit }: Props) {
     const id = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(id);
   }, []);
-  const livePool = mining.pool + (mining.perHour / 3600) * tick;
-  const assets = mining.holding.tokens + livePool;
+  const pending = mining.pool + (mining.perHour / 3600) * tick; // "ready to claim"
+  // Pool Wallet = total ICE the user holds on the platform (collected + pending).
+  const poolWallet = mining.earnedBalance + pending;
+  const assets = mining.holding.tokens + poolWallet;
 
   // Progress toward the next level, from the holding curve.
   const holdRatio = useMemo(() => Math.pow(c.maxUsd / c.minUsd, 1 / (c.count - 1)), [c]);
@@ -144,7 +146,7 @@ export function MineLevels({ mining, onDeposit }: Props) {
           </div>
           <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[11px]">
             <div className="uppercase tracking-wide text-white/40">Pool Wallet</div>
-            <div className="mt-0.5"><b>{livePool.toFixed(4)}</b> <span className="text-ice-300">ICE</span></div>
+            <div className="mt-0.5"><b>{ice(poolWallet)}</b> <span className="text-ice-300">ICE</span></div>
           </div>
         </div>
       </div>
@@ -185,7 +187,7 @@ export function MineLevels({ mining, onDeposit }: Props) {
         <div className="mx-auto -mt-2 h-5 w-40 rounded-[50%] bg-ice-500/40 blur-md" />
 
         <div className="relative mx-auto mt-2 w-fit rounded-xl border border-ice-400/20 bg-black/25 px-5 py-2">
-          <span className="text-xl font-extrabold tabular-nums text-ice-300">+{livePool.toFixed(4)}</span>
+          <span className="text-xl font-extrabold tabular-nums text-ice-300">+{pending.toFixed(4)}</span>
           <span className="ml-2 text-[11px] font-semibold uppercase tracking-wide text-white/60">Ready to claim</span>
         </div>
       </div>
@@ -193,11 +195,11 @@ export function MineLevels({ mining, onDeposit }: Props) {
       {/* CLAIM */}
       <button
         onClick={collect}
-        disabled={busy || livePool <= 0}
+        disabled={busy || pending <= 0}
         className="w-full rounded-2xl bg-gradient-to-b from-ice-200 to-ice-500 py-4 text-lg font-black uppercase tracking-wide text-night-900 shadow-[0_0_34px_-6px_rgba(51,194,255,0.85)] transition active:scale-[0.98] disabled:opacity-40"
-        style={!busy && livePool > 0 ? { animation: 'minePop 2s ease-in-out infinite' } : undefined}
+        style={!busy && pending > 0 ? { animation: 'minePop 2s ease-in-out infinite' } : undefined}
       >
-        {busy ? 'Claiming…' : `Claim ${livePool.toFixed(4)} ICE`}
+        {busy ? 'Claiming…' : `Claim ${pending.toFixed(4)} ICE`}
       </button>
 
       {/* Buy / Leaderboard */}

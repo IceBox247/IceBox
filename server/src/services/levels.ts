@@ -158,9 +158,12 @@ export function serializeLevelMining(
     },
     // Live ICE price in USD (read from the pool), so the client tracks on-chain.
     price: px,
-    // Holding Wallet (on-chain) vs Pool Wallet (earned on-platform, withdrawable).
+    // Holding Wallet (on-chain) vs Pool Wallet (total ICE held on the platform).
     holding: { tokens: money(miner.holdingTokens), usd: money(miner.holdingUsd) },
+    // `pool` = uncollected pending (the "ready to claim" number). `earnedBalance`
+    // = the user's full withdrawable platform ICE balance already collected.
     pool: pending,
+    earnedBalance: money(user.earnedBalance),
     level,
     speed: speedForLevel(level),
     speedUnit: c.speedUnit,

@@ -331,6 +331,7 @@ export interface LevelMiningState {
   price: number;
   holding: { tokens: number; usd: number };
   pool: number;
+  earnedBalance: number;
   level: number;
   speed: number;
   speedUnit: string;
