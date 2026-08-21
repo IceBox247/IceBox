@@ -61,7 +61,10 @@ export function MineLevels({ mining, onDeposit }: Props) {
   const pending = mining.pool + (mining.perHour / 3600) * tick; // "ready to claim"
   // Pool Wallet = total ICE the user holds on the platform (collected + pending).
   const poolWallet = mining.earnedBalance + pending;
-  const assets = mining.holding.tokens + poolWallet;
+  // Effective holding in ICE = holding value / price (includes any holding credit),
+  // so it stays consistent with the USD value and the level math.
+  const holdTokens = mining.price > 0 ? mining.holding.usd / mining.price : mining.holding.tokens;
+  const assets = holdTokens + poolWallet;
 
   // Progress toward the next level, from the holding curve.
   const holdRatio = useMemo(() => Math.pow(c.maxUsd / c.minUsd, 1 / (c.count - 1)), [c]);
@@ -142,7 +145,7 @@ export function MineLevels({ mining, onDeposit }: Props) {
         <div className="mt-3 grid grid-cols-2 gap-2">
           <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[11px]">
             <div className="uppercase tracking-wide text-white/40">Holding Wallet</div>
-            <div className="mt-0.5"><b>{ice(mining.holding.tokens)}</b> <span className="text-ice-300">ICE</span></div>
+            <div className="mt-0.5"><b>{ice(holdTokens)}</b> <span className="text-ice-300">ICE</span></div>
           </div>
           <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[11px]">
             <div className="uppercase tracking-wide text-white/40">Pool Wallet</div>
@@ -400,7 +403,7 @@ function StoreSheet({
         {buy && (
           <div className="space-y-4">
             <Row label="Required holding" value={`${ice(buy.requiredTokens)} ICE`} sub={fmtUsd(buy.requiredUsd)} />
-            <Row label="Your holding" value={`${ice(mining.holding.tokens)} ICE`} sub={fmtUsd(mining.holding.usd)} />
+            <Row label="Your holding" value={`${ice(mining.price > 0 ? mining.holding.usd / mining.price : mining.holding.tokens)} ICE`} sub={fmtUsd(mining.holding.usd)} />
             <Row label="Missing to unlock" value={`${ice(buy.missingTokens)} ICE`} sub={fmtUsd(buy.missingUsd)} danger={buy.missingUsd > 0} />
             {buy.missingUsd <= 0 ? (
               <div className="rounded-xl bg-emerald-400/10 p-3 text-center text-sm text-emerald-300">
