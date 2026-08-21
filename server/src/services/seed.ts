@@ -53,6 +53,17 @@ const TASKS = [
     sortOrder: 4,
   },
   {
+    key: 'join_onlineupdate',
+    title: 'Join Online Update 247',
+    subtitle: 'Join our partner channel',
+    reward: 0.5,
+    actionType: 'join',
+    actionLabel: 'Join',
+    url: 'https://t.me/onlineupdate_247',
+    icon: 'telegram',
+    sortOrder: 4,
+  },
+  {
     key: 'join_sharkverse',
     title: 'Join SharkVerse',
     subtitle: 'Join our partner channel',
