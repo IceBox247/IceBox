@@ -46,6 +46,7 @@ export interface AppConfig {
   depositEnabled: boolean;
   minDeposit: number;
   withdrawEnabled: boolean;
+  icePrice: number;
   tokenLaunchAt?: string;
   tokenLaunchLabel?: string;
   tokenTradeUrl?: string;

@@ -8,6 +8,24 @@ export function compact(n: number): string {
   return n.toLocaleString('en-US');
 }
 
+/** Convert a USD-value amount to ICE token amount at the given price. */
+export function toIce(usdValue: number, price: number): number {
+  return price > 0 ? usdValue / price : 0;
+}
+
+/** Format an ICE token amount: whole numbers with separators, small ones with decimals. */
+export function ice(n: number): string {
+  if (n >= 1000) return Math.round(n).toLocaleString('en-US');
+  if (n >= 1) return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  return n.toLocaleString('en-US', { maximumFractionDigits: 4 });
+}
+
+/** Live token price, keeping precision for tiny values ($0.0000428). */
+export function priceUsd(n: number): string {
+  if (!(n > 0)) return '—';
+  return n >= 0.01 ? `$${n.toFixed(4)}` : `$${n.toPrecision(3)}`;
+}
+
 /** Shorten a wallet address: TQ1a…9fZ2 */
 export function shortAddress(addr: string, head = 6, tail = 4): string {
   if (addr.length <= head + tail + 1) return addr;

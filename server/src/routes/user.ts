@@ -3,6 +3,7 @@ import { prisma, money } from '../db';
 import { config, dextopusReady } from '../config';
 import { publicUser } from '../services/users';
 import { isAdminTelegramId } from '../services/admin';
+import { getIcePriceUsd } from '../services/chain';
 
 export const userRouter = Router();
 
@@ -14,7 +15,7 @@ export const userRouter = Router();
 userRouter.get('/me', async (req, res) => {
   const user = req.user!;
 
-  const [referralCount, activeReferralCount, tasksDone, staked] = await Promise.all([
+  const [referralCount, activeReferralCount, tasksDone, staked, icePrice] = await Promise.all([
     prisma.user.count({ where: { referredById: user.id } }),
     prisma.user.count({ where: { referredById: user.id, totalEarned: { gt: 0 } } }),
     prisma.taskCompletion.count({ where: { userId: user.id } }),
@@ -22,6 +23,7 @@ userRouter.get('/me', async (req, res) => {
       where: { userId: user.id, status: 'active' },
       _sum: { principal: true },
     }),
+    getIcePriceUsd(),
   ]);
 
   res.json({
@@ -48,6 +50,8 @@ userRouter.get('/me', async (req, res) => {
       depositEnabled: dextopusReady,
       minDeposit: config.dextopus.minDeposit,
       withdrawEnabled: config.dextopus.withdrawEnabled,
+      // Live ICE price in USD — the client shows balances in ICE (value / price).
+      icePrice,
       // Countdown to the ICE token going tradeable on-chain.
       tokenLaunchAt: config.tokenLaunch.at,
       tokenLaunchLabel: config.tokenLaunch.label,
