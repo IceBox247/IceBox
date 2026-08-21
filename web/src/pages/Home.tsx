@@ -40,7 +40,7 @@ export function Home({ onWithdraw, onHistory, onDeposit, onCheckin, onLaunch, on
     { icon: WalletIcon, label: 'Total Earned', value: `${usdt(overview.totalEarned)}`, unit: 'ICE', tint: 'text-ice-300 bg-ice-400/15' },
     { icon: ReferralsIcon, label: 'Total Referrals', value: `${overview.totalReferrals}`, unit: '', tint: 'text-usdt bg-usdt/15' },
     { icon: TasksIcon, label: 'Tasks Done', value: `${overview.tasksDone}`, unit: '', tint: 'text-violet-300 bg-violet-400/15' },
-    { icon: WalletIcon, label: 'Available', value: `${usdt(overview.available)}`, unit: 'USDT', tint: 'text-sky-300 bg-sky-400/15' },
+    { icon: WalletIcon, label: 'Available', value: `${ice(iceBalance)}`, unit: 'ICE', tint: 'text-sky-300 bg-sky-400/15' },
   ];
 
   return (

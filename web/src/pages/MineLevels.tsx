@@ -23,6 +23,12 @@ function fmtPrice(n: number): string {
   if (!(n > 0)) return '—';
   return n >= 0.01 ? `$${n.toFixed(4)}` : `$${n.toPrecision(3)}`;
 }
+/** Live-ticking ICE amount — more decimals when small so it visibly counts up. */
+function fmtLiveIce(n: number): string {
+  if (n >= 1000) return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (n >= 1) return n.toFixed(4);
+  return n.toFixed(6);
+}
 /** Tier name for a level, ice-themed (Frost → Polar Vortex). */
 function levelName(level: number, count: number): string {
   const f = level / Math.max(1, count);
@@ -54,12 +60,20 @@ export function MineLevels({ mining, onDeposit }: Props) {
   const toast = useToast();
   const c = mining.curve;
 
-  const [tick, setTick] = useState(0);
+  // Live "ready to claim" that visibly ticks up every frame. We anchor to the
+  // server's pool value and the wall clock at mount, then add the per-second
+  // accrual so the number keeps counting between refreshes (not static).
+  const anchor = useRef({ pool: mining.pool, at: Date.now() });
   useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    anchor.current = { pool: mining.pool, at: Date.now() };
+  }, [mining.pool, mining.perHour]);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 200);
     return () => clearInterval(id);
   }, []);
-  const pending = mining.pool + (mining.perHour / 3600) * tick; // "ready to claim"
+  const elapsedSec = Math.max(0, (now - anchor.current.at) / 1000);
+  const pending = anchor.current.pool + (mining.perHour / 3600) * elapsedSec; // "ready to claim"
   // Pool Wallet = total ICE the user holds on the platform (collected + pending).
   const poolWallet = mining.earnedBalance + pending;
   // Holding Wallet = the real on-chain wallet balance (0 until a wallet with ICE
@@ -211,7 +225,7 @@ export function MineLevels({ mining, onDeposit }: Props) {
         </div>
 
         <div className="relative mx-auto mt-2 w-fit rounded-xl border border-ice-400/20 bg-black/25 px-5 py-2">
-          <span className="text-xl font-extrabold tabular-nums text-ice-300">+{pending.toFixed(4)}</span>
+          <span className="text-xl font-extrabold tabular-nums text-ice-300">+{fmtLiveIce(pending)}</span>
           <span className="ml-2 text-[11px] font-semibold uppercase tracking-wide text-white/60">Ready to claim</span>
         </div>
       </div>
@@ -223,7 +237,7 @@ export function MineLevels({ mining, onDeposit }: Props) {
         className="w-full rounded-2xl bg-gradient-to-b from-ice-200 to-ice-500 py-4 text-lg font-black uppercase tracking-wide text-night-900 shadow-[0_0_34px_-6px_rgba(51,194,255,0.85)] transition active:scale-[0.98] disabled:opacity-40"
         style={!busy && pending > 0 ? { animation: 'minePop 2s ease-in-out infinite' } : undefined}
       >
-        {busy ? 'Claiming…' : `Claim ${pending.toFixed(4)} ICE`}
+        {busy ? 'Claiming…' : `Claim ${fmtLiveIce(pending)} ICE`}
       </button>
 
       {/* Buy / Leaderboard */}
