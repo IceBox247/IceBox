@@ -363,7 +363,8 @@ export const config = {
   // defaults to the live ICE BOX USD contract on BSC.
   token: {
     address: str('TOKEN_ADDRESS', '0xF26a32b8e14C463B57c189E462e13b10BD192b95'),
-    symbol: str('TOKEN_SYMBOL', 'ICE'),
+    name: str('TOKEN_NAME', 'ICE USD'),
+    symbol: str('TOKEN_SYMBOL', 'USD'),
     decimals: num('TOKEN_DECIMALS', 18),
     chainId: num('TOKEN_CHAIN_ID', 56),
     chainName: str('TOKEN_CHAIN_NAME', 'BNB Smart Chain (BSC)'),

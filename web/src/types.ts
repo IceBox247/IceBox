@@ -52,6 +52,7 @@ export interface AppConfig {
   isAdmin?: boolean;
   token?: {
     address: string;
+    name: string;
     symbol: string;
     decimals: number;
     chainId: number;

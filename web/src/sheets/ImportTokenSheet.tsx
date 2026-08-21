@@ -26,21 +26,22 @@ export function ImportTokenSheet({ open, onClose }: { open: boolean; onClose: ()
   const steps = [
     `Open MetaMask and switch the network to ${token.chainName}.`,
     'On the Tokens tab, scroll down and tap “Import tokens”.',
-    'Paste the ICE contract address below into “Token contract address”.',
+    `Paste the ${token.name} contract address below into “Token contract address”.`,
     `The symbol (${token.symbol}) and decimals (${token.decimals}) fill in automatically.`,
-    'Tap “Import” — ICE now appears in your MetaMask wallet.',
+    `Tap “Import” — ${token.name} now appears in your MetaMask wallet.`,
   ];
 
   return (
-    <Sheet open={open} onClose={onClose} title={`Import ${token.symbol} to MetaMask`}>
+    <Sheet open={open} onClose={onClose} title={`Import ${token.name} to MetaMask`}>
       <div className="space-y-4">
         <p className="text-sm text-white/60">
-          Add the ICE token to MetaMask so you can see and manage it in your own wallet after
-          withdrawing.
+          Add the {token.name} token to MetaMask so you can see and manage it in your own wallet
+          after withdrawing.
         </p>
 
         {/* Token facts */}
         <div className="card space-y-2 p-4 text-sm">
+          <Row label="Token name" value={token.name} />
           <Row label="Network" value={token.chainName} />
           <Row label="Symbol" value={token.symbol} />
           <Row label="Decimals" value={String(token.decimals)} />
@@ -48,7 +49,9 @@ export function ImportTokenSheet({ open, onClose }: { open: boolean; onClose: ()
 
         {/* Contract address + copy */}
         <div className="rounded-2xl border border-ice-400/25 bg-ice-400/5 p-4">
-          <div className="text-[11px] uppercase tracking-wide text-white/45">ICE token contract</div>
+          <div className="text-[11px] uppercase tracking-wide text-white/45">
+            {token.name} token contract
+          </div>
           <div className="mt-1 break-all font-mono text-sm text-ice-100">{token.address}</div>
           <button onClick={copy} className="btn-primary mt-3 w-full py-3">
             {copied ? '✓ Copied' : 'Copy contract address'}

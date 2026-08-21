@@ -55,6 +55,7 @@ userRouter.get('/me', async (req, res) => {
       isAdmin: isAdminTelegramId(user.telegramId),
       token: {
         address: config.token.address,
+        name: config.token.name,
         symbol: config.token.symbol,
         decimals: config.token.decimals,
         chainId: config.token.chainId,

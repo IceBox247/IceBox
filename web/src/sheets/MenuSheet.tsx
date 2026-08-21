@@ -64,8 +64,8 @@ export function MenuSheet({ open, onClose, onHistory, onAdmin, onImportToken }: 
       ? [
           {
             icon: RefreshIcon,
-            title: `Import ${me.config.token.symbol} to MetaMask`,
-            subtitle: 'Add the ICE token to your wallet',
+            title: `Import ${me.config.token.name} to MetaMask`,
+            subtitle: 'Add the ICE USD token to your wallet',
             onClick: () => {
               onClose();
               setTimeout(onImportToken, 200);
