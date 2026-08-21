@@ -72,6 +72,14 @@ export function MineLevels({ mining, onDeposit }: Props) {
 
   return (
     <div className="animate-fade-in space-y-4 px-5 pb-28 pt-3">
+      <style>{`
+        @keyframes mineBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+        @keyframes mineSpin{to{transform:rotate(360deg)}}
+        @keyframes minePulse{0%{transform:scale(.85);opacity:.55}100%{transform:scale(1.5);opacity:0}}
+        @keyframes mineShine{0%{transform:translateX(-140%) rotate(12deg)}60%,100%{transform:translateX(240%) rotate(12deg)}}
+        @keyframes minePop{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+        @keyframes mineFloat{0%{transform:translateY(0);opacity:0}20%{opacity:1}100%{transform:translateY(-70px);opacity:0}}
+      `}</style>
       {/* Top row: level + status + wallet */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -115,23 +123,53 @@ export function MineLevels({ mining, onDeposit }: Props) {
             <span className="text-ice-300">ICE</span>
           </div>
         </div>
-        <div className="mx-auto mt-3 w-fit rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-8 py-2.5 text-3xl font-extrabold tabular-nums text-emerald-400">
+        <div
+          className="mx-auto mt-3 w-fit rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-8 py-2.5 text-3xl font-extrabold tabular-nums text-emerald-400"
+          style={livePool > 0 ? { animation: 'minePop 1.6s ease-in-out infinite' } : undefined}
+        >
           +{livePool.toFixed(4)}
         </div>
       </div>
 
-      {/* Coin */}
-      <div className="grid place-items-center py-3">
-        <div className="grid h-40 w-40 place-items-center rounded-full bg-gradient-to-br from-ice-300 via-ice-400 to-ice-600 text-4xl font-black tracking-tight text-night-900 shadow-[0_0_50px_-8px_rgba(51,194,255,0.6)]">
-          ICE
-        </div>
+      {/* Animated coin — tap to claim */}
+      <div className="relative grid place-items-center py-6">
+        {/* pulsing glow rings */}
+        <span className="pointer-events-none absolute h-40 w-40 rounded-full bg-ice-400/25" style={{ animation: 'minePulse 2.4s ease-out infinite' }} />
+        <span className="pointer-events-none absolute h-40 w-40 rounded-full bg-ice-400/20" style={{ animation: 'minePulse 2.4s ease-out infinite', animationDelay: '1.2s' }} />
+        {/* rotating aura */}
+        <span
+          className="pointer-events-none absolute h-52 w-52 rounded-full opacity-70 blur-[2px]"
+          style={{ background: 'conic-gradient(from 0deg, transparent, rgba(51,194,255,.45), transparent 55%)', animation: 'mineSpin 6s linear infinite' }}
+        />
+        {/* floating sparkles */}
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className="pointer-events-none absolute bottom-8 text-lg"
+            style={{ left: `${38 + i * 12}%`, animation: `mineFloat ${2.6 + i * 0.5}s ease-in ${i * 0.7}s infinite` }}
+          >
+            ❄️
+          </span>
+        ))}
+        {/* the coin */}
+        <button
+          onClick={collect}
+          disabled={busy}
+          className="relative grid h-40 w-40 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-ice-200 via-ice-400 to-ice-600 text-4xl font-black tracking-tight text-night-900 shadow-[0_0_60px_-4px_rgba(51,194,255,0.75)] transition active:scale-95"
+          style={{ animation: 'mineBob 3.2s ease-in-out infinite' }}
+        >
+          <span className="absolute inset-2 rounded-full ring-2 ring-white/25" />
+          <span className="pointer-events-none absolute -inset-y-2 left-0 w-1/3 bg-white/30 blur-md" style={{ animation: 'mineShine 3.5s ease-in-out infinite' }} />
+          <span className="relative">ICE</span>
+        </button>
       </div>
 
       {/* CLAIM */}
       <button
         onClick={collect}
         disabled={busy || livePool <= 0}
-        className="btn-primary w-full py-4 text-lg font-extrabold disabled:opacity-40"
+        className="btn-primary w-full py-4 text-lg font-extrabold shadow-[0_0_30px_-8px_rgba(51,194,255,0.8)] disabled:opacity-40"
+        style={!busy && livePool > 0 ? { animation: 'minePop 2s ease-in-out infinite' } : undefined}
       >
         {busy ? 'Claiming…' : 'CLAIM'}
       </button>
