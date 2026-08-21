@@ -346,6 +346,7 @@ export interface MiningState {
     enabled: boolean;
     usdtPool: number;
     usdtTop: number;
+    usdtPrizes: number[];
     icePool: number;
     iceTop: number;
   };

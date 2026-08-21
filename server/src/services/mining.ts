@@ -120,6 +120,8 @@ export function serializeMining(user: User, miner: Miner, referralMiners: number
       enabled: config.mining.rewardsEnabled,
       usdtPool: config.mining.usdtPool,
       usdtTop: config.mining.usdtTop,
+      // Fixed USDT prize per rank (rank 1 first) — the client shows each place's payout.
+      usdtPrizes: config.mining.usdtPrizes,
       icePool: config.mining.icePool,
       iceTop: config.mining.iceTop,
     },
@@ -317,9 +319,9 @@ export async function distributeMiningRewards(): Promise<{
   const { leaderboard } = await miningLeaderboard(0, cfg.iceTop);
   if (leaderboard.length === 0) return skip;
 
-  // Fixed weight denominators (rank 1 heaviest). Using the full top-N sum means
-  // that with fewer than N miners, the pool isn't fully spent.
-  const usdtDenom = (cfg.usdtTop * (cfg.usdtTop + 1)) / 2;
+  // USDT: fixed prize per rank (rank 1 = usdtPrizes[0], …); ranks past the ladder
+  // win nothing. ICE: rank-weighted split (rank 1 heaviest). With fewer miners
+  // than the ladder length, the lower prizes simply go unpaid.
   const iceDenom = (cfg.iceTop * (cfg.iceTop + 1)) / 2;
 
   let usdtPaid = 0;
@@ -328,8 +330,7 @@ export async function distributeMiningRewards(): Promise<{
 
   for (const row of leaderboard) {
     const rank = row.rank;
-    const usdt =
-      rank <= cfg.usdtTop ? money((cfg.usdtPool * (cfg.usdtTop - rank + 1)) / usdtDenom) : 0;
+    const usdt = money(cfg.usdtPrizes[rank - 1] ?? 0);
     const ice =
       rank <= cfg.iceTop ? money((cfg.icePool * (cfg.iceTop - rank + 1)) / iceDenom) : 0;
     if (usdt <= 0 && ice <= 0) continue;

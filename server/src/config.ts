@@ -421,8 +421,21 @@ export const config = {
     // Daily leaderboard rewards, split by rank: top N share a USDT pool
     // (withdrawable) and top M share an ICE USD pool.
     const rewardsEnabled = process.env.MINE_REWARDS_ENABLED !== 'false';
-    const usdtPool = num('MINE_DAILY_USDT_POOL', 5);
-    const usdtTop = Math.max(1, Math.floor(num('MINE_USDT_TOP', 10)));
+    // USDT rewards use a FIXED prize per rank (rank 1 = $2, rank 2 = $1, …), not
+    // a formula — so the operator controls exactly what each place pays. Override
+    // the whole ladder with MINE_USDT_PRIZES="2,1,0.5,0.3,…" (rank 1 first).
+    const usdtPrizesDefault = [2, 1, 0.5, 0.3, 0.25, 0.24, 0.21, 0.18, 0.17, 0.15];
+    const usdtPrizes = (() => {
+      const raw = (process.env.MINE_USDT_PRIZES ?? '').trim();
+      if (!raw) return usdtPrizesDefault;
+      const parsed = raw
+        .split(',')
+        .map((s) => Number(s.trim()))
+        .filter((n) => Number.isFinite(n) && n >= 0);
+      return parsed.length ? parsed : usdtPrizesDefault;
+    })();
+    const usdtTop = usdtPrizes.length; // how many ranks win USDT = length of ladder
+    const usdtPool = Math.round(usdtPrizes.reduce((a, b) => a + b, 0) * 100) / 100; // total, for display
     const icePool = num('MINE_DAILY_ICE_POOL', 1000);
     const iceTop = Math.max(1, Math.floor(num('MINE_ICE_TOP', 100)));
 
@@ -436,6 +449,7 @@ export const config = {
       rewardsEnabled,
       usdtPool,
       usdtTop,
+      usdtPrizes,
       icePool,
       iceTop,
       maxIcePerDay,

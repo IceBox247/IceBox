@@ -70,12 +70,12 @@ export function Mine({ onDeposit }: Props) {
   const iceForUsd = (usd: number) =>
     mining.minDay * Math.pow(Math.max(usd, mining.minBuy) / mining.minBuy, mining.yieldExp);
 
-  // The daily reward a given rank wins (same rank-weight split the server uses).
+  // The daily reward a given rank wins. USDT is a fixed prize per rank (rank 1
+  // first); ICE is the rank-weight split — both mirror the server exactly.
   const rw = mining.rewards;
-  const usdtDenom = (rw.usdtTop * (rw.usdtTop + 1)) / 2;
   const iceDenom = (rw.iceTop * (rw.iceTop + 1)) / 2;
   const rewardFor = (rank: number) => ({
-    usdt: rank <= rw.usdtTop ? (rw.usdtPool * (rw.usdtTop - rank + 1)) / usdtDenom : 0,
+    usdt: rw.usdtPrizes?.[rank - 1] ?? 0,
     ice: rank <= rw.iceTop ? (rw.icePool * (rw.iceTop - rank + 1)) / iceDenom : 0,
   });
   const myRow = board?.find((r) => r.isMe) ?? null;
