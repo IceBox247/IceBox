@@ -152,6 +152,56 @@ cronRouter.get('/user', async (req, res) => {
   res.json({ ok: true, ...(await lookupUser(String(req.query.query ?? ''))) });
 });
 
+/**
+ * GET /api/cron/task-verify?secret=CRON_SECRET — for each active channel-join
+ * task, report whether the bot can verify membership (i.e. it is an admin of
+ * that chat). Use it after adding @IceBoxbot_bot as admin to confirm each
+ * channel is wired up, so real joiners can claim and non-joiners are blocked.
+ */
+cronRouter.get('/task-verify', async (req, res) => {
+  if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
+  if (!hasBot) return res.json({ ok: false, reason: 'BOT_TOKEN not set' });
+
+  const botId = config.botToken.split(':')[0];
+  const { prisma } = await import('../db');
+  const tasks = await prisma.task.findMany({
+    where: { active: true, actionType: 'join' },
+    select: { key: true, title: true, chatId: true, url: true },
+    orderBy: { sortOrder: 'asc' },
+  });
+
+  const checks = await Promise.all(
+    tasks.map(async (t) => {
+      if (!t.chatId) {
+        return { task: t.key, chatId: null, ready: false, note: 'no chatId — cannot verify (private invite link?)' };
+      }
+      try {
+        const r = await fetch(
+          `https://api.telegram.org/bot${config.botToken}/getChatMember` +
+            `?chat_id=${encodeURIComponent(t.chatId)}&user_id=${encodeURIComponent(botId)}`,
+        );
+        const j: any = await r.json().catch(() => ({}));
+        if (!j?.ok) {
+          return { task: t.key, chatId: t.chatId, ready: false, note: j?.description ?? 'getChatMember failed' };
+        }
+        const status = j?.result?.status;
+        const ready = status === 'administrator' || status === 'creator';
+        return {
+          task: t.key,
+          chatId: t.chatId,
+          ready,
+          botStatus: status,
+          note: ready ? 'bot is admin — verification works' : `bot is "${status}", must be admin`,
+        };
+      } catch (e) {
+        return { task: t.key, chatId: t.chatId, ready: false, note: e instanceof Error ? e.message : String(e) };
+      }
+    }),
+  );
+
+  res.json({ ok: true, allReady: checks.every((c) => c.ready), checks });
+});
+
 /** GET /api/cron/status — queue counts and hot-wallet balances. */
 cronRouter.get('/status', async (req, res) => {
   if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
