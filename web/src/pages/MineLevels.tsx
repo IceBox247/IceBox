@@ -6,7 +6,7 @@ import { haptic } from '../telegram';
 import { usdt, ice } from '../lib/format';
 import { Sheet } from '../components/Sheet';
 import { sfx, isMuted, toggleMuted } from '../lib/sound';
-import { hasInjectedWallet, requestInjectedAddress, connectAndSign, connectWalletConnect, walletDeepLinks, openExternal } from '../lib/wallet';
+import { hasInjectedWallet, requestInjectedAddress, connectAndSign, walletDeepLinks, openExternal } from '../lib/wallet';
 import { WhitepaperView } from './Whitepaper';
 import type { LevelMiningState, BuyLevelInfo, MinerRankRow, MinerJourney } from '../types';
 
@@ -1005,22 +1005,6 @@ function ConnectWallet({ onConnected }: { onConnected: () => Promise<void> }) {
     }
   }
 
-  /** WalletConnect modal (lists all wallets) — for any other wallet. */
-  async function connectViaWc() {
-    setBusy(true);
-    try {
-      const { address, signature } = await connectWalletConnect(nonceFor);
-      await api.walletConnect(address, signature);
-      await onConnected();
-      haptic('success');
-      toast.show('Wallet connected — mining boosted ⚡', 'success');
-    } catch (e: any) {
-      toast.show(e instanceof ApiError ? e.message : 'WalletConnect didn’t complete — try a wallet button above', 'error');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function getMessage() {
     setBusy(true);
     try {
@@ -1069,17 +1053,10 @@ function ConnectWallet({ onConnected }: { onConnected: () => Promise<void> }) {
           </button>
         </div>
         <button
-          onClick={() => { navigator.clipboard?.writeText(link.connectUrl); toast.show('Link copied — paste it in your wallet’s browser', 'success'); }}
-          className="w-full rounded-xl border border-white/10 py-2.5 text-xs font-semibold text-white/70"
+          onClick={() => { navigator.clipboard?.writeText(link.connectUrl); toast.show('Link copied — open your wallet app → its Browser/DApp tab → paste', 'success'); }}
+          className="w-full rounded-xl border border-ice-400/30 bg-ice-400/10 py-3 text-xs font-bold text-ice-200"
         >
-          📋 Copy link (paste in any wallet’s browser)
-        </button>
-        <button
-          onClick={connectViaWc}
-          disabled={busy}
-          className="w-full rounded-xl border border-ice-400/30 bg-ice-400/10 py-2.5 text-xs font-bold text-ice-200 disabled:opacity-50"
-        >
-          {busy ? '…' : '🔗 Other wallet (WalletConnect)'}
+          📋 Other wallet? Copy link → paste in its browser
         </button>
         <p className="text-center text-[11px] text-ice-300/80">
           ⏳ Waiting for you to connect… this closes automatically once done.
