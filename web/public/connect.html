@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Connect Wallet · IceBox</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    background:#07101d; color:#eaf4ff; min-height:100vh; display:grid; place-items:center; padding:24px; }
+  .card { width:100%; max-width:420px; background:#0e1c2f; border:1px solid rgba(51,194,255,.18);
+    border-radius:22px; padding:26px 22px; box-shadow:0 20px 60px -20px rgba(0,0,0,.7); text-align:center; }
+  .coin { width:84px; height:84px; margin:0 auto 10px; filter:drop-shadow(0 8px 20px rgba(51,194,255,.5)); }
+  h1 { font-size:22px; margin:6px 0 2px; }
+  p { color:#9fb6cf; font-size:14px; line-height:1.5; margin:8px 0; }
+  button { width:100%; border:0; border-radius:14px; padding:15px; font-size:16px; font-weight:800;
+    background:linear-gradient(180deg,#7fdcff,#33c2ff); color:#062036; cursor:pointer; margin-top:14px; }
+  button:disabled { opacity:.55; }
+  .status { margin-top:16px; font-size:14px; font-weight:600; min-height:20px; }
+  .ok { color:#34d399; } .err { color:#f87171; } .muted { color:#9fb6cf; }
+  .addr { font-family:ui-monospace,monospace; font-size:12px; color:#9fb6cf; word-break:break-all; margin-top:6px; }
+  .lock { color:#34d399; font-size:12px; margin-top:14px; }
+  .done { font-size:40px; margin-bottom:6px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <img class="coin" src="/coin.png" alt="ICE" />
+  <h1>Connect your wallet</h1>
+  <p>This proves the wallet is yours so your on-chain ICE boosts your mining level.
+     It's <b>free</b>, uses <b>no gas</b>, and <b>cannot move your funds</b>.</p>
+  <div id="addr" class="addr"></div>
+  <button id="go">🔗 Connect &amp; Sign</button>
+  <div id="status" class="status muted">Open this page inside your wallet's browser (MetaMask / Trust), then tap Connect.</div>
+  <div class="lock">🔒 IceBox · iceboxminiapp.online</div>
+</div>
+<script>
+  var token = new URLSearchParams(location.search).get('t') || '';
+  var $ = function(id){ return document.getElementById(id); };
+  function set(m,c){ $('status').className = 'status ' + (c||'muted'); $('status').innerHTML = m; }
+
+  async function run(){
+    var eth = window.ethereum;
+    if (!token) { set('Missing link token. Reopen from IceBox.', 'err'); return; }
+    if (!eth) {
+      set('No wallet detected. Open this page from inside your wallet app’s browser (MetaMask → Browser, or Trust → DApps).', 'err');
+      return;
+    }
+    $('go').disabled = true;
+    try {
+      set('Requesting your wallet…');
+      var accounts = await eth.request({ method: 'eth_requestAccounts' });
+      var address = accounts && accounts[0];
+      if (!address) throw new Error('No account selected');
+      $('addr').textContent = address;
+
+      set('Fetching message to sign…');
+      var infoRes = await fetch('/api/wallet/link-info?token=' + encodeURIComponent(token) + '&address=' + encodeURIComponent(address));
+      var info = await infoRes.json();
+      if (!infoRes.ok || !info.message) throw new Error(info.message || 'Link expired — reopen from IceBox.');
+
+      set('Approve the signature in your wallet…');
+      var signature = await eth.request({ method: 'personal_sign', params: [info.message, address] });
+
+      set('Verifying…');
+      var linkRes = await fetch('/api/wallet/link', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token: token, address: address, signature: signature }),
+      });
+      var out = await linkRes.json();
+      if (!linkRes.ok || !out.ok) throw new Error(out.message || 'Verification failed');
+
+      $('go').style.display = 'none';
+      $('status').className = 'status ok';
+      $('status').innerHTML = '<div class="done">✅</div>Wallet connected! Go back to IceBox on Telegram — your level updates automatically.';
+    } catch (e) {
+      set((e && (e.message || e.reason)) || 'Could not connect', 'err');
+      $('go').disabled = false;
+    }
+  }
+  $('go').onclick = run;
+  // Auto-start when a wallet is already injected (i.e. inside a wallet browser).
+  if (window.ethereum) setTimeout(run, 400);
+</script>
+</body>
+</html>

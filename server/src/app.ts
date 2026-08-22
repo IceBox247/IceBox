@@ -17,6 +17,7 @@ import { miningRouter } from './routes/mining';
 import { adminRouter } from './routes/admin';
 import { dextopusWebhookHandler } from './routes/webhooks';
 import { tokensRouter } from './routes/tokens';
+import { walletLinkRouter } from './routes/walletLink';
 import { cronRouter } from './routes/cron';
 import { createBot } from './telegram/bot';
 
@@ -68,6 +69,10 @@ export function createApp(): Express {
 
   // Public token registry (used by the wallet-browser creator pages — no Telegram).
   app.use('/api/tokens', tokensRouter);
+
+  // Public wallet-linking (the /connect.html page runs in the wallet's browser,
+  // outside Telegram, so these can't sit behind Mini App auth).
+  app.use('/api/wallet', walletLinkRouter);
 
   // Vercel Cron / operator endpoints — before auth, since neither caller has
   // Mini App initData. Guarded by CRON_SECRET instead.

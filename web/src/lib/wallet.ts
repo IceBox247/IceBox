@@ -14,6 +14,21 @@ export function hasInjectedWallet(): boolean {
   return !!injectedProvider();
 }
 
+/** Open a URL so it actually leaves the Telegram webview and reaches the target
+ *  app/browser (a plain window.open is often swallowed inside Telegram). */
+export function openExternal(url: string) {
+  const tg = (window as any).Telegram?.WebApp;
+  try {
+    if (tg?.openLink) {
+      tg.openLink(url, { try_instant_view: false });
+      return;
+    }
+  } catch {
+    /* fall through */
+  }
+  window.open(url, '_blank');
+}
+
 /**
  * One-tap connect + sign with the injected wallet: request the account, then
  * personal_sign the given message. Returns the address + signature to submit.

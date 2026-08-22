@@ -149,6 +149,11 @@ export const api = {
     request<{ ok: boolean; mining: AnyMiningState }>('/mining/wallet/disconnect', {
       method: 'POST',
     }),
+  walletLinkToken: () =>
+    request<{ ok: boolean; token: string; connectUrl: string; metamask: string; trust: string }>(
+      '/mining/wallet/link-token',
+      { method: 'POST' },
+    ),
   buyLevel: (level: number) =>
     request<BuyLevelInfo & { ok: boolean }>('/mining/level/buy', {
       method: 'POST',

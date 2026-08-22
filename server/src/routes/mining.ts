@@ -79,6 +79,30 @@ miningRouter.post('/wallet/nonce', async (req, res) => {
 });
 
 /**
+ * POST /api/mining/wallet/link-token — issue a one-time link token + deep links.
+ * The user opens the returned URL inside their wallet's dapp browser (where the
+ * wallet can actually sign), completing the bind via the public /api/wallet
+ * endpoints. This is the reliable path on mobile, where wallets have no
+ * standalone "sign message" screen.
+ */
+miningRouter.post('/wallet/link-token', async (req, res) => {
+  const user = req.user!;
+  const token = crypto.randomBytes(16).toString('hex');
+  await prisma.user.update({ where: { id: user.id }, data: { walletNonce: token } });
+  const origin = `${req.protocol}://${req.get('host')}`;
+  const host = (req.get('host') ?? '').replace(/^https?:\/\//, '');
+  const connectUrl = `${origin}/connect.html?t=${token}`;
+  res.json({
+    ok: true,
+    token,
+    connectUrl,
+    // Open the connect page directly INSIDE each wallet's dapp browser.
+    metamask: `https://metamask.app.link/dapp/${host}/connect.html?t=${token}`,
+    trust: `https://link.trustwallet.com/open_url?url=${encodeURIComponent(connectUrl)}`,
+  });
+});
+
+/**
  * POST /api/mining/wallet/connect { address, signature } — verify the signature
  * over the issued nonce, bind the wallet, and sync the level from its holding.
  */

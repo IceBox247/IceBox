@@ -6,7 +6,7 @@ import { haptic } from '../telegram';
 import { usdt, ice } from '../lib/format';
 import { Sheet } from '../components/Sheet';
 import { sfx, isMuted, toggleMuted } from '../lib/sound';
-import { hasInjectedWallet, requestInjectedAddress, connectAndSign, connectWalletConnect, walletDeepLinks } from '../lib/wallet';
+import { hasInjectedWallet, requestInjectedAddress, connectAndSign, walletDeepLinks, openExternal } from '../lib/wallet';
 import { WhitepaperView } from './Whitepaper';
 import type { LevelMiningState, BuyLevelInfo, MinerRankRow, MinerJourney } from '../types';
 
@@ -930,69 +930,98 @@ function Row({ label, value, sub, danger }: { label: string; value: string; sub?
   );
 }
 
-/** Paste address → sign the issued message in your wallet → paste signature. */
+/**
+ * Connect a wallet to boost mining. On mobile, wallets have no standalone
+ * "sign message" screen — so the reliable path is to open a tiny IceBox connect
+ * page INSIDE the wallet's own browser (where signing works), tied back to this
+ * account by a one-time link token. We poll for the bind to complete. Injected
+ * providers (desktop / in-wallet browser) get a direct one-tap; manual paste is
+ * the last resort.
+ */
 function ConnectWallet({ onConnected }: { onConnected: () => Promise<void> }) {
   const toast = useToast();
+  const injected = hasInjectedWallet();
+  const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<'main' | 'manual'>('main');
+  const [link, setLink] = useState<{ connectUrl: string; metamask: string; trust: string } | null>(null);
+  // manual state
   const [address, setAddress] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [signature, setSignature] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [manual, setManual] = useState(false);
-  const injected = hasInjectedWallet();
 
   const nonceFor = async (a: string) => (await api.walletNonce(a)).message;
 
-  /** Shared connect wrapper: run a connect+sign strategy, then bind server-side. */
-  async function doConnect(run: () => Promise<{ address: string; signature: string }>) {
+  // Once a link is opened, poll for the wallet to be bound (from the browser flow).
+  useEffect(() => {
+    if (!link) return;
+    let alive = true;
+    const id = setInterval(async () => {
+      try {
+        const r = await api.refreshMiningChain();
+        const m = r.mining as { wallet?: { verified?: boolean } };
+        if (alive && m?.wallet?.verified) {
+          clearInterval(id);
+          haptic('success');
+          toast.show('Wallet connected — mining boosted ⚡', 'success');
+          await onConnected();
+        }
+      } catch {
+        /* keep polling */
+      }
+    }, 3000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [link]);
+
+  /** Direct one-tap when a provider is injected (desktop / inside a wallet browser). */
+  async function connectInjected() {
     setBusy(true);
     try {
-      const { address, signature } = await run();
-      await api.walletConnect(address, signature);
+      const addr = await requestInjectedAddress();
+      const { signature: sig } = await connectAndSign(await nonceFor(addr));
+      await api.walletConnect(addr, sig);
       await onConnected();
       haptic('success');
-      toast.show('Wallet connected — mining boosted from your holding ⚡', 'success');
+      toast.show('Wallet connected — mining boosted ⚡', 'success');
     } catch (e: any) {
-      const m =
-        e instanceof ApiError
-          ? e.message
-          : e?.message === 'no_account'
-            ? 'No wallet selected'
-            : 'Could not connect — try the manual option below';
-      toast.show(m, 'error');
+      toast.show(e instanceof ApiError ? e.message : 'Could not connect', 'error');
     } finally {
       setBusy(false);
     }
   }
 
-  const connectOneTap = () =>
-    doConnect(async () => {
-      if (injected) {
-        const addr = await requestInjectedAddress();
-        const { signature } = await connectAndSign(await nonceFor(addr));
-        return { address: addr, signature };
-      }
-      return connectWalletConnect(nonceFor);
-    });
+  /** Telegram path: mint a link token and show wallet-browser options. */
+  async function startLink() {
+    setBusy(true);
+    try {
+      setLink(await api.walletLinkToken());
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.message : 'Could not start — try again', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function getMessage() {
     setBusy(true);
     try {
-      const r = await api.walletNonce(address.trim());
-      setMessage(r.message);
-      toast.show('Sign this message in your wallet, then paste the signature', 'success');
+      setMessage((await api.walletNonce(address.trim())).message);
     } catch (e) {
       toast.show(e instanceof ApiError ? e.message : 'Invalid address', 'error');
     } finally {
       setBusy(false);
     }
   }
-  async function connect() {
+  async function connectManual() {
     setBusy(true);
     try {
       await api.walletConnect(address.trim(), signature.trim());
       await onConnected();
       haptic('success');
-      toast.show('Wallet connected — mining boosted from your holding ⚡', 'success');
+      toast.show('Wallet connected ⚡', 'success');
     } catch (e) {
       toast.show(e instanceof ApiError ? e.message : 'Could not verify wallet', 'error');
     } finally {
@@ -1000,77 +1029,111 @@ function ConnectWallet({ onConnected }: { onConnected: () => Promise<void> }) {
     }
   }
 
+  const intro = (
+    <div className="rounded-xl border border-ice-400/20 bg-ice-400/5 p-3 text-[12px] leading-relaxed text-white/75">
+      <b className="text-ice-200">Boost your mining rate.</b> The more ICE you hold in your connected
+      wallet, the higher your Level and the faster you mine.
+    </div>
+  );
+
+  // Step: wallet-browser options after a link token is minted.
+  if (link) {
+    return (
+      <div className="space-y-3">
+        {intro}
+        <p className="text-[12px] text-white/60">
+          Open IceBox <b>inside your wallet’s app</b> to connect &amp; sign in one tap:
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => openExternal(link.metamask)} className="btn-primary flex items-center justify-center gap-2 py-3.5 text-sm">
+            🦊 MetaMask
+          </button>
+          <button onClick={() => openExternal(link.trust)} className="btn-primary flex items-center justify-center gap-2 py-3.5 text-sm">
+            🛡️ Trust
+          </button>
+        </div>
+        <button
+          onClick={() => { navigator.clipboard?.writeText(link.connectUrl); toast.show('Link copied — paste it in your wallet’s browser', 'success'); }}
+          className="w-full rounded-xl border border-white/10 py-2.5 text-xs font-semibold text-white/70"
+        >
+          📋 Copy link (paste in any wallet’s browser)
+        </button>
+        <p className="text-center text-[11px] text-ice-300/80">
+          ⏳ Waiting for you to connect… this closes automatically once done.
+        </p>
+        <button onClick={() => { setLink(null); setMode('manual'); }} className="w-full py-1 text-[11px] text-white/40">
+          Advanced: paste address + signature
+        </button>
+      </div>
+    );
+  }
+
+  if (mode === 'manual') {
+    return (
+      <div className="space-y-3">
+        {intro}
+        <p className="text-[11px] text-white/45">
+          Advanced: paste your wallet address, then a signature. Note — most mobile wallets can only
+          sign inside their own browser, so the wallet buttons above are easier.
+        </p>
+        <input
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          placeholder="Your 0x… BSC wallet address"
+          className="w-full rounded-xl bg-white/5 px-3 py-2.5 text-sm outline-none"
+        />
+        {!message ? (
+          <button onClick={getMessage} disabled={busy || address.trim().length < 42} className="btn-primary w-full py-2.5 text-sm disabled:opacity-40">
+            {busy ? '…' : 'Continue'}
+          </button>
+        ) : (
+          <>
+            <div className="rounded-xl bg-white/5 p-3 text-[12px] text-white/70">
+              <div className="rounded-lg bg-black/30 p-2">
+                <code className="block whitespace-pre-wrap break-all text-[11px] text-white/70">{message}</code>
+              </div>
+              <button
+                onClick={() => { navigator.clipboard?.writeText(message); toast.show('Message copied', 'success'); }}
+                className="mt-2 rounded-lg bg-ice-400/15 px-3 py-1.5 text-[12px] font-bold text-ice-200"
+              >
+                📋 Copy message
+              </button>
+            </div>
+            <input
+              value={signature}
+              onChange={(e) => setSignature(e.target.value)}
+              placeholder="Paste the signature (0x…) here"
+              className="w-full rounded-xl bg-white/5 px-3 py-2.5 text-sm outline-none"
+            />
+            <button onClick={connectManual} disabled={busy || signature.trim().length < 10} className="btn-primary w-full py-2.5 text-sm disabled:opacity-40">
+              {busy ? '…' : 'Verify & connect'}
+            </button>
+          </>
+        )}
+        <button onClick={() => { setMode('main'); setMessage(null); }} className="w-full py-1 text-[11px] text-white/40">
+          ← Back
+        </button>
+      </div>
+    );
+  }
+
+  // Main entry.
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-ice-400/20 bg-ice-400/5 p-3 text-[12px] leading-relaxed text-white/75">
-        <b className="text-ice-200">Boost your mining rate.</b> The more ICE you hold in your connected
-        wallet, the higher your Level and the faster you mine.
-      </div>
-
-      {/* Primary path: one-tap connect. Injected → direct; else WalletConnect
-          modal (lists every wallet). */}
-      {!manual && (
-        <>
-          <button onClick={connectOneTap} disabled={busy} className="btn-primary w-full py-3.5 text-base disabled:opacity-50">
-            {busy ? 'Connecting…' : '🔗 Connect Wallet'}
-          </button>
-          <p className="text-center text-[11px] text-white/45">
-            Pick your wallet, approve the connection, and sign — free, no gas.
-          </p>
-          <button onClick={() => setManual(true)} className="w-full rounded-xl border border-white/10 py-2.5 text-xs font-semibold text-white/70">
-            Trouble connecting? Enter address manually
-          </button>
-        </>
-      )}
-
-      {/* Manual fallback. */}
-      {manual && (
-        <>
-          <p className="text-[11px] text-white/45">
-            Paste the address of the wallet you hold ICE in, then prove it’s yours with a quick
-            (free, gasless) signature.
-          </p>
-          <input
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            placeholder="Your 0x… BSC wallet address"
-            className="w-full rounded-xl bg-white/5 px-3 py-2.5 text-sm outline-none"
-          />
-          {!message ? (
-            <button onClick={getMessage} disabled={busy || address.trim().length < 42} className="btn-primary w-full py-2.5 text-sm disabled:opacity-40">
-              {busy ? '…' : 'Continue'}
-            </button>
-          ) : (
-            <>
-              <div className="rounded-xl bg-white/5 p-3 text-[12px] text-white/70">
-                <p className="mb-2">Open your wallet, tap <b>“Sign Message”</b>, paste this, sign, then paste the signature below:</p>
-                <div className="rounded-lg bg-black/30 p-2">
-                  <code className="block whitespace-pre-wrap break-all text-[11px] text-white/70">{message}</code>
-                </div>
-                <button
-                  onClick={() => { navigator.clipboard?.writeText(message); toast.show('Message copied', 'success'); }}
-                  className="mt-2 rounded-lg bg-ice-400/15 px-3 py-1.5 text-[12px] font-bold text-ice-200"
-                >
-                  📋 Copy message
-                </button>
-                <p className="mt-2 text-[11px] text-emerald-300/80">🔒 Free · no gas · cannot move funds.</p>
-              </div>
-              <input
-                value={signature}
-                onChange={(e) => setSignature(e.target.value)}
-                placeholder="Paste the signature (0x…) here"
-                className="w-full rounded-xl bg-white/5 px-3 py-2.5 text-sm outline-none"
-              />
-              <button onClick={connect} disabled={busy || signature.trim().length < 10} className="btn-primary w-full py-2.5 text-sm disabled:opacity-40">
-                {busy ? '…' : 'Verify & connect'}
-              </button>
-              <button onClick={() => setMessage(null)} className="w-full py-1 text-[11px] text-white/40">
-                ← Use a different address
-              </button>
-            </>
-          )}
-        </>
-      )}
+      {intro}
+      <button
+        onClick={injected ? connectInjected : startLink}
+        disabled={busy}
+        className="btn-primary w-full py-3.5 text-base disabled:opacity-50"
+      >
+        {busy ? 'Starting…' : '🔗 Connect Wallet'}
+      </button>
+      <p className="text-center text-[11px] text-white/45">
+        Opens your wallet to connect &amp; sign — free, no gas, can’t move funds.
+      </p>
+      <button onClick={() => setMode('manual')} className="w-full py-1 text-[11px] text-white/40">
+        Advanced: paste address manually
+      </button>
     </div>
   );
 }
