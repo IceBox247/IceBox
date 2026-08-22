@@ -9,20 +9,33 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 /** UTC day index — same value all day, +1 the next UTC day. */
 const dayIndex = (d: Date | number) => Math.floor((typeof d === 'number' ? d : d.getTime()) / MS_PER_DAY);
 
-/** Reward for a given 1-based streak day (clamped to the last configured day). */
-function rewardForStreak(streak: number): number {
-  const r = config.checkin.rewards;
-  if (r.length === 0) return 0;
-  return money(r[Math.min(Math.max(streak, 1), r.length) - 1]);
+/**
+ * Reward for a given 1-based streak day.
+ *  • USDT rail (staker above the threshold): FLAT `base` every day — real
+ *    dollars, no growth, no ICE multiplier.
+ *  • ICE rail: `base × mult`, plus `iceGrowthPerDay` of the day-1 amount for
+ *    each extra streak day (e.g. +10%/day). Capped at `days` so it never grows
+ *    without bound.
+ */
+function rewardForDay(day: number, asUsdt: boolean, mult: number): number {
+  const c = config.checkin;
+  if (asUsdt) return money(c.base); // flat USDT
+  const d = Math.min(Math.max(day, 1), c.days);
+  const grown = c.base * (1 + c.iceGrowthPerDay * (d - 1));
+  return money(grown * mult); // ICE: +growth/day, price-scaled multiplier
 }
 
 /**
- * Compute the current check-in state for a user. `scale` adjusts the DISPLAYED
- * rewards to match what's actually credited: non-stakers get ICE at the
- * price-scaled free-money multiplier (scale = mult), stakers get the raw USDT
- * value (scale = 1). Keeps the ladder honest with the payout.
+ * Compute the current check-in state, using the rail (USDT vs ICE) and the ICE
+ * multiplier so the DISPLAYED ladder matches exactly what gets credited.
  */
-function checkinState(lastCheckIn: Date | null, streak: number, now = new Date(), scale = 1) {
+function checkinState(
+  lastCheckIn: Date | null,
+  streak: number,
+  now: Date,
+  asUsdt: boolean,
+  mult: number,
+) {
   const today = dayIndex(now);
   const last = lastCheckIn ? dayIndex(lastCheckIn) : null;
   const claimedToday = last === today;
@@ -34,27 +47,27 @@ function checkinState(lastCheckIn: Date | null, streak: number, now = new Date()
     claimedToday,
     streak,
     nextStreak,
-    reward: money(rewardForStreak(nextStreak) * scale),
-    rewards: config.checkin.rewards.map((r) => money(r * scale)),
+    reward: rewardForDay(nextStreak, asUsdt, mult),
+    rewards: Array.from({ length: config.checkin.days }, (_, i) => rewardForDay(i + 1, asUsdt, mult)),
     // Start of the next UTC day, when the next claim opens.
     nextClaimAt: new Date((today + 1) * MS_PER_DAY).toISOString(),
   };
 }
 
+/** Whether the user's active staked principal qualifies for the flat-USDT rail. */
+async function isUsdtRail(db: { stake: { aggregate: Function } }, userId: number) {
+  const staked = await db.stake.aggregate({
+    where: { userId, status: 'active' },
+    _sum: { principal: true },
+  });
+  return (staked._sum.principal ?? 0) > config.checkin.usdtMinStake;
+}
+
 /** GET /api/checkin — current streak, whether claimable today, reward schedule. */
 checkinRouter.get('/', async (req, res) => {
   const user = req.user!;
-  const [staked, mult] = await Promise.all([
-    prisma.stake.aggregate({
-      where: { userId: user.id, status: 'active' },
-      _sum: { principal: true },
-    }),
-    getEarnIceMultiplier(),
-  ]);
-  // USDT rail only for meaningful stakers: active staked principal above the
-  // configured threshold ($10 by default). Otherwise ICE at the ×20 multiplier.
-  const asUsdt = (staked._sum.principal ?? 0) > config.checkin.usdtMinStake;
-  res.json({ ...checkinState(user.lastCheckIn, user.checkInStreak, new Date(), asUsdt ? 1 : mult), asUsdt });
+  const [asUsdt, mult] = await Promise.all([isUsdtRail(prisma, user.id), getEarnIceMultiplier()]);
+  res.json({ ...checkinState(user.lastCheckIn, user.checkInStreak, new Date(), asUsdt, mult), asUsdt });
 });
 
 /** POST /api/checkin/claim — claim today's bonus (once per UTC day). */
@@ -73,17 +86,12 @@ checkinRouter.post('/claim', async (req, res) => {
       if (last === today) return { already: true as const };
 
       const streak = last === today - 1 ? fresh.checkInStreak + 1 : 1;
-      const baseReward = rewardForStreak(streak);
 
-      // Reward rail depends on whether the user has staked funds: stakers get
-      // it as USDT-withdrawable (deposited bucket, real $ value); everyone else
-      // gets ICE (earned bucket) at the price-scaled free-money multiplier.
-      const staked = await tx.stake.aggregate({
-        where: { userId: user.id, status: 'active' },
-        _sum: { principal: true },
-      });
-      const asUsdt = (staked._sum.principal ?? 0) > config.checkin.usdtMinStake;
-      const reward = asUsdt ? baseReward : money(baseReward * mult);
+      // Reward rail: stakers above the threshold get a FLAT USDT amount (real $,
+      // deposited bucket); everyone else gets ICE (earned bucket) that grows
+      // 10%/day off the day-1 amount, at the price-scaled multiplier.
+      const asUsdt = await isUsdtRail(tx, user.id);
+      const reward = rewardForDay(streak, asUsdt, mult);
 
       const updated = await tx.user.update({
         where: { id: user.id },
@@ -125,7 +133,7 @@ checkinRouter.post('/claim', async (req, res) => {
       balance: result.balance,
       earnedBalance: result.earnedBalance,
       state: {
-        ...checkinState(now, result.streak, now, result.asUsdt ? 1 : mult),
+        ...checkinState(now, result.streak, now, result.asUsdt, mult),
         asUsdt: result.asUsdt,
       },
     });

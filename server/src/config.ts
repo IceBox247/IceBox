@@ -162,13 +162,14 @@ export const config = {
   // the earned bucket (like tasks). Tune with CHECKIN_REWARDS (comma list).
   checkin: {
     enabled: process.env.CHECKIN_ENABLED !== 'false',
-    rewards: (process.env.CHECKIN_REWARDS ?? '0.05,0.10,0.15,0.20,0.25,0.30,0.50')
-      .split(',')
-      .map((s) => Number(s.trim()))
-      .filter((n) => Number.isFinite(n) && n >= 0),
-    // A user's free bonus is paid as real USDT (no ICE multiplier) only once
-    // their active staked principal is above this many USD; below it they get
-    // ICE at the ×20 (price-scaled) multiplier like everyone else.
+    // Day-1 base reward, in USD. Two very different schedules by rail:
+    //  • USDT stakers: FLAT `base` every day (no growth, no multiplier) — real $.
+    //  • ICE users: `base × iceMultiplier`, growing by `iceGrowthPerDay` of the
+    //    day-1 amount each streak day (e.g. +10%/day), capped at `days`.
+    base: num('CHECKIN_BASE', 0.05),
+    days: Math.max(1, Math.floor(num('CHECKIN_DAYS', 7))),
+    iceGrowthPerDay: Math.max(0, num('CHECKIN_ICE_GROWTH', 0.1)),
+    // USDT rail only kicks in once active staked principal is above this many USD.
     usdtMinStake: num('CHECKIN_USDT_MIN_STAKE', 10),
   },
 
