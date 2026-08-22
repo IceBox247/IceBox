@@ -6,7 +6,7 @@ import { haptic } from '../telegram';
 import { usdt, ice } from '../lib/format';
 import { Sheet } from '../components/Sheet';
 import { sfx, isMuted, toggleMuted } from '../lib/sound';
-import { hasInjectedWallet, requestInjectedAddress, connectAndSign, connectWalletConnect, walletDeepLinks, WC_WALLETS, type WcWallet } from '../lib/wallet';
+import { hasInjectedWallet, requestInjectedAddress, connectAndSign, connectWalletConnect, walletDeepLinks } from '../lib/wallet';
 import { WhitepaperView } from './Whitepaper';
 import type { LevelMiningState, BuyLevelInfo, MinerRankRow, MinerJourney } from '../types';
 
@@ -964,14 +964,15 @@ function ConnectWallet({ onConnected }: { onConnected: () => Promise<void> }) {
     }
   }
 
-  const connectInjected = () =>
+  const connectOneTap = () =>
     doConnect(async () => {
-      const addr = await requestInjectedAddress();
-      const { signature } = await connectAndSign(await nonceFor(addr));
-      return { address: addr, signature };
+      if (injected) {
+        const addr = await requestInjectedAddress();
+        const { signature } = await connectAndSign(await nonceFor(addr));
+        return { address: addr, signature };
+      }
+      return connectWalletConnect(nonceFor);
     });
-
-  const connectWc = (w: WcWallet) => doConnect(() => connectWalletConnect(nonceFor, w));
 
   async function getMessage() {
     setBusy(true);
@@ -1006,34 +1007,18 @@ function ConnectWallet({ onConnected }: { onConnected: () => Promise<void> }) {
         wallet, the higher your Level and the faster you mine.
       </div>
 
-      {/* Primary path: one-tap connect. Injected → single button. In Telegram →
-          pick a wallet, which we deep-link through Telegram (reliable). */}
+      {/* Primary path: one-tap connect. Injected → direct; else WalletConnect
+          modal (lists every wallet). */}
       {!manual && (
         <>
-          {injected ? (
-            <button onClick={connectInjected} disabled={busy} className="btn-primary w-full py-3.5 text-base disabled:opacity-50">
-              {busy ? 'Connecting…' : '🔗 Connect Wallet'}
-            </button>
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              {WC_WALLETS.map((w) => (
-                <button
-                  key={w.key}
-                  onClick={() => connectWc(w)}
-                  disabled={busy}
-                  className="btn-primary flex items-center justify-center gap-2 py-3.5 text-sm disabled:opacity-50"
-                >
-                  <span className="text-lg">{w.icon}</span> {busy ? '…' : w.label}
-                </button>
-              ))}
-            </div>
-          )}
+          <button onClick={connectOneTap} disabled={busy} className="btn-primary w-full py-3.5 text-base disabled:opacity-50">
+            {busy ? 'Connecting…' : '🔗 Connect Wallet'}
+          </button>
           <p className="text-center text-[11px] text-white/45">
-            Opens your wallet to connect &amp; sign — free, no gas. After you approve, tap back to
-            Telegram; if it prompts to sign, approve that too.
+            Pick your wallet, approve the connection, and sign — free, no gas.
           </p>
-          <button onClick={() => setManual(true)} className="w-full py-1 text-[11px] text-white/40">
-            Or enter address manually
+          <button onClick={() => setManual(true)} className="w-full rounded-xl border border-white/10 py-2.5 text-xs font-semibold text-white/70">
+            Trouble connecting? Enter address manually
           </button>
         </>
       )}
