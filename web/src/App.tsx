@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useStore } from './store';
+import { api } from './api';
 import { LoadingScreen } from './components/Loading';
 import { Header } from './components/Header';
 import { BottomNav, type Tab } from './components/BottomNav';
@@ -16,6 +17,7 @@ import { CheckinSheet } from './sheets/CheckinSheet';
 import { LaunchSheet } from './sheets/LaunchSheet';
 import { AdminSheet } from './sheets/AdminSheet';
 import { ImportTokenSheet } from './sheets/ImportTokenSheet';
+import { NotificationsSheet, getLastSeen } from './sheets/NotificationsSheet';
 
 export default function App() {
   const { loading, error, me, refreshAll } = useStore();
@@ -28,6 +30,26 @@ export default function App() {
   const [launchOpen, setLaunchOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [unread, setUnread] = useState(false);
+
+  // Poll the activity feed for the bell's unread dot: something newer than the
+  // last id this device has opened up to. Runs while the app is mounted.
+  useEffect(() => {
+    if (!me) return;
+    let alive = true;
+    const check = () =>
+      api
+        .notifications(getLastSeen())
+        .then((r) => alive && setUnread(r.unread > 0))
+        .catch(() => {});
+    check();
+    const id = setInterval(check, 60_000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [me]);
 
   if (loading) return <LoadingScreen />;
 
@@ -45,7 +67,11 @@ export default function App() {
 
   return (
     <div className="mx-auto min-h-screen max-w-md bg-night-900 hex-bg">
-      <Header onMenu={() => setMenuOpen(true)} />
+      <Header
+        onMenu={() => setMenuOpen(true)}
+        onBell={() => setNotifOpen(true)}
+        unread={unread}
+      />
 
       <main className="pt-2">
         {tab === 'home' && (
@@ -87,6 +113,11 @@ export default function App() {
       <LaunchSheet open={launchOpen} onClose={() => setLaunchOpen(false)} />
       <AdminSheet open={adminOpen} onClose={() => setAdminOpen(false)} />
       <ImportTokenSheet open={importOpen} onClose={() => setImportOpen(false)} />
+      <NotificationsSheet
+        open={notifOpen}
+        onClose={() => setNotifOpen(false)}
+        onSeen={() => setUnread(false)}
+      />
     </div>
   );
 }

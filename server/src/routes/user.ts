@@ -4,8 +4,22 @@ import { config, dextopusReady } from '../config';
 import { publicUser } from '../services/users';
 import { isAdminTelegramId } from '../services/admin';
 import { getIcePriceUsd } from '../services/chain';
+import { userNotifications } from '../services/notifications';
 
 export const userRouter = Router();
+
+/**
+ * GET /api/notifications?since=<id>
+ * The user's in-app activity feed, built from their ledger (deposits, mining
+ * claims, referral earnings, check-ins, stake rewards, withdrawals…), newest
+ * first. `since` is the id of the last item this device has seen — the response
+ * reports how many are newer (for the bell's unread dot).
+ */
+userRouter.get('/notifications', async (req, res) => {
+  const user = req.user!;
+  const since = Number(req.query.since) || 0;
+  res.json(await userNotifications(user.id, since));
+});
 
 /**
  * GET /api/me

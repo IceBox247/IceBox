@@ -368,6 +368,23 @@ export interface LevelMiningState {
   };
 }
 
+export interface AppNotification {
+  id: number;
+  kind: string;
+  icon: string;
+  title: string;
+  detail: string;
+  amount: number;
+  token: 'ice' | 'usdt';
+  at: string;
+}
+
+export interface NotificationsResponse {
+  notifications: AppNotification[];
+  unread: number;
+  latestId: number;
+}
+
 export interface JourneyPoint {
   at: string;
   level: number;

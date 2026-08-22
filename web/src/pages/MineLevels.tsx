@@ -130,8 +130,11 @@ export function MineLevels({ mining, onDeposit }: Props) {
         @keyframes minePop{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
         @keyframes mineGlow{0%,100%{box-shadow:0 0 40px -6px rgba(51,194,255,.6)}50%{box-shadow:0 0 70px 0 rgba(51,194,255,.9)}}
         @keyframes mineHalo{0%,100%{opacity:.45;transform:translate(-50%,-50%) scale(1)}50%{opacity:.85;transform:translate(-50%,-50%) scale(1.12)}}
-        @keyframes mineRise{0%{transform:translateY(0);opacity:0}15%{opacity:1}100%{transform:translateY(-120px);opacity:0}}
+        @keyframes mineRise{0%{transform:translateY(0);opacity:0}15%{opacity:1}100%{transform:translateY(-96px);opacity:0}}
         @keyframes mineFlicker{0%,100%{opacity:.9}50%{opacity:.35}}
+        @keyframes coinBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+        @keyframes coinSpin3d{0%,100%{transform:rotateY(-16deg)}50%{transform:rotateY(16deg)}}
+        @keyframes coinShine{0%{transform:translateX(-140%) rotate(20deg)}60%,100%{transform:translateX(160%) rotate(20deg)}}
       `}</style>
 
       {/* Header */}
@@ -209,38 +212,38 @@ export function MineLevels({ mining, onDeposit }: Props) {
         </div>
       </div>
 
-      {/* Rig hero — the rig image is baked onto this exact background colour */}
-      <div className="relative overflow-hidden rounded-2xl border border-ice-400/20 p-4" style={{ background: '#08182b' }}>
-        <div className="relative z-10 mx-auto mb-1 w-fit rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-emerald-400">
+      {/* Coin hero — the spinning ICE coin, tap to claim */}
+      <div className="relative overflow-hidden rounded-2xl border border-ice-400/20 py-4" style={{ background: 'radial-gradient(120% 80% at 50% 0%, #0e2740 0%, #08182b 70%)' }}>
+        <div className="relative z-10 mx-auto mb-3 w-fit rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-emerald-400">
           <span style={{ animation: 'mineFlicker 1.4s ease-in-out infinite' }}>●</span> Mining Active
         </div>
 
-        {/* rig image — tap to claim */}
-        <div className="relative mx-auto w-full max-w-[320px]">
-          {/* rotating conic halo + pulsing glow behind the rig */}
+        {/* coin — tap to claim */}
+        <div className="relative mx-auto h-[210px] w-[210px]" style={{ perspective: '900px' }}>
+          {/* rotating conic halo + pulsing glow behind the coin */}
           <div
-            className="pointer-events-none absolute left-1/2 top-1/2 h-[280px] w-[280px] rounded-full"
+            className="pointer-events-none absolute left-1/2 top-1/2 h-[250px] w-[250px] rounded-full"
             style={{
-              background: 'conic-gradient(from 0deg, rgba(51,194,255,0), rgba(51,194,255,.35), rgba(51,194,255,0), rgba(120,220,255,.3), rgba(51,194,255,0))',
+              background: 'conic-gradient(from 0deg, rgba(51,194,255,0), rgba(51,194,255,.4), rgba(51,194,255,0), rgba(120,220,255,.35), rgba(51,194,255,0))',
               transform: 'translate(-50%,-50%)',
-              animation: 'mineSpin 9s linear infinite',
-              filter: 'blur(14px)',
+              animation: 'mineSpin 8s linear infinite',
+              filter: 'blur(16px)',
             }}
           />
           <div
-            className="pointer-events-none absolute left-1/2 top-1/2 h-[220px] w-[220px] rounded-full"
+            className="pointer-events-none absolute left-1/2 top-1/2 h-[200px] w-[200px] rounded-full"
             style={{
-              background: 'radial-gradient(circle, rgba(51,194,255,.35) 0%, rgba(51,194,255,0) 65%)',
+              background: 'radial-gradient(circle, rgba(51,194,255,.4) 0%, rgba(51,194,255,0) 62%)',
               animation: 'mineHalo 3s ease-in-out infinite',
             }}
           />
-          {/* floating spark particles rising off the rig */}
+          {/* floating spark particles rising off the coin */}
           {[...Array(6)].map((_, i) => (
             <span
               key={i}
-              className="pointer-events-none absolute bottom-8 h-1 w-1 rounded-full bg-ice-200"
+              className="pointer-events-none absolute bottom-4 z-20 h-1 w-1 rounded-full bg-ice-100"
               style={{
-                left: `${18 + i * 12}%`,
+                left: `${20 + i * 11}%`,
                 boxShadow: '0 0 6px 1px rgba(120,220,255,.9)',
                 animation: `mineRise ${3 + (i % 3)}s ease-in ${i * 0.5}s infinite`,
               }}
@@ -249,14 +252,33 @@ export function MineLevels({ mining, onDeposit }: Props) {
           <button
             onClick={() => { sfx.tap(); collect(); }}
             disabled={busy}
-            className="relative z-10 block w-full select-none transition active:scale-95"
-            style={{ animation: 'mineBob 4s ease-in-out infinite' }}
+            aria-label="Claim mined ICE"
+            className="relative z-10 block h-full w-full select-none rounded-full transition active:scale-95"
+            style={{ animation: 'coinBob 4s ease-in-out infinite' }}
           >
-            <img src="/rig.png" alt="ICE mining rig" draggable={false} className="w-full" />
+            <div className="relative h-full w-full" style={{ transformStyle: 'preserve-3d', animation: 'coinSpin3d 5s ease-in-out infinite' }}>
+              <img
+                src="/coin.png"
+                alt="ICE coin"
+                draggable={false}
+                className="h-full w-full rounded-full"
+                style={{ filter: 'drop-shadow(0 8px 22px rgba(51,194,255,.55))' }}
+              />
+              {/* moving shine sweep across the coin face */}
+              <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
+                <div
+                  className="absolute -inset-y-4 left-0 w-1/3"
+                  style={{
+                    background: 'linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent)',
+                    animation: 'coinShine 4.5s ease-in-out infinite',
+                  }}
+                />
+              </div>
+            </div>
           </button>
         </div>
 
-        <div className="relative z-10 mx-auto mt-2 w-fit rounded-xl border border-ice-400/20 bg-black/25 px-5 py-2 text-center">
+        <div className="relative z-10 mx-auto mt-3 w-fit rounded-xl border border-ice-400/20 bg-black/25 px-5 py-2 text-center">
           <div>
             <span className="text-xl font-extrabold tabular-nums text-ice-300">+{fmtLiveIce(pending)}</span>
             <span className="ml-2 text-[11px] font-semibold uppercase tracking-wide text-white/60">Ready to claim</span>

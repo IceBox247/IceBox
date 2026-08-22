@@ -16,6 +16,7 @@ import type {
   BuyLevelInfo,
   MiningLeaderboard,
   MinerJourney,
+  NotificationsResponse,
   AdminStats,
 } from './types';
 
@@ -154,4 +155,6 @@ export const api = {
       body: JSON.stringify({ level }),
     }),
   adminStats: () => request<AdminStats>('/admin/stats'),
+  notifications: (since = 0) =>
+    request<NotificationsResponse>(`/notifications?since=${since}`),
 };
