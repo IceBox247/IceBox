@@ -117,6 +117,21 @@ miningRouter.post('/wallet/connect', async (req, res) => {
   if (!verifyWalletSignature(address, fresh.walletNonce, signature)) {
     return res.status(400).json({ error: 'bad_signature', message: 'Signature did not match this wallet.' });
   }
+  // One wallet = one account: refuse if another verified user already holds it.
+  const taken = await prisma.user.findFirst({
+    where: {
+      walletAddress: { equals: address, mode: 'insensitive' },
+      walletVerifiedAt: { not: null },
+      NOT: { id: user.id },
+    },
+    select: { id: true },
+  });
+  if (taken) {
+    return res.status(409).json({
+      error: 'wallet_taken',
+      message: 'This wallet is already linked to another IceBox account.',
+    });
+  }
   await prisma.user.update({
     where: { id: user.id },
     data: { walletAddress: address, walletVerifiedAt: new Date(), walletNonce: null },

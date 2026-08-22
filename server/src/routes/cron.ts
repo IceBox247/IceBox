@@ -102,6 +102,21 @@ cronRouter.get('/resync-levels', async (req, res) => {
 });
 
 /**
+ * GET /api/cron/dedupe-wallets — enforce one-wallet-per-account on existing
+ * data: unbind wallets shared across multiple accounts (earliest keeps it).
+ */
+cronRouter.get('/dedupe-wallets', async (req, res) => {
+  if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
+  try {
+    const { dedupeWallets } = await import('../services/levels');
+    res.json({ ok: true, ...(await dedupeWallets()) });
+  } catch (e) {
+    console.error('[cron] dedupe-wallets failed', e);
+    res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+/**
  * GET /api/cron/adjust-balance — operator balance correction (self-serve).
  * Params: secret, (username=@name OR userId=123), amount (e.g. -8 to deduct,
  * 8 to add), optional bucket=deposited|earned (default deposited), reason.

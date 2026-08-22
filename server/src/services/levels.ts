@@ -216,6 +216,45 @@ export async function resyncAllLevels() {
   return { updated, clearedPending };
 }
 
+/**
+ * Enforce one-wallet-per-account on EXISTING data: if a wallet is linked to
+ * several accounts, the earliest verified one keeps it; the rest are unbound
+ * (on-chain holding zeroed, level recomputed from any migration bonus only).
+ */
+export async function dedupeWallets() {
+  const c = L();
+  const users = await prisma.user.findMany({
+    where: { walletAddress: { not: null }, walletVerifiedAt: { not: null } },
+    select: { id: true, walletAddress: true },
+    orderBy: { walletVerifiedAt: 'asc' }, // earliest keeps the wallet
+  });
+  const seen = new Set<string>();
+  let unbound = 0;
+  for (const u of users) {
+    const key = (u.walletAddress ?? '').toLowerCase();
+    if (!key) continue;
+    if (!seen.has(key)) {
+      seen.add(key);
+      continue;
+    }
+    // Duplicate → unbind this (later) account.
+    const miner = await prisma.miner.findUnique({ where: { userId: u.id } });
+    const level = c.levelForHolding(money(miner?.bonusHoldingUsd ?? 0));
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: u.id },
+        data: { walletAddress: null, walletVerifiedAt: null, walletNonce: null },
+      }),
+      prisma.miner.updateMany({
+        where: { userId: u.id },
+        data: { holdingUsd: money(miner?.bonusHoldingUsd ?? 0), holdingTokens: 0, level, peakLevel: level },
+      }),
+    ]);
+    unbound++;
+  }
+  return { checked: users.length, unbound };
+}
+
 /** What it takes to reach a target level, qualified on the user's ASSETS
  * (wallet holding + pool wallet), matching the ATF-style buy sheet. */
 export function buyLevelInfo(targetLevel: number, assetsUsd: number, price: number) {
