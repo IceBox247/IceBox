@@ -65,6 +65,16 @@ export async function getIcePriceUsd(): Promise<number> {
 }
 
 /**
+ * Last known ICE price WITHOUT awaiting an RPC read — the value cached by
+ * `getIcePriceUsd()`, or the configured fallback. Used in synchronous accrual
+ * paths (e.g. mining rate) where we can't await; callers that need a fresh read
+ * should `await getIcePriceUsd()` first (which refreshes this cache).
+ */
+export function lastIcePriceUsd(): number {
+  return priceCache.usd > 0 ? priceCache.usd : config.miningLevels.price;
+}
+
+/**
  * Multiplier that turns a free-money reward into ICE tokens, scaled by price so
  * the ICE quantity divides by `divisorPer10x` for every 10x the price rises
  * above basePrice (and multiplies as it falls). Keeps free gifts from ballooning

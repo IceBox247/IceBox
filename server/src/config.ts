@@ -520,8 +520,27 @@ export const config = {
       return Math.max(0, Math.min(count, l));
     };
     const yieldRatio = Math.pow(maxYield / minYield, 1 / (count - 1));
-    const yieldForLevel = (lvl: number) =>
-      lvl < 1 ? 0 : round4(minYield * Math.pow(yieldRatio, Math.min(count, lvl) - 1));
+    const baseYieldForLevel = (lvl: number) =>
+      lvl < 1 ? 0 : minYield * Math.pow(yieldRatio, Math.min(count, lvl) - 1);
+
+    // Global mining-rate multiplier applied to every level's daily yield, scaled
+    // DOWN as the token price rises: `mult` at the base price, halving for every
+    // `divisorPer5x`-fold (default 5×) price increase. Below the base price it is
+    // clamped to `mult` (never boosts). This keeps ICE/day meaningful while the
+    // price is tiny and self-tapers as ICE appreciates.
+    const yieldMult = Math.max(0.0001, num('MINE_YIELD_MULTIPLIER', 35));
+    const yieldBasePrice = num('MINE_YIELD_BASE_PRICE', 0.0000442);
+    const yieldPer5x = Math.max(1.0001, num('MINE_YIELD_DIVISOR_PER_5X', 2));
+    // exponent so that a 5× price rise multiplies yield by 1/divisorPer5x.
+    const yieldExp = Math.log(yieldPer5x) / Math.log(5);
+    const yieldMultiplierForPrice = (px: number) => {
+      const p = px > 0 ? px : yieldBasePrice;
+      const eff = Math.max(p, yieldBasePrice); // no boost below the base price
+      return yieldMult * Math.pow(yieldBasePrice / eff, yieldExp);
+    };
+    // Level yield AFTER the price-scaled multiplier — this is the real ICE/day.
+    const yieldForLevel = (lvl: number, px = yieldBasePrice) =>
+      round4(baseYieldForLevel(lvl) * yieldMultiplierForPrice(px));
 
     return {
       enabled: model === 'levels',
@@ -537,6 +556,9 @@ export const config = {
       referralYieldPerRef,
       swapUrlBase,
       speedUnit,
+      yieldMult,
+      yieldBasePrice,
+      yieldMultiplierForPrice,
       requiredUsdFor,
       levelForHolding,
       yieldForLevel,

@@ -210,7 +210,7 @@ export function serializeLevelMining(
   // at token precision so the "ready to claim" number visibly ticks up.
   const ice8 = (n: number) => Math.round(Math.max(0, n) * 1e8) / 1e8;
   const level = miner.level;
-  const dailyBase = c.yieldForLevel(level);
+  const dailyBase = c.yieldForLevel(level, px);
   const referralBonus = refs * c.referralYieldPerRef;
   const perDayRaw = dailyBase + referralBonus;
   const perDay = ice8(perDayRaw);

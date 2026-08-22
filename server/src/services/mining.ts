@@ -1,6 +1,7 @@
 import type { Miner, User } from '@prisma/client';
 import { prisma, money } from '../db';
 import { config } from '../config';
+import { lastIcePriceUsd } from './chain';
 
 const MS_PER_DAY = 86_400_000;
 
@@ -50,8 +51,10 @@ function ratePerHour(boughtHashrate: number, referralMiners: number): number {
  */
 export function minerRatePerHour(miner: Miner, referralMiners: number): number {
   if (config.miningLevels.enabled) {
+    // Level yield is price-scaled (35× base, tapering as price rises). Use the
+    // last cached price so this stays synchronous for accrual.
     const daily =
-      config.miningLevels.yieldForLevel(miner.level) +
+      config.miningLevels.yieldForLevel(miner.level, lastIcePriceUsd()) +
       referralMiners * config.miningLevels.referralYieldPerRef;
     return daily / 24;
   }
