@@ -6,6 +6,7 @@ import { haptic } from '../telegram';
 import { usdt, ice } from '../lib/format';
 import { Sheet } from '../components/Sheet';
 import { sfx, isMuted, toggleMuted } from '../lib/sound';
+import { WhitepaperView } from './Whitepaper';
 import type { LevelMiningState, BuyLevelInfo, MinerRankRow, MinerJourney } from '../types';
 
 /** Compact USD: $0.13 · $103K · $3.25M. */
@@ -91,6 +92,7 @@ export function MineLevels({ mining, onDeposit }: Props) {
   const [storeOpen, setStoreOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
+  const [paperOpen, setPaperOpen] = useState(false);
   const [soundOff, setSoundOff] = useState(isMuted);
 
   // Celebrate whenever the mining level ticks up (chime + haptic).
@@ -329,6 +331,22 @@ export function MineLevels({ mining, onDeposit }: Props) {
           setConnectOpen(true);
         }}
       />
+      {/* Floating whitepaper button (like ATF's "?") */}
+      <button
+        onClick={() => { sfx.click(); setPaperOpen(true); }}
+        aria-label="White paper"
+        className="fixed bottom-24 left-4 z-30 grid h-12 w-12 place-items-center rounded-full border border-ice-400/40 bg-night-900/80 text-xl font-black text-ice-200 shadow-[0_0_24px_-4px_rgba(51,194,255,0.7)] backdrop-blur"
+      >
+        ?
+      </button>
+
+      <Sheet open={paperOpen} onClose={() => setPaperOpen(false)} title="White Paper">
+        <WhitepaperView />
+        <button onClick={() => setPaperOpen(false)} className="btn-ghost mt-2 w-full py-3">
+          Close
+        </button>
+      </Sheet>
+
       <LeaderboardSheet open={boardOpen} onClose={() => setBoardOpen(false)} unit={mining.speedUnit} />
       <Sheet open={connectOpen} onClose={() => setConnectOpen(false)} title="Connect Wallet">
         {mining.wallet.verified ? (

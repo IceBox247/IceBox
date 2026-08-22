@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useStore } from './store';
 import { api } from './api';
+import { isTelegram } from './telegram';
+import { Landing } from './pages/Landing';
 import { LoadingScreen } from './components/Loading';
 import { Header } from './components/Header';
 import { BottomNav, type Tab } from './components/BottomNav';
@@ -50,6 +52,10 @@ export default function App() {
       clearInterval(id);
     };
   }, [me]);
+
+  // Outside Telegram (a normal browser visitor), serve the public marketing
+  // site + whitepaper instead of the Mini App, which needs signed Telegram data.
+  if (!isTelegram) return <Landing />;
 
   if (loading) return <LoadingScreen />;
 
