@@ -166,6 +166,10 @@ export const config = {
       .split(',')
       .map((s) => Number(s.trim()))
       .filter((n) => Number.isFinite(n) && n >= 0),
+    // A user's free bonus is paid as real USDT (no ICE multiplier) only once
+    // their active staked principal is above this many USD; below it they get
+    // ICE at the ×20 (price-scaled) multiplier like everyone else.
+    usdtMinStake: num('CHECKIN_USDT_MIN_STAKE', 10),
   },
 
   staking: {

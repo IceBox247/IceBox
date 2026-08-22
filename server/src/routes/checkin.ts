@@ -44,11 +44,16 @@ function checkinState(lastCheckIn: Date | null, streak: number, now = new Date()
 /** GET /api/checkin — current streak, whether claimable today, reward schedule. */
 checkinRouter.get('/', async (req, res) => {
   const user = req.user!;
-  const [activeStakes, mult] = await Promise.all([
-    prisma.stake.count({ where: { userId: user.id, status: 'active' } }),
+  const [staked, mult] = await Promise.all([
+    prisma.stake.aggregate({
+      where: { userId: user.id, status: 'active' },
+      _sum: { principal: true },
+    }),
     getEarnIceMultiplier(),
   ]);
-  const asUsdt = activeStakes > 0;
+  // USDT rail only for meaningful stakers: active staked principal above the
+  // configured threshold ($10 by default). Otherwise ICE at the ×20 multiplier.
+  const asUsdt = (staked._sum.principal ?? 0) > config.checkin.usdtMinStake;
   res.json({ ...checkinState(user.lastCheckIn, user.checkInStreak, new Date(), asUsdt ? 1 : mult), asUsdt });
 });
 
@@ -73,8 +78,11 @@ checkinRouter.post('/claim', async (req, res) => {
       // Reward rail depends on whether the user has staked funds: stakers get
       // it as USDT-withdrawable (deposited bucket, real $ value); everyone else
       // gets ICE (earned bucket) at the price-scaled free-money multiplier.
-      const activeStakes = await tx.stake.count({ where: { userId: user.id, status: 'active' } });
-      const asUsdt = activeStakes > 0;
+      const staked = await tx.stake.aggregate({
+        where: { userId: user.id, status: 'active' },
+        _sum: { principal: true },
+      });
+      const asUsdt = (staked._sum.principal ?? 0) > config.checkin.usdtMinStake;
       const reward = asUsdt ? baseReward : money(baseReward * mult);
 
       const updated = await tx.user.update({
