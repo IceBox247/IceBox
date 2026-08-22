@@ -363,12 +363,32 @@ export function MineLevels({ mining, onDeposit }: Props) {
   );
 }
 
+/** Compact ICE amount for P&L labels: 4,739 · 1.2K · 42.75. */
+function fmtIceC(n: number): string {
+  const a = Math.abs(n);
+  if (a >= 1000) return n.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  if (a >= 1) return n.toFixed(2);
+  return n.toFixed(4);
+}
+/** ICE-denominated asset value of a journey point (assetsUsd priced in ICE). */
+function pointIce(assetsUsd: number, price: number): number {
+  return price > 0 ? assetsUsd / price : 0;
+}
+
 /**
- * "Level Journey" stats card — an ExpertOption-style trading panel showing the
- * user's level over time as a glowing area chart, with current/peak levels and
- * today's P&L (change in total assets). Refetches each time the store opens.
+ * "My Level Journey" stats card — a trading-style panel showing the user's total
+ * ICE assets over time as a glowing area chart, with current/peak level and
+ * today's P&L (change in ICE assets). Tap to open the full PNL chart.
  */
-function JourneyCard({ open, level, speedUnit }: { open: boolean; level: number; speedUnit: string }) {
+function JourneyCard({
+  open,
+  level,
+  onOpen,
+}: {
+  open: boolean;
+  level: number;
+  onOpen: (j: MinerJourney) => void;
+}) {
   const [j, setJ] = useState<MinerJourney | null>(null);
   useEffect(() => {
     if (!open) return;
@@ -376,58 +396,57 @@ function JourneyCard({ open, level, speedUnit }: { open: boolean; level: number;
     api.miningJourney().then(setJ).catch(() => setJ(null));
   }, [open, level]);
 
-  // Build the area path from the recorded points (fallback: a flat line at the
-  // current level so the card still renders on a brand-new miner).
+  const price = j?.price ?? 0;
   const W = 300;
-  const H = 96;
+  const H = 84;
   const pts = j?.points?.length ? j.points : [{ level, assetsUsd: 0, at: '' }];
-  const series = pts.length === 1 ? [pts[0], pts[0]] : pts;
-  const vals = series.map((p) => p.level);
+  const raw = pts.length === 1 ? [pts[0], pts[0]] : pts;
+  const vals = raw.map((p) => pointIce(p.assetsUsd, price));
   const min = Math.min(...vals);
   const max = Math.max(...vals);
   const span = max - min || 1;
-  const up = (j?.todayChangeUsd ?? 0) >= 0;
+  const changeIce = pointIce(j?.todayChangeUsd ?? 0, price);
+  const up = changeIce >= 0;
   const stroke = up ? '#34d399' : '#f87171';
-  const coords = series.map((p, i) => {
-    const x = (i / (series.length - 1)) * W;
-    // Leave 12px headroom top/bottom so the line never clips.
-    const y = 12 + (1 - (p.level - min) / span) * (H - 24);
+  const coords = vals.map((v, i) => {
+    const x = (i / (vals.length - 1)) * W;
+    const y = 10 + (1 - (v - min) / span) * (H - 20);
     return [x, y] as const;
   });
   const line = coords.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
   const area = `${line} L${W},${H} L0,${H} Z`;
   const [ex, ey] = coords[coords.length - 1];
-
-  const changeUsd = j?.todayChangeUsd ?? 0;
-  const changePct = j?.todayChangePct ?? 0;
+  const atAth = (j?.current ?? level) >= (j?.peak ?? level);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-ice-400/15 bg-gradient-to-b from-white/[0.05] to-transparent">
+    <button
+      onClick={() => j && onOpen(j)}
+      disabled={!j}
+      className="block w-full overflow-hidden rounded-2xl border border-emerald-400/20 bg-gradient-to-b from-emerald-400/[0.07] to-transparent text-left"
+    >
       <div className="flex items-start justify-between px-4 pt-3.5">
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/40">Level Journey</div>
-          <div className="mt-0.5 flex items-end gap-1.5">
-            <span className="text-3xl font-black leading-none text-ice-100">Lv {j?.current ?? level}</span>
+          <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/40">My Level Journey</div>
+          <div className="mt-0.5 text-lg font-black leading-tight text-ice-100">
+            Level {j?.current ?? level} <span className="text-white/40">· Peak {j?.peak ?? level}</span>
           </div>
-          <div className="mt-1 text-[11px] text-white/45">
-            Peak <b className="text-ice-200">Lv {j?.peak ?? level}</b>
+          <div className="mt-1 flex items-baseline gap-1.5 text-[11px]">
+            <span className="text-white/45">Today’s P&amp;L</span>
+            <b className={`tabular-nums ${up ? 'text-emerald-300' : 'text-red-300'}`}>
+              {up ? '+' : '−'}{fmtIceC(Math.abs(changeIce))} ICE
+            </b>
           </div>
         </div>
-        <div className="text-right">
-          <div
-            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold tabular-nums ${
-              up ? 'bg-emerald-400/15 text-emerald-300' : 'bg-red-400/15 text-red-300'
-            }`}
-          >
-            {up ? '▲' : '▼'} {changePct >= 0 ? '+' : ''}{changePct.toFixed(2)}%
-          </div>
-          <div className={`mt-1 text-[11px] font-semibold tabular-nums ${up ? 'text-emerald-300/80' : 'text-red-300/80'}`}>
-            {changeUsd >= 0 ? '+' : '−'}{fmtUsd(Math.abs(changeUsd))} today
-          </div>
+        <div
+          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-extrabold ${
+            atAth ? 'bg-emerald-400/15 text-emerald-300' : 'bg-white/10 text-white/60'
+          }`}
+        >
+          ▲ {atAth ? 'All-time high' : 'Journey'}
         </div>
       </div>
 
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="mt-2 block h-24 w-full">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="mt-2 block h-20 w-full">
         <defs>
           <linearGradient id="jArea" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={stroke} stopOpacity="0.35" />
@@ -443,18 +462,209 @@ function JourneyCard({ open, level, speedUnit }: { open: boolean; level: number;
         </defs>
         <path d={area} fill="url(#jArea)" />
         <path d={line} fill="none" stroke={stroke} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" filter="url(#jGlow)" />
-        <circle cx={ex} cy={ey} r="3.5" fill={stroke} filter="url(#jGlow)" />
         <circle cx={ex} cy={ey} r="3.5" fill={stroke}>
           <animate attributeName="r" values="3.5;7;3.5" dur="1.8s" repeatCount="indefinite" />
           <animate attributeName="opacity" values="0.9;0;0.9" dur="1.8s" repeatCount="indefinite" />
         </circle>
       </svg>
 
-      <div className="flex items-center justify-between border-t border-white/5 px-4 py-2 text-[10px] text-white/40">
-        <span>{j ? `${series.length} snapshots` : 'Loading…'}</span>
-        <span>{speedUnit} climbs as your holding grows</span>
+      <div className="flex items-center justify-between border-t border-emerald-400/10 px-4 py-2.5 text-xs font-bold text-emerald-300">
+        <span>📈 {j ? 'Tap to view full PNL chart' : 'Loading…'}</span>
+        <span aria-hidden>→</span>
       </div>
-    </div>
+    </button>
+  );
+}
+
+/**
+ * Full-screen P&L chart — the user's total ICE assets across every recorded
+ * journey snapshot. Pan by dragging, zoom with pinch or wheel, tap a point to
+ * read its level/value/date (ATF-style tracking).
+ */
+function FullPnlSheet({
+  open,
+  onClose,
+  data,
+}: {
+  open: boolean;
+  onClose: () => void;
+  data: MinerJourney | null;
+}) {
+  const price = data?.price ?? 0;
+  const series = useMemo(() => {
+    const pts = data?.points ?? [];
+    const arr = pts.map((p) => ({ ...p, ice: pointIce(p.assetsUsd, price) }));
+    return arr.length === 1 ? [arr[0], arr[0]] : arr;
+  }, [data, price]);
+
+  const [zoom, setZoom] = useState(1);
+  const [sel, setSel] = useState<number | null>(null);
+  useEffect(() => {
+    if (open) {
+      setZoom(1);
+      setSel(null);
+    }
+  }, [open]);
+
+  const changeIce = pointIce(data?.todayChangeUsd ?? 0, price);
+  const up = changeIce >= 0;
+  const stroke = up ? '#34d399' : '#f87171';
+  const atAth = (data?.current ?? 0) >= (data?.peak ?? 0);
+
+  // Chart geometry. Inner width scales with zoom; the scroll container pans.
+  const H = 300;
+  const baseW = 320;
+  const W = Math.round(baseW * zoom);
+  const padT = 16;
+  const padB = 28;
+  const vals = series.map((p) => p.ice);
+  const min = Math.min(...vals, 0);
+  const max = Math.max(...vals, 1);
+  const span = max - min || 1;
+  const xOf = (i: number) => (series.length <= 1 ? 0 : (i / (series.length - 1)) * (W - 8) + 4);
+  const yOf = (v: number) => padT + (1 - (v - min) / span) * (H - padT - padB);
+  const coords = series.map((p, i) => [xOf(i), yOf(p.ice)] as const);
+  const line = coords.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const areaPath = `${line} L${coords[coords.length - 1]?.[0] ?? 0},${H - padB} L${coords[0]?.[0] ?? 0},${H - padB} Z`;
+
+  // Pinch-to-zoom (two-finger) tracking.
+  const pinch = useRef<{ d: number; z: number } | null>(null);
+  const dist = (t: React.TouchList) =>
+    Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+
+  const yTicks = [max, min + span * 0.66, min + span * 0.33, min];
+
+  return (
+    <Sheet open={open} onClose={onClose} title="Level Journey">
+      {!data ? (
+        <div className="py-16 text-center text-white/40">Loading…</div>
+      ) : (
+        <div className="space-y-4">
+          {/* Stat tiles */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-white/40">Current</div>
+              <div className="mt-1 text-xl font-black">Lv {data.current}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-white/40">Peak</div>
+              <div className="mt-1 text-xl font-black text-emerald-300">Lv {data.peak}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-white/40">Today</div>
+              <div className={`mt-1 text-lg font-black ${up ? 'text-emerald-300' : 'text-red-300'}`}>
+                {up ? '▲' : '▼'} {up ? '+' : '−'}{fmtIceC(Math.abs(changeIce))}
+              </div>
+            </div>
+          </div>
+
+          <div className="text-center text-[11px] font-semibold uppercase tracking-wide text-white/40">
+            {atAth ? '❄️ At all-time high' : 'Total ICE assets over time'}
+          </div>
+
+          {/* Interactive chart: scroll = pan, pinch/wheel = zoom, tap = detail */}
+          <div
+            className="relative overflow-x-auto no-scrollbar rounded-2xl border border-white/10 bg-black/30"
+            onWheel={(e) => {
+              if (e.ctrlKey || Math.abs(e.deltaY) > 0) {
+                setZoom((z) => Math.min(6, Math.max(1, z - Math.sign(e.deltaY) * 0.2)));
+              }
+            }}
+            onTouchStart={(e) => {
+              if (e.touches.length === 2) pinch.current = { d: dist(e.touches), z: zoom };
+            }}
+            onTouchMove={(e) => {
+              if (e.touches.length === 2 && pinch.current) {
+                const ratio = dist(e.touches) / pinch.current.d;
+                setZoom(Math.min(6, Math.max(1, pinch.current.z * ratio)));
+              }
+            }}
+            onTouchEnd={() => {
+              pinch.current = null;
+            }}
+          >
+            <svg
+              width={W}
+              height={H}
+              viewBox={`0 0 ${W} ${H}`}
+              className="block touch-pan-x"
+              onClick={(e) => {
+                const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
+                const x = ((e.clientX - rect.left) / rect.width) * W;
+                let best = 0;
+                let bd = Infinity;
+                coords.forEach(([cx], i) => {
+                  const d = Math.abs(cx - x);
+                  if (d < bd) {
+                    bd = d;
+                    best = i;
+                  }
+                });
+                setSel(best);
+              }}
+            >
+              <defs>
+                <linearGradient id="pnlArea" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={stroke} stopOpacity="0.3" />
+                  <stop offset="100%" stopColor={stroke} stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              {/* gridlines */}
+              {yTicks.map((v, i) => (
+                <g key={i}>
+                  <line x1="0" x2={W} y1={yOf(v)} y2={yOf(v)} stroke="rgba(255,255,255,.06)" strokeWidth="1" />
+                </g>
+              ))}
+              <path d={areaPath} fill="url(#pnlArea)" />
+              <path d={line} fill="none" stroke={stroke} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+              {/* selected crosshair */}
+              {sel != null && coords[sel] && (
+                <g>
+                  <line x1={coords[sel][0]} x2={coords[sel][0]} y1={padT} y2={H - padB} stroke="rgba(255,255,255,.25)" strokeDasharray="3 3" />
+                  <circle cx={coords[sel][0]} cy={coords[sel][1]} r="5" fill={stroke} stroke="#0b1e17" strokeWidth="2" />
+                </g>
+              )}
+              {/* live end dot */}
+              {sel == null && coords.length > 0 && (
+                <circle cx={coords[coords.length - 1][0]} cy={coords[coords.length - 1][1]} r="4" fill={stroke}>
+                  <animate attributeName="r" values="4;8;4" dur="1.8s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="1;0;1" dur="1.8s" repeatCount="indefinite" />
+                </circle>
+              )}
+            </svg>
+            {/* y-axis labels (fixed overlay) */}
+            <div className="pointer-events-none absolute left-1 top-0 flex h-full flex-col justify-between py-2 text-[9px] text-white/35">
+              {yTicks.map((v, i) => (
+                <span key={i}>{fmtIceC(v)}</span>
+              ))}
+            </div>
+          </div>
+
+          {/* Selected point detail */}
+          {sel != null && series[sel] && (
+            <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+              <div>
+                <div className="text-sm font-bold">Level {series[sel].level}</div>
+                <div className="text-[11px] text-white/45">
+                  {series[sel].at ? new Date(series[sel].at).toLocaleString() : '—'}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-sm font-extrabold text-ice-300">{fmtIceC(series[sel].ice)} ICE</div>
+                <div className="text-[10px] text-white/40">{fmtUsd(series[sel].assetsUsd)}</div>
+              </div>
+            </div>
+          )}
+
+          <p className="text-center text-[11px] text-white/40">
+            Drag to pan · Pinch or scroll to zoom · Tap a point for details
+          </p>
+          <button onClick={onClose} className="btn-ghost w-full py-3">
+            Close
+          </button>
+        </div>
+      )}
+    </Sheet>
   );
 }
 
@@ -484,6 +694,7 @@ function StoreSheet({
   useEffect(() => setShown(30), [mining.level, open]);
   const [jump, setJump] = useState('');
   const [buy, setBuy] = useState<BuyLevelInfo | null>(null);
+  const [pnl, setPnl] = useState<MinerJourney | null>(null);
 
   const levels = useMemo(() => {
     const out: number[] = [];
@@ -511,7 +722,7 @@ function StoreSheet({
   return (
     <Sheet open={open} onClose={onClose} title="Miner Store">
       <div className="space-y-4">
-        <JourneyCard open={open} level={mining.level} speedUnit={mining.speedUnit} />
+        <JourneyCard open={open} level={mining.level} onOpen={setPnl} />
 
         {!mining.wallet.verified && (
           <button onClick={onConnect} className="w-full rounded-2xl border border-ice-400/30 bg-ice-400/10 px-4 py-3 text-left text-sm">
@@ -620,6 +831,9 @@ function StoreSheet({
           </div>
         )}
       </Sheet>
+
+      {/* Full-screen PNL chart */}
+      <FullPnlSheet open={!!pnl} onClose={() => setPnl(null)} data={pnl} />
     </Sheet>
   );
 }

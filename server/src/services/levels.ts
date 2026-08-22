@@ -67,8 +67,16 @@ export async function syncMinerLevel(
         lastAccruedAt: now,
       },
     });
-    // Record a Level-Journey point when the level moves (or on the first sync).
-    if (changed || miner.peakLevel === 0) {
+    // Record a Level-Journey point when the level moves, on the first sync, or
+    // at most ~hourly otherwise — so the P&L chart fills in a real time series
+    // (assets keep growing from mining even when the level is unchanged).
+    const lastPoint = await tx.minerLevelPoint.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    });
+    const stalePoint = !lastPoint || now.getTime() - lastPoint.createdAt.getTime() > 3_600_000;
+    if (changed || miner.peakLevel === 0 || stalePoint) {
       await tx.minerLevelPoint.create({ data: { userId, level, assetsUsd } });
     }
     return { miner: updated, holdingUsd: holding.usd, holdingTokens: holding.tokens, level };
