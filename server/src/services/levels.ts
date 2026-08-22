@@ -218,8 +218,11 @@ export function serializeLevelMining(
   // at token precision so the "ready to claim" number visibly ticks up.
   const ice8 = (n: number) => Math.round(Math.max(0, n) * 1e8) / 1e8;
   const level = miner.level;
+  const yieldMult = c.yieldMultiplierForPrice(px);
   const dailyBase = c.yieldForLevel(level, px);
-  const referralBonus = refs * c.referralYieldPerRef;
+  // Referral bonus is scaled by the same multiplier as the level yield so the
+  // whole daily rate is a clean 35× (at base price).
+  const referralBonus = refs * c.referralYieldPerRef * yieldMult;
   const perDayRaw = dailyBase + referralBonus;
   const perDay = ice8(perDayRaw);
   const perHour = ice8(perDayRaw / 24);

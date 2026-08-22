@@ -103,9 +103,9 @@ export function Home({ onWithdraw, onHistory, onDeposit, onCheckin, onLaunch, on
         >
           <div className="mb-3 flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-extrabold leading-tight">❄️ ICE Token Launch</h3>
+              <h3 className="text-lg font-extrabold leading-tight">❄️ ICE Token · Live</h3>
               <p className="text-sm text-white/50">
-                {launch.done ? 'Now tradeable on-chain 🎉' : 'Tradeable on-chain in'}
+                {launch.done ? 'Live & tradeable on-chain 🎉' : 'Live now · next liquidity boost in'}
               </p>
             </div>
             <ChevronRightIcon width={18} height={18} />

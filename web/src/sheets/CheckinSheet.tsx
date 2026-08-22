@@ -13,6 +13,7 @@ export function CheckinSheet({ open, onClose }: { open: boolean; onClose: () => 
   const [busy, setBusy] = useState(false);
 
   if (!checkin) return null;
+  const unit = checkin.asUsdt ? 'USDT' : 'ICE';
   const len = checkin.rewards.length || 1;
   // Which day chip is "current" in the cycle.
   const dayShown = Math.min(checkin.claimedToday ? checkin.streak : checkin.nextStreak, len);
@@ -22,7 +23,7 @@ export function CheckinSheet({ open, onClose }: { open: boolean; onClose: () => 
     try {
       const { reward, streak } = await claimCheckin();
       haptic('success');
-      toast.show(`Day ${streak} — claimed ${usdt(reward)} ICE 🔥`, 'success');
+      toast.show(`Day ${streak} — claimed ${usdt(reward)} ${unit} 🔥`, 'success');
     } catch (e) {
       haptic('error');
       toast.show(e instanceof ApiError ? e.message : 'Check-in failed', 'error');
@@ -68,7 +69,7 @@ export function CheckinSheet({ open, onClose }: { open: boolean; onClose: () => 
                     <CheckIcon width={14} height={14} />
                   </div>
                 ) : (
-                  <div className="mt-0.5 text-[10px] text-white/30">ICE</div>
+                  <div className="mt-0.5 text-[10px] text-white/30">{unit}</div>
                 )}
               </div>
             );
@@ -77,7 +78,7 @@ export function CheckinSheet({ open, onClose }: { open: boolean; onClose: () => 
 
         {checkin.canClaim ? (
           <button onClick={claim} disabled={busy} className="btn-primary w-full py-4 text-lg">
-            {busy ? 'Claiming…' : `Claim ${usdt(checkin.reward)} ICE`}
+            {busy ? 'Claiming…' : `Claim ${usdt(checkin.reward)} ${unit}`}
           </button>
         ) : (
           <div className="rounded-2xl bg-white/5 py-4 text-center font-semibold text-white/60">

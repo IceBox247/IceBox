@@ -16,8 +16,13 @@ function rewardForStreak(streak: number): number {
   return money(r[Math.min(Math.max(streak, 1), r.length) - 1]);
 }
 
-/** Compute the current check-in state for a user. */
-function checkinState(lastCheckIn: Date | null, streak: number, now = new Date()) {
+/**
+ * Compute the current check-in state for a user. `scale` adjusts the DISPLAYED
+ * rewards to match what's actually credited: non-stakers get ICE at the
+ * price-scaled free-money multiplier (scale = mult), stakers get the raw USDT
+ * value (scale = 1). Keeps the ladder honest with the payout.
+ */
+function checkinState(lastCheckIn: Date | null, streak: number, now = new Date(), scale = 1) {
   const today = dayIndex(now);
   const last = lastCheckIn ? dayIndex(lastCheckIn) : null;
   const claimedToday = last === today;
@@ -29,8 +34,8 @@ function checkinState(lastCheckIn: Date | null, streak: number, now = new Date()
     claimedToday,
     streak,
     nextStreak,
-    reward: rewardForStreak(nextStreak),
-    rewards: config.checkin.rewards,
+    reward: money(rewardForStreak(nextStreak) * scale),
+    rewards: config.checkin.rewards.map((r) => money(r * scale)),
     // Start of the next UTC day, when the next claim opens.
     nextClaimAt: new Date((today + 1) * MS_PER_DAY).toISOString(),
   };
@@ -39,8 +44,12 @@ function checkinState(lastCheckIn: Date | null, streak: number, now = new Date()
 /** GET /api/checkin — current streak, whether claimable today, reward schedule. */
 checkinRouter.get('/', async (req, res) => {
   const user = req.user!;
-  const activeStakes = await prisma.stake.count({ where: { userId: user.id, status: 'active' } });
-  res.json({ ...checkinState(user.lastCheckIn, user.checkInStreak), asUsdt: activeStakes > 0 });
+  const [activeStakes, mult] = await Promise.all([
+    prisma.stake.count({ where: { userId: user.id, status: 'active' } }),
+    getEarnIceMultiplier(),
+  ]);
+  const asUsdt = activeStakes > 0;
+  res.json({ ...checkinState(user.lastCheckIn, user.checkInStreak, new Date(), asUsdt ? 1 : mult), asUsdt });
 });
 
 /** POST /api/checkin/claim — claim today's bonus (once per UTC day). */
@@ -107,7 +116,10 @@ checkinRouter.post('/claim', async (req, res) => {
       asUsdt: result.asUsdt,
       balance: result.balance,
       earnedBalance: result.earnedBalance,
-      state: { ...checkinState(now, result.streak, now), asUsdt: result.asUsdt },
+      state: {
+        ...checkinState(now, result.streak, now, result.asUsdt ? 1 : mult),
+        asUsdt: result.asUsdt,
+      },
     });
   } catch (err) {
     console.error('checkin error', err);

@@ -51,11 +51,15 @@ function ratePerHour(boughtHashrate: number, referralMiners: number): number {
  */
 export function minerRatePerHour(miner: Miner, referralMiners: number): number {
   if (config.miningLevels.enabled) {
-    // Level yield is price-scaled (35× base, tapering as price rises). Use the
-    // last cached price so this stays synchronous for accrual.
+    // The whole daily rate — level yield AND the referral bonus — is price-
+    // scaled by the same multiplier (35× at base price, tapering as price
+    // rises), so "35×" applies to the full number the user sees, not just the
+    // level portion. Use the cached price so this stays synchronous for accrual.
+    const px = lastIcePriceUsd();
+    const mult = config.miningLevels.yieldMultiplierForPrice(px);
     const daily =
-      config.miningLevels.yieldForLevel(miner.level, lastIcePriceUsd()) +
-      referralMiners * config.miningLevels.referralYieldPerRef;
+      config.miningLevels.yieldForLevel(miner.level, px) +
+      referralMiners * config.miningLevels.referralYieldPerRef * mult;
     return daily / 24;
   }
   return ratePerHour(miner.hashrate, referralMiners);
