@@ -204,11 +204,20 @@ export function serializeLevelMining(
 ) {
   const c = L();
   const px = price > 0 ? price : c.price;
-  const pending = livePending(miner, refs, now);
+  // 8-decimal rounding for the mining rates + live pending. `money()` (2 dp) is
+  // for USD cents; ICE accrues far slower than a cent/hour, so rounding perHour
+  // to 2 dp collapses it to 0.00 and the client counter never moves. Keep these
+  // at token precision so the "ready to claim" number visibly ticks up.
+  const ice8 = (n: number) => Math.round(Math.max(0, n) * 1e8) / 1e8;
   const level = miner.level;
   const dailyBase = c.yieldForLevel(level);
-  const referralBonus = money(refs * c.referralYieldPerRef);
-  const perDay = money(dailyBase + referralBonus);
+  const referralBonus = refs * c.referralYieldPerRef;
+  const perDayRaw = dailyBase + referralBonus;
+  const perDay = ice8(perDayRaw);
+  const perHour = ice8(perDayRaw / 24);
+  // Precise live pending (miner.pending settled to `now` at full rate).
+  const hours = Math.max(0, (now.getTime() - miner.lastAccruedAt.getTime()) / 3_600_000);
+  const pending = ice8(miner.pending + minerRatePerHour(miner, refs) * hours);
   // Assets = on-chain holding + pool wallet (earned + live pending).
   const assetsUsd = money(miner.holdingUsd + (user.earnedBalance + pending) * px);
   const next = level < c.count ? buyLevelInfo(level + 1, assetsUsd, px) : null;
@@ -233,8 +242,8 @@ export function serializeLevelMining(
     speed: speedForLevel(level),
     speedUnit: c.speedUnit,
     perDay,
-    perHour: money(perDay / 24),
-    dailyBase,
+    perHour,
+    dailyBase: ice8(dailyBase),
     totalMined: money(miner.totalMined),
     // Curve params so the client can render all `count` level cards itself.
     curve: {
@@ -247,7 +256,7 @@ export function serializeLevelMining(
       maxSpeed: c.maxSpeed,
       price: px,
     },
-    referral: { miners: refs, perRef: c.referralYieldPerRef, bonus: referralBonus },
+    referral: { miners: refs, perRef: c.referralYieldPerRef, bonus: ice8(referralBonus) },
     nextLevel: next,
     swapUrlBase: c.swapUrlBase,
     rewards: {
