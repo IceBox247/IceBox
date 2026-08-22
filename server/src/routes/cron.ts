@@ -86,6 +86,59 @@ cronRouter.get('/reconcile-deposits', async (req, res) => {
 });
 
 /**
+ * GET /api/cron/adjust-balance — operator balance correction (self-serve).
+ * Params: secret, (username=@name OR userId=123), amount (e.g. -8 to deduct,
+ * 8 to add), optional bucket=deposited|earned (default deposited), reason.
+ * Writes a ledger entry and refuses to push the balance negative.
+ *
+ * Example — claw back an over-sent $8 deposit:
+ *   /api/cron/adjust-balance?secret=…&username=Uchedolla&amount=-8&reason=over-deposit
+ */
+cronRouter.get('/adjust-balance', async (req, res) => {
+  if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
+  const { prisma, money } = await import('../db');
+  const username = String(req.query.username ?? '').replace(/^@/, '').trim();
+  const userId = Number(req.query.userId);
+  const amount = Number(req.query.amount);
+  const bucket = String(req.query.bucket ?? 'deposited'); // deposited | earned
+  const reason = (String(req.query.reason ?? 'admin_adjustment') || 'admin_adjustment').slice(0, 64);
+  if (!Number.isFinite(amount) || amount === 0) {
+    return res.status(400).json({ error: 'invalid_amount', message: 'Pass a non-zero amount (e.g. -8).' });
+  }
+  const user = Number.isInteger(userId) && userId > 0
+    ? await prisma.user.findUnique({ where: { id: userId } })
+    : username
+      ? await prisma.user.findFirst({ where: { username: { equals: username, mode: 'insensitive' } } })
+      : null;
+  if (!user) return res.status(404).json({ error: 'user_not_found' });
+
+  const delta = money(amount);
+  if (money(user.balance + delta) < 0) {
+    return res.status(400).json({ error: 'would_go_negative', balance: money(user.balance) });
+  }
+  const data: Record<string, unknown> = { balance: { increment: delta } };
+  // 'earned' also moves the earned (ICE) bucket; 'deposited' touches balance only.
+  if (bucket === 'earned') data.earnedBalance = { increment: delta };
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const u = await tx.user.update({ where: { id: user.id }, data });
+    await tx.ledgerEntry.create({
+      data: { userId: user.id, amount: delta, reason, meta: JSON.stringify({ admin: true, bucket }) },
+    });
+    return u;
+  });
+  res.json({
+    ok: true,
+    userId: user.id,
+    username: user.username,
+    delta,
+    bucket,
+    balance: money(updated.balance),
+    earnedBalance: money(updated.earnedBalance),
+  });
+});
+
+/**
  * GET /api/cron/dextopus-payouts — off-ramp: fund Dextopus quotes for pending
  * withdrawals, then confirm delivery of ones already in flight.
  */
