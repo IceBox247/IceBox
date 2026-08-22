@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../db';
+import { submitVerification, checkVerification } from '../services/verifyContract';
 
 export const tokensRouter = Router();
 
@@ -119,6 +120,62 @@ tokensRouter.get('/list.json', async (req, res) => {
       logoURI: `${origin}/api/tokens/${t.chainId}/${t.address}/logo`,
     })),
   });
+});
+
+/**
+ * POST /api/tokens/verify — auto-verify an IceBox-created token on BscScan.
+ * Body: { chainId, address, buyTaxBps?, sellTaxBps?, taxWallet? }.
+ * Reconstructs the exact source + constructor args from our registry and submits.
+ */
+tokensRouter.post('/verify', async (req, res) => {
+  try {
+    const b = req.body ?? {};
+    if (!isAddress(b.address)) return res.status(400).json({ error: 'invalid_address' });
+    const chainId = Number(b.chainId);
+    if (chainId !== 56) {
+      return res.status(400).json({ error: 'unsupported_chain', message: 'Auto-verify supports BNB Smart Chain (BSC) tokens.' });
+    }
+    const row = await prisma.createdToken.findUnique({
+      where: { chainId_address: { chainId, address: b.address } },
+    });
+    if (!row) {
+      return res.status(404).json({ error: 'not_found', message: 'This token was not created with the IceBox tool, so we can’t auto-verify it.' });
+    }
+    if (row.taxed && (b.buyTaxBps == null || b.sellTaxBps == null || !isAddress(b.taxWallet))) {
+      return res.status(400).json({
+        error: 'tax_params_required',
+        message: 'For a tax token, provide the buy/sell tax (bps) and tax wallet used at creation.',
+      });
+    }
+    const result = await submitVerification({
+      address: row.address,
+      name: row.name,
+      symbol: row.symbol,
+      decimals: row.decimals,
+      supply: row.supply,
+      taxed: row.taxed,
+      creator: row.creator,
+      buyTaxBps: b.buyTaxBps != null ? Number(b.buyTaxBps) : undefined,
+      sellTaxBps: b.sellTaxBps != null ? Number(b.sellTaxBps) : undefined,
+      taxWallet: typeof b.taxWallet === 'string' ? b.taxWallet : undefined,
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('verify error', err);
+    res.status(500).json({ error: 'verify_failed', message: 'Could not submit verification.' });
+  }
+});
+
+/** GET /api/tokens/verify-status?guid=... — poll a submitted verification. */
+tokensRouter.get('/verify-status', async (req, res) => {
+  const guid = String(req.query.guid ?? '');
+  if (!guid) return res.status(400).json({ error: 'missing_guid' });
+  try {
+    res.json(await checkVerification(guid));
+  } catch (err) {
+    console.error('verify-status error', err);
+    res.status(500).json({ error: 'status_failed' });
+  }
 });
 
 /**

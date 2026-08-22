@@ -160,6 +160,13 @@ export const config = {
   // Daily check-in bonus. `rewards` is the per-streak-day reward schedule; once
   // the streak passes the list length it stays at the last value. Credited to
   // the earned bucket (like tasks). Tune with CHECKIN_REWARDS (comma list).
+  // Auto-verify IceBox-created tokens on BscScan (built into the tools).
+  verify: {
+    bscscanApiKey: str('BSCSCAN_API_KEY', ''),
+    compilerVersion: str('VERIFY_COMPILER_VERSION', 'v0.8.26+commit.8a97fa7a'),
+    optimizerRuns: num('VERIFY_OPTIMIZER_RUNS', 200),
+  },
+
   checkin: {
     enabled: process.env.CHECKIN_ENABLED !== 'false',
     // Day-1 base reward, in USD. Two very different schedules by rail:
