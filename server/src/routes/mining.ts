@@ -151,9 +151,10 @@ miningRouter.post('/level/buy', async (req, res) => {
     return res.status(400).json({ error: 'invalid_level', message: 'Choose a valid level.' });
   }
   const price = await getIcePriceUsd();
-  // Qualify on ASSETS = on-chain holding + pool wallet (earned + settled pending).
-  const assetsUsd = miner.holdingUsd + (user.earnedBalance + miner.pending) * price;
-  const info = buyLevelInfo(target, assetsUsd, price);
+  // Qualify on HOLDING only (on-chain + migration bonus) — the pool never counts
+  // toward the level, to avoid a mining feedback loop.
+  const levelBasisUsd = miner.holdingUsd + miner.bonusHoldingUsd;
+  const info = buyLevelInfo(target, levelBasisUsd, price);
   const swapUrl = `${config.miningLevels.swapUrlBase}?chain=bsc&outputCurrency=${config.token.address}`;
   res.json({ ok: true, ...info, price, token: config.token.address, swapUrl });
 });

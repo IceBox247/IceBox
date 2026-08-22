@@ -86,6 +86,22 @@ cronRouter.get('/reconcile-deposits', async (req, res) => {
 });
 
 /**
+ * GET /api/cron/resync-levels — repair the mining runaway: recompute every
+ * miner's level from on-chain holding only and clear inflated uncollected
+ * pending. Run once after the holding-only-level fix deploys.
+ */
+cronRouter.get('/resync-levels', async (req, res) => {
+  if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
+  try {
+    const { resyncAllLevels } = await import('../services/levels');
+    res.json({ ok: true, ...(await resyncAllLevels()) });
+  } catch (e) {
+    console.error('[cron] resync-levels failed', e);
+    res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+/**
  * GET /api/cron/adjust-balance — operator balance correction (self-serve).
  * Params: secret, (username=@name OR userId=123), amount (e.g. -8 to deduct,
  * 8 to add), optional bucket=deposited|earned (default deposited), reason.

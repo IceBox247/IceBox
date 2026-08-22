@@ -47,12 +47,14 @@ export async function syncMinerLevel(
     const hours = Math.max(0, (now.getTime() - miner.lastAccruedAt.getTime()) / 3_600_000);
     const accrued = minerRatePerHour(miner, refs) * hours;
     const pending = money(miner.pending + accrued);
-    // Level is driven by ASSETS = on-chain holding + pool wallet (earned + pending) —
-    // exactly what the buy sheet qualifies on. (Migration compensation already
-    // lives in the pool, so no separate holding credit is added here.)
-    const poolTokens = money(user.earnedBalance + pending);
-    const assetsUsd = money(holding.usd + poolTokens * price);
-    const level = L().levelForHolding(assetsUsd);
+    // Level is driven ONLY by what the user actually HOLDS on-chain (plus any
+    // one-time migration compensation) — NEVER by the mined pool. Counting the
+    // pool created a runaway loop: mining grows the pool → raises the level →
+    // raises the yield → grows the pool faster, exploding to the max level. The
+    // pool is the user's withdrawable reward; holding is what buys mining power.
+    const levelBasisUsd = money(holding.usd + miner.bonusHoldingUsd);
+    const assetsUsd = levelBasisUsd; // journey chart tracks the level basis
+    const level = L().levelForHolding(levelBasisUsd);
     const peakLevel = Math.max(miner.peakLevel, level);
     const changed = level !== miner.level;
     const updated = await tx.miner.update({
@@ -187,6 +189,33 @@ export async function minerJourney(userId: number, price: number) {
   };
 }
 
+/**
+ * Repair the runaway: recompute every miner's level from HOLDING only (on-chain
+ * + migration bonus) and clear the uncollected `pending` that the feedback loop
+ * inflated. Non-destructive to already-collected balances (use adjust-balance
+ * for those). Idempotent — safe to run repeatedly.
+ */
+export async function resyncAllLevels() {
+  const c = L();
+  const miners = await prisma.miner.findMany();
+  let updated = 0;
+  let clearedPending = 0;
+  const now = new Date();
+  // The runaway polluted the journey chart with absurd points — start fresh.
+  await prisma.minerLevelPoint.deleteMany({});
+  for (const m of miners) {
+    const levelBasisUsd = money(m.holdingUsd + m.bonusHoldingUsd);
+    const level = c.levelForHolding(levelBasisUsd);
+    clearedPending = money(clearedPending + Math.max(0, m.pending));
+    await prisma.miner.update({
+      where: { userId: m.userId },
+      data: { level, peakLevel: level, pending: 0, lastAccruedAt: now },
+    });
+    updated++;
+  }
+  return { updated, clearedPending };
+}
+
 /** What it takes to reach a target level, qualified on the user's ASSETS
  * (wallet holding + pool wallet), matching the ATF-style buy sheet. */
 export function buyLevelInfo(targetLevel: number, assetsUsd: number, price: number) {
@@ -229,9 +258,10 @@ export function serializeLevelMining(
   // Precise live pending (miner.pending settled to `now` at full rate).
   const hours = Math.max(0, (now.getTime() - miner.lastAccruedAt.getTime()) / 3_600_000);
   const pending = ice8(miner.pending + minerRatePerHour(miner, refs) * hours);
-  // Assets = on-chain holding + pool wallet (earned + live pending).
-  const assetsUsd = money(miner.holdingUsd + (user.earnedBalance + pending) * px);
-  const next = level < c.count ? buyLevelInfo(level + 1, assetsUsd, px) : null;
+  // Level qualifies on HOLDING only (on-chain + migration bonus) — never the
+  // mined pool, which would create a runaway loop. The pool is shown separately.
+  const levelBasisUsd = money(miner.holdingUsd + miner.bonusHoldingUsd);
+  const next = level < c.count ? buyLevelInfo(level + 1, levelBasisUsd, px) : null;
   return {
     enabled: true,
     model: 'levels' as const,
