@@ -54,6 +54,19 @@ function checkinState(
   };
 }
 
+/** Fetch the ICE multiplier but never let it hang/throw the claim: fall back to
+ *  the configured base multiplier if the price read is slow or fails. */
+async function safeMultiplier(): Promise<number> {
+  const fallback = config.earnIce.base;
+  try {
+    const timeout = new Promise<number>((resolve) => setTimeout(() => resolve(fallback), 6000));
+    const m = await Promise.race([getEarnIceMultiplier(), timeout]);
+    return Number.isFinite(m) && m > 0 ? m : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 /** Whether the user's active staked principal qualifies for the flat-USDT rail. */
 async function isUsdtRail(db: { stake: { aggregate: Function } }, userId: number) {
   const staked = await db.stake.aggregate({
@@ -76,8 +89,10 @@ checkinRouter.post('/claim', async (req, res) => {
   if (!config.checkin.enabled) return res.status(403).json({ error: 'checkin_disabled' });
 
   const now = new Date();
-  // Price-scaled ICE multiplier, fetched before the transaction (network I/O).
-  const mult = await getEarnIceMultiplier();
+  // Both network/price reads happen BEFORE the DB transaction so the
+  // transaction stays tiny (and can't be blocked by a slow RPC). Both are
+  // resilient — a slow price feed can never fail the claim.
+  const [mult, asUsdt] = await Promise.all([safeMultiplier(), isUsdtRail(prisma, user.id)]);
   try {
     const result = await prisma.$transaction(async (tx) => {
       const fresh = await tx.user.findUniqueOrThrow({ where: { id: user.id } });
@@ -86,11 +101,8 @@ checkinRouter.post('/claim', async (req, res) => {
       if (last === today) return { already: true as const };
 
       const streak = last === today - 1 ? fresh.checkInStreak + 1 : 1;
-
-      // Reward rail: stakers above the threshold get a FLAT USDT amount (real $,
-      // deposited bucket); everyone else gets ICE (earned bucket) that grows
-      // 10%/day off the day-1 amount, at the price-scaled multiplier.
-      const asUsdt = await isUsdtRail(tx, user.id);
+      // Stakers above the threshold get a FLAT USDT amount (real $, deposited
+      // bucket); everyone else gets ICE (earned bucket) growing 10%/day.
       const reward = rewardForDay(streak, asUsdt, mult);
 
       const updated = await tx.user.update({
@@ -139,6 +151,6 @@ checkinRouter.post('/claim', async (req, res) => {
     });
   } catch (err) {
     console.error('checkin error', err);
-    res.status(500).json({ error: 'checkin_failed' });
+    res.status(500).json({ error: 'checkin_failed', message: err instanceof Error ? err.message : String(err) });
   }
 });
