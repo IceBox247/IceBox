@@ -40,14 +40,32 @@
   var $ = function(id){ return document.getElementById(id); };
   function set(m,c){ $('status').className = 'status ' + (c||'muted'); $('status').innerHTML = m; }
 
+  function getEth(){ return window.ethereum || window.trustwallet || null; }
+  // Some wallets (Trust) inject the provider a moment AFTER load, so wait for it
+  // rather than checking once.
+  function waitForProvider(ms){
+    return new Promise(function(resolve){
+      if (getEth()) return resolve(getEth());
+      var done = false;
+      var finish = function(){ if(!done){ done = true; resolve(getEth()); } };
+      window.addEventListener('ethereum#initialized', finish, { once: true });
+      var start = Date.now();
+      var iv = setInterval(function(){
+        if (getEth() || Date.now() - start > ms){ clearInterval(iv); finish(); }
+      }, 200);
+    });
+  }
+
   async function run(){
-    var eth = window.ethereum;
     if (!token) { set('Missing link token. Reopen from IceBox.', 'err'); return; }
+    $('go').disabled = true;
+    set('Looking for your wallet…');
+    var eth = await waitForProvider(5000);
     if (!eth) {
-      set('No wallet detected. Open this page from inside your wallet app’s browser (MetaMask → Browser, or Trust → DApps).', 'err');
+      set('No wallet detected. Open this page from inside your wallet app’s browser (MetaMask → Browser, or Trust → the browser/DApps tab).', 'err');
+      $('go').disabled = false;
       return;
     }
-    $('go').disabled = true;
     try {
       set('Requesting your wallet…');
       var accounts = await eth.request({ method: 'eth_requestAccounts' });
@@ -80,8 +98,8 @@
     }
   }
   $('go').onclick = run;
-  // Auto-start when a wallet is already injected (i.e. inside a wallet browser).
-  if (window.ethereum) setTimeout(run, 400);
+  // Auto-start: run() waits for the provider to inject (handles Trust's delay).
+  setTimeout(run, 300);
 </script>
 </body>
 </html>
