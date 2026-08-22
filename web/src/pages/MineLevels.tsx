@@ -744,8 +744,8 @@ function StoreSheet({
 
         {!mining.wallet.verified && (
           <button onClick={onConnect} className="w-full rounded-2xl border border-ice-400/30 bg-ice-400/10 px-4 py-3 text-left text-sm">
-            <b>Connect your BSC wallet</b>
-            <div className="text-[11px] text-white/50">Your on-chain ICE holding sets your level.</div>
+            <b>Connect a BSC wallet (optional)</b>
+            <div className="text-[11px] text-white/50">Only if you hold ICE on-chain and want it to boost your level. Earned ICE already counts.</div>
           </button>
         )}
 
@@ -952,39 +952,77 @@ function ConnectWallet({ onConnected }: { onConnected: () => Promise<void> }) {
 
   return (
     <div className="space-y-3">
-      <p className="text-[11px] text-white/45">
-        Your on-chain ICE holding sets your mining level. Connect the wallet you hold ICE in.
-      </p>
-      <input
-        value={address}
-        onChange={(e) => setAddress(e.target.value)}
-        placeholder="0x… wallet address"
-        className="w-full rounded-xl bg-white/5 px-3 py-2.5 text-sm outline-none"
-      />
+      {/* Plain-language explainer — this is optional and safe. */}
+      <div className="rounded-xl border border-ice-400/20 bg-ice-400/5 p-3 text-[12px] leading-relaxed text-white/70">
+        <b className="text-ice-200">This is optional.</b> Your earned ICE already counts toward your
+        level. Only connect a wallet if you <b>hold extra ICE in a BSC wallet</b> and want it to boost
+        your level too.
+      </div>
+
+      {/* Step 1 */}
+      <div>
+        <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-white/40">
+          Step 1 · Your wallet address
+        </div>
+        <input
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          placeholder="Paste your 0x… BSC address"
+          className="w-full rounded-xl bg-white/5 px-3 py-2.5 text-sm outline-none"
+        />
+      </div>
+
       {!message ? (
-        <button onClick={getMessage} disabled={busy || address.trim().length < 42} className="btn-primary w-full py-2.5 text-sm disabled:opacity-40">
+        <button
+          onClick={getMessage}
+          disabled={busy || address.trim().length < 42}
+          className="btn-primary w-full py-2.5 text-sm disabled:opacity-40"
+        >
           {busy ? '…' : 'Continue'}
         </button>
       ) : (
         <>
-          <div className="rounded-xl bg-white/5 p-3">
-            <div className="mb-1 text-[11px] text-white/45">Sign this exact message in your wallet:</div>
-            <code className="block whitespace-pre-wrap break-all text-[11px] text-white/70">{message}</code>
-            <button
-              onClick={() => { navigator.clipboard?.writeText(message); toast.show('Message copied', 'success'); }}
-              className="mt-2 text-[11px] text-ice-300"
-            >
-              Copy message
-            </button>
+          {/* Step 2 */}
+          <div>
+            <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-white/40">
+              Step 2 · Prove it’s yours
+            </div>
+            <div className="rounded-xl bg-white/5 p-3 text-[12px] text-white/70">
+              <p className="mb-2">
+                Open your wallet app (MetaMask, Trust, TokenPocket…), find <b>“Sign Message”</b>,
+                paste the text below, sign, and copy the result back here.
+              </p>
+              <div className="rounded-lg bg-black/30 p-2">
+                <code className="block whitespace-pre-wrap break-all text-[11px] text-white/70">{message}</code>
+              </div>
+              <button
+                onClick={() => { navigator.clipboard?.writeText(message); toast.show('Message copied', 'success'); }}
+                className="mt-2 rounded-lg bg-ice-400/15 px-3 py-1.5 text-[12px] font-bold text-ice-200"
+              >
+                📋 Copy message to sign
+              </button>
+              <p className="mt-2 text-[11px] text-emerald-300/80">
+                🔒 Signing is free, uses no gas, and <b>cannot move or spend any funds</b> — it only
+                proves the wallet is yours.
+              </p>
+            </div>
           </div>
+
           <input
             value={signature}
             onChange={(e) => setSignature(e.target.value)}
-            placeholder="Paste signature (0x…)"
+            placeholder="Paste the signature (0x…) here"
             className="w-full rounded-xl bg-white/5 px-3 py-2.5 text-sm outline-none"
           />
-          <button onClick={connect} disabled={busy || signature.trim().length < 10} className="btn-primary w-full py-2.5 text-sm disabled:opacity-40">
+          <button
+            onClick={connect}
+            disabled={busy || signature.trim().length < 10}
+            className="btn-primary w-full py-2.5 text-sm disabled:opacity-40"
+          >
             {busy ? '…' : 'Verify & connect'}
+          </button>
+          <button onClick={() => setMessage(null)} className="w-full py-1 text-[11px] text-white/40">
+            ← Use a different address
           </button>
         </>
       )}
