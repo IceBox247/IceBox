@@ -158,7 +158,7 @@ tokensRouter.post('/verify', async (req, res) => {
       buyTaxBps: b.buyTaxBps != null ? Number(b.buyTaxBps) : undefined,
       sellTaxBps: b.sellTaxBps != null ? Number(b.sellTaxBps) : undefined,
       taxWallet: typeof b.taxWallet === 'string' ? b.taxWallet : undefined,
-    });
+    }, chainId);
     res.json(result);
   } catch (err) {
     console.error('verify error', err);
@@ -170,8 +170,9 @@ tokensRouter.post('/verify', async (req, res) => {
 tokensRouter.get('/verify-status', async (req, res) => {
   const guid = String(req.query.guid ?? '');
   if (!guid) return res.status(400).json({ error: 'missing_guid' });
+  const chainId = Number(req.query.chainId) || 56;
   try {
-    res.json(await checkVerification(guid));
+    res.json(await checkVerification(guid, chainId));
   } catch (err) {
     console.error('verify-status error', err);
     res.status(500).json({ error: 'status_failed' });

@@ -6,7 +6,7 @@ import { haptic } from '../telegram';
 import { usdt, ice } from '../lib/format';
 import { Sheet } from '../components/Sheet';
 import { sfx, isMuted, toggleMuted } from '../lib/sound';
-import { hasInjectedWallet, requestInjectedAddress, connectAndSign, connectWalletConnect, walletDeepLinks } from '../lib/wallet';
+import { hasInjectedWallet, requestInjectedAddress, connectAndSign, connectWalletConnect, walletDeepLinks, WC_WALLETS, type WcWallet } from '../lib/wallet';
 import { WhitepaperView } from './Whitepaper';
 import type { LevelMiningState, BuyLevelInfo, MinerRankRow, MinerJourney } from '../types';
 
@@ -940,31 +940,38 @@ function ConnectWallet({ onConnected }: { onConnected: () => Promise<void> }) {
   const [manual, setManual] = useState(false);
   const injected = hasInjectedWallet();
 
-  /** One-tap connect + sign: use the injected provider if present, otherwise
-   *  WalletConnect (opens the user's wallet app). No copy/paste. */
-  async function oneTap() {
+  const nonceFor = async (a: string) => (await api.walletNonce(a)).message;
+
+  /** Shared connect wrapper: run a connect+sign strategy, then bind server-side. */
+  async function doConnect(run: () => Promise<{ address: string; signature: string }>) {
     setBusy(true);
     try {
-      let addr: string;
-      let sig: string;
-      const nonceFor = async (a: string) => (await api.walletNonce(a)).message;
-      if (injected) {
-        addr = await requestInjectedAddress();
-        ({ signature: sig } = await connectAndSign(await nonceFor(addr)));
-      } else {
-        ({ address: addr, signature: sig } = await connectWalletConnect(nonceFor));
-      }
-      await api.walletConnect(addr, sig);
+      const { address, signature } = await run();
+      await api.walletConnect(address, signature);
       await onConnected();
       haptic('success');
       toast.show('Wallet connected — mining boosted from your holding ⚡', 'success');
     } catch (e: any) {
-      const m = e instanceof ApiError ? e.message : e?.message === 'no_account' ? 'No wallet selected' : 'Could not connect';
+      const m =
+        e instanceof ApiError
+          ? e.message
+          : e?.message === 'no_account'
+            ? 'No wallet selected'
+            : 'Could not connect — try the manual option below';
       toast.show(m, 'error');
     } finally {
       setBusy(false);
     }
   }
+
+  const connectInjected = () =>
+    doConnect(async () => {
+      const addr = await requestInjectedAddress();
+      const { signature } = await connectAndSign(await nonceFor(addr));
+      return { address: addr, signature };
+    });
+
+  const connectWc = (w: WcWallet) => doConnect(() => connectWalletConnect(nonceFor, w));
 
   async function getMessage() {
     setBusy(true);
@@ -999,17 +1006,34 @@ function ConnectWallet({ onConnected }: { onConnected: () => Promise<void> }) {
         wallet, the higher your Level and the faster you mine.
       </div>
 
-      {/* Primary path: one-tap connect (injected wallet or WalletConnect). */}
+      {/* Primary path: one-tap connect. Injected → single button. In Telegram →
+          pick a wallet, which we deep-link through Telegram (reliable). */}
       {!manual && (
         <>
-          <button onClick={oneTap} disabled={busy} className="btn-primary w-full py-3.5 text-base disabled:opacity-50">
-            {busy ? 'Connecting…' : '🔗 Connect Wallet'}
-          </button>
+          {injected ? (
+            <button onClick={connectInjected} disabled={busy} className="btn-primary w-full py-3.5 text-base disabled:opacity-50">
+              {busy ? 'Connecting…' : '🔗 Connect Wallet'}
+            </button>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {WC_WALLETS.map((w) => (
+                <button
+                  key={w.key}
+                  onClick={() => connectWc(w)}
+                  disabled={busy}
+                  className="btn-primary flex items-center justify-center gap-2 py-3.5 text-sm disabled:opacity-50"
+                >
+                  <span className="text-lg">{w.icon}</span> {busy ? '…' : w.label}
+                </button>
+              ))}
+            </div>
+          )}
           <p className="text-center text-[11px] text-white/45">
-            Opens your wallet (MetaMask, Trust, TokenPocket…) to connect & sign — free, no gas.
+            Opens your wallet to connect &amp; sign — free, no gas. After you approve, tap back to
+            Telegram; if it prompts to sign, approve that too.
           </p>
           <button onClick={() => setManual(true)} className="w-full py-1 text-[11px] text-white/40">
-            Enter address manually instead
+            Or enter address manually
           </button>
         </>
       )}

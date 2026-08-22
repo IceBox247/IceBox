@@ -2,11 +2,13 @@ import { AbiCoder } from 'ethers';
 import { config } from '../config';
 import { TOKEN_FACTORY_SOURCE } from '../generated/tokenFactorySource';
 
-// BscScan classic verification API. Every IceBox token is a CustomToken (plain)
-// or TaxToken from TokenFactory.sol, compiled with a fixed solc version +
-// optimizer, so we can rebuild the exact source + constructor args and submit
-// the verification on the user's behalf — no Remix, no copy/paste.
-const BSCSCAN_API = 'https://api.bscscan.com/api';
+// Etherscan V2 unified verification API (the classic per-chain V1 endpoints are
+// deprecated). One key works across chains; the chain is selected with the
+// `chainid` query param (56 = BNB Smart Chain). Every IceBox token is a
+// CustomToken/TaxToken from TokenFactory.sol compiled with a fixed solc version
+// + optimizer, so we rebuild the exact source + constructor args and submit the
+// verification on the user's behalf — no Remix, no copy/paste.
+const ETHERSCAN_V2_API = 'https://api.etherscan.io/v2/api';
 
 export interface TokenForVerify {
   address: string;
@@ -43,10 +45,11 @@ function constructorArgs(t: TokenForVerify): { contractName: string; encoded: st
  *  it's already verified. */
 export async function submitVerification(
   t: TokenForVerify,
+  chainId = 56,
 ): Promise<{ ok: boolean; guid?: string; alreadyVerified?: boolean; message: string }> {
   const apikey = config.verify.bscscanApiKey;
   if (!apikey) {
-    return { ok: false, message: 'Verification isn’t configured yet (missing BscScan API key).' };
+    return { ok: false, message: 'Verification isn’t configured yet (missing API key).' };
   }
   const { contractName, encoded } = constructorArgs(t);
   const body = new URLSearchParams({
@@ -63,13 +66,13 @@ export async function submitVerification(
     constructorArguements: encoded,
     licenseType: '3', // MIT
   });
-  const r = await fetch(BSCSCAN_API, {
+  const r = await fetch(`${ETHERSCAN_V2_API}?chainid=${chainId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
   });
   const j: any = await r.json().catch(() => null);
-  if (!j) return { ok: false, message: 'BscScan returned no response — try again.' };
+  if (!j) return { ok: false, message: 'Explorer returned no response — try again.' };
   if (j.status === '1') return { ok: true, guid: String(j.result), message: 'Submitted for verification.' };
   const msg = String(j.result || j.message || 'Verification error');
   if (/already verified/i.test(msg)) return { ok: true, alreadyVerified: true, message: 'Already verified ✅' };
@@ -79,9 +82,10 @@ export async function submitVerification(
 /** Poll a verification guid for its result. */
 export async function checkVerification(
   guid: string,
+  chainId = 56,
 ): Promise<{ done: boolean; ok: boolean; message: string }> {
   const apikey = config.verify.bscscanApiKey;
-  const url = `${BSCSCAN_API}?apikey=${apikey}&module=contract&action=checkverifystatus&guid=${encodeURIComponent(guid)}`;
+  const url = `${ETHERSCAN_V2_API}?chainid=${chainId}&apikey=${apikey}&module=contract&action=checkverifystatus&guid=${encodeURIComponent(guid)}`;
   const r = await fetch(url);
   const j: any = await r.json().catch(() => null);
   const res = String(j?.result || '');
