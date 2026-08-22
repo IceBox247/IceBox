@@ -57,7 +57,7 @@ export function Landing() {
         {/* Nav */}
         <nav className="flex items-center justify-between py-5">
           <div className="flex items-center gap-2">
-            <img src="/coin.png" alt="" className="h-8 w-8" />
+            <img src="/icebox-mark.png" alt="IceBox" className="h-9 w-auto" />
             <span className="text-lg font-black tracking-tight">
               ICE<span className="text-ice-300">BOX</span>
             </span>
@@ -154,7 +154,7 @@ export function Landing() {
         {/* Footer */}
         <footer className="border-t border-white/10 py-8 text-center text-xs text-white/35">
           <div className="mb-2 flex items-center justify-center gap-2">
-            <img src="/coin.png" alt="" className="h-6 w-6" />
+            <img src="/icebox-mark.png" alt="" className="h-6 w-auto" />
             <span className="font-bold text-white/60">IceBox</span>
           </div>
           <p>{LINKS.website.replace(/^https?:\/\//, '')} · {LINKS.email}</p>
