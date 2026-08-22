@@ -38,6 +38,53 @@ export async function requestInjectedAddress(): Promise<string> {
   return accounts[0];
 }
 
+/**
+ * WalletConnect one-tap: opens the user's wallet app (MetaMask, Trust,
+ * TokenPocket…) via the WalletConnect modal/deep link, connects on BSC, signs
+ * the verification message, and returns address + signature. Used inside
+ * Telegram where there's no injected provider. The SDK is dynamically imported
+ * so it only loads when a user actually connects.
+ */
+export async function connectWalletConnect(
+  getMessage: (address: string) => Promise<string>,
+): Promise<{ address: string; signature: string }> {
+  const { WALLETCONNECT_PROJECT_ID, LINKS } = await import('../content/site');
+  const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
+  const provider = await EthereumProvider.init({
+    projectId: WALLETCONNECT_PROJECT_ID,
+    chains: [56], // BNB Smart Chain
+    optionalChains: [56],
+    showQrModal: true,
+    metadata: {
+      name: 'IceBox',
+      description: 'IceBox — hold ICE, mine ICE',
+      url: LINKS.website,
+      icons: [`${LINKS.website}/coin.png`],
+    },
+  });
+  try {
+    await provider.connect(); // opens the wallet-choice modal / deep link
+    const address: string =
+      (provider as any).accounts?.[0] ||
+      ((await provider.request({ method: 'eth_accounts' })) as string[])?.[0];
+    if (!address) throw new Error('no_account');
+    // Fetch the exact nonce message for THIS address, then sign it in the same
+    // session (opens the wallet once for approval, once for signing).
+    const message = await getMessage(address);
+    const signature = (await provider.request({
+      method: 'personal_sign',
+      params: [message, address],
+    })) as string;
+    return { address, signature };
+  } finally {
+    try {
+      await provider.disconnect();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 export interface WalletLink {
   key: string;
   label: string;

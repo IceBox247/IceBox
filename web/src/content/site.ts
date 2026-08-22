@@ -20,6 +20,11 @@ export const LINKS = {
   bscscan: `https://bscscan.com/token/${TOKEN.contract}`,
 };
 
+/** WalletConnect (Reown) project id — public client identifier, safe to ship.
+ *  Add www.iceboxminiapp.online to the project's allowlist in the Reown dashboard. */
+export const WALLETCONNECT_PROJECT_ID =
+  (import.meta.env.VITE_WALLETCONNECT_PROJECT_ID as string) || '9098deb5d0662733d18992c5af3533b9';
+
 /** Token facts shown on the landing + whitepaper. Adjust freely. */
 export const TOKEN_FACTS = {
   name: TOKEN.name, // "ICE BOX"

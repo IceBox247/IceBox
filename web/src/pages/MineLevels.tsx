@@ -6,7 +6,7 @@ import { haptic } from '../telegram';
 import { usdt, ice } from '../lib/format';
 import { Sheet } from '../components/Sheet';
 import { sfx, isMuted, toggleMuted } from '../lib/sound';
-import { hasInjectedWallet, requestInjectedAddress, connectAndSign, walletDeepLinks } from '../lib/wallet';
+import { hasInjectedWallet, requestInjectedAddress, connectAndSign, connectWalletConnect, walletDeepLinks } from '../lib/wallet';
 import { WhitepaperView } from './Whitepaper';
 import type { LevelMiningState, BuyLevelInfo, MinerRankRow, MinerJourney } from '../types';
 
@@ -940,19 +940,26 @@ function ConnectWallet({ onConnected }: { onConnected: () => Promise<void> }) {
   const [manual, setManual] = useState(false);
   const injected = hasInjectedWallet();
 
-  /** One-tap: connect the in-app/extension wallet, sign the nonce, verify. */
+  /** One-tap connect + sign: use the injected provider if present, otherwise
+   *  WalletConnect (opens the user's wallet app). No copy/paste. */
   async function oneTap() {
     setBusy(true);
     try {
-      const addr = await requestInjectedAddress();
-      const { message: msg } = await api.walletNonce(addr);
-      const { signature: sig } = await connectAndSign(msg);
+      let addr: string;
+      let sig: string;
+      const nonceFor = async (a: string) => (await api.walletNonce(a)).message;
+      if (injected) {
+        addr = await requestInjectedAddress();
+        ({ signature: sig } = await connectAndSign(await nonceFor(addr)));
+      } else {
+        ({ address: addr, signature: sig } = await connectWalletConnect(nonceFor));
+      }
       await api.walletConnect(addr, sig);
       await onConnected();
       haptic('success');
       toast.show('Wallet connected — mining boosted from your holding ⚡', 'success');
     } catch (e: any) {
-      const m = e instanceof ApiError ? e.message : e?.message === 'no_injected' ? 'No wallet detected' : 'Could not connect';
+      const m = e instanceof ApiError ? e.message : e?.message === 'no_account' ? 'No wallet selected' : 'Could not connect';
       toast.show(m, 'error');
     } finally {
       setBusy(false);
@@ -992,27 +999,28 @@ function ConnectWallet({ onConnected }: { onConnected: () => Promise<void> }) {
         wallet, the higher your Level and the faster you mine.
       </div>
 
-      {/* Primary path: one-tap connect when a wallet is available. */}
-      {injected && !manual && (
+      {/* Primary path: one-tap connect (injected wallet or WalletConnect). */}
+      {!manual && (
         <>
           <button onClick={oneTap} disabled={busy} className="btn-primary w-full py-3.5 text-base disabled:opacity-50">
             {busy ? 'Connecting…' : '🔗 Connect Wallet'}
           </button>
+          <p className="text-center text-[11px] text-white/45">
+            Opens your wallet (MetaMask, Trust, TokenPocket…) to connect & sign — free, no gas.
+          </p>
           <button onClick={() => setManual(true)} className="w-full py-1 text-[11px] text-white/40">
             Enter address manually instead
           </button>
         </>
       )}
 
-      {/* Manual path (no injected wallet, e.g. inside Telegram). */}
-      {(!injected || manual) && (
+      {/* Manual fallback. */}
+      {manual && (
         <>
-          {!injected && (
-            <p className="text-[11px] text-white/45">
-              Paste the address of the wallet you hold ICE in, then prove it’s yours with a quick
-              (free, gasless) signature.
-            </p>
-          )}
+          <p className="text-[11px] text-white/45">
+            Paste the address of the wallet you hold ICE in, then prove it’s yours with a quick
+            (free, gasless) signature.
+          </p>
           <input
             value={address}
             onChange={(e) => setAddress(e.target.value)}
