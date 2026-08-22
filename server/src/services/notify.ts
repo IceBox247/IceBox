@@ -92,7 +92,7 @@ export async function alertDeposit(params: {
   const who = params.name ? `\n👤 ${params.name}` : '';
   const text =
     `🟢 <b>New Deposit</b>\n\n` +
-    `💰 Amount: <b>${money(params.amount)} ICE USD</b>\n` +
+    `💰 Amount: <b>${money(params.amount)} USDT</b>\n` +
     `🪙 Asset: ${asset}${params.chain ? ` (${params.chain})` : ''}` +
     who +
     txLink(params.txHash) +

@@ -287,6 +287,50 @@ export async function reconcileUserDeposits(user: User): Promise<void> {
 }
 
 /**
+ * Reconcile a single user's deposits by id or @username — the operator backstop
+ * for when the Dextopus webhook misses a deposit. Credits + alerts any newly
+ * completed ones. Returns what happened for the caller to log.
+ */
+export async function reconcileDepositsFor(
+  key: { userId?: number; username?: string },
+): Promise<{ ok: boolean; note: string; userId?: number }> {
+  const user = key.userId
+    ? await prisma.user.findUnique({ where: { id: key.userId } })
+    : key.username
+      ? await prisma.user.findFirst({
+          where: { username: { equals: key.username.replace(/^@/, ''), mode: 'insensitive' } },
+        })
+      : null;
+  if (!user) return { ok: false, note: 'user_not_found' };
+  await reconcileUserDeposits(user);
+  return { ok: true, note: 'reconciled', userId: user.id };
+}
+
+/**
+ * Bounded batch backstop: reconcile the most recently active users who have a
+ * Dextopus deposit address, so a webhook outage self-heals without waiting for
+ * each user to open the app. Capped to stay well under the serverless timeout
+ * (one Dextopus call per user). The webhook remains the primary, instant path.
+ */
+export async function reconcileRecentDeposits(limit = 25): Promise<{ scanned: number }> {
+  const addrs = await prisma.depositAddress.findMany({
+    orderBy: { createdAt: 'desc' },
+    take: Math.max(1, Math.min(100, limit)),
+    include: { user: true },
+  });
+  // Dedupe users (a user can have several deposit addresses).
+  const seen = new Set<number>();
+  let scanned = 0;
+  for (const a of addrs) {
+    if (seen.has(a.userId)) continue;
+    seen.add(a.userId);
+    await reconcileUserDeposits(a.user).catch(() => {});
+    scanned++;
+  }
+  return { scanned };
+}
+
+/**
  * Handle a raw Dextopus deposit webhook event: map the deposit address back to
  * a user and credit. Returns a short status for logging.
  */

@@ -45,9 +45,42 @@ cronRouter.get('/payouts', async (req, res) => {
     const hashrateMigration = await migrateHashrateSpenders().catch((e) => ({
       error: e instanceof Error ? e.message : String(e),
     }));
-    res.json({ ok: true, legacy, dextopus, poll, miningRewards, hashrateMigration });
+    // Backstop: credit + alert any deposits the webhook missed (bounded batch).
+    const { reconcileRecentDeposits } = await import('../services/deposits');
+    const deposits = await reconcileRecentDeposits().catch((e) => ({
+      error: e instanceof Error ? e.message : String(e),
+    }));
+    res.json({ ok: true, legacy, dextopus, poll, miningRewards, hashrateMigration, deposits });
   } catch (e) {
     console.error('[cron] payout run failed', e);
+    res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+/**
+ * GET /api/cron/reconcile-deposits — operator backstop for missed deposits.
+ *  • ?userId=123 or ?username=@name → reconcile just that user (fast; use this
+ *    to rescue a specific stuck deposit).
+ *  • no target → bounded batch of recently-active depositors.
+ * Credits + posts the deposit alert for anything the webhook missed.
+ */
+cronRouter.get('/reconcile-deposits', async (req, res) => {
+  if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
+  try {
+    const { reconcileDepositsFor, reconcileRecentDeposits } = await import('../services/deposits');
+    const userId = Number(req.query.userId);
+    const username = req.query.username ? String(req.query.username) : undefined;
+    if ((Number.isInteger(userId) && userId > 0) || username) {
+      const result = await reconcileDepositsFor({
+        userId: Number.isInteger(userId) && userId > 0 ? userId : undefined,
+        username,
+      });
+      return res.json(result);
+    }
+    const limit = Number(req.query.limit) || 25;
+    res.json({ ok: true, ...(await reconcileRecentDeposits(limit)) });
+  } catch (e) {
+    console.error('[cron] reconcile-deposits failed', e);
     res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
   }
 });
