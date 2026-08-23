@@ -63,6 +63,10 @@ tasksRouter.post('/:id/claim', async (req, res) => {
   if (!task) return res.status(404).json({ error: 'task_not_found' });
 
   // For channel-join tasks, confirm the user actually joined via the bot.
+  // Only a CONFIRMED non-member is blocked. When the bot can't check at all
+  // (it's not an admin of a partner channel, chat not found, transient error)
+  // we let the claim through — a task nobody can ever verify would otherwise be
+  // impossible to complete. Set TASK_STRICT_VERIFY=true to hard-block instead.
   if (task.chatId) {
     const membership = await checkMembership(task.chatId, user.telegramId);
     if (membership === 'not_member') {
@@ -71,8 +75,7 @@ tasksRouter.post('/:id/claim', async (req, res) => {
         message: 'Join the channel first, then tap Claim.',
       });
     }
-    if (membership === 'error') {
-      // Bot likely isn't an admin of the channel yet, or the chat is wrong.
+    if (membership === 'error' && process.env.TASK_STRICT_VERIFY === 'true') {
       return res.status(503).json({
         error: 'verify_unavailable',
         message: 'Could not verify membership yet. Please try again shortly.',
