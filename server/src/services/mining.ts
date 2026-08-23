@@ -373,10 +373,12 @@ export async function distributeMiningRewards(): Promise<{
   let usdtPaid = 0;
   let icePaid = 0;
   let winners = 0;
+  const usdtWinners: Array<{ rank: number; name: string; usdt: number }> = [];
 
   for (const row of leaderboard) {
     const rank = row.rank;
     const usdt = money(cfg.usdtPrizes[rank - 1] ?? 0);
+    if (usdt > 0) usdtWinners.push({ rank, name: row.name, usdt });
     const ice =
       rank <= cfg.iceTop ? money((cfg.icePool * (cfg.iceTop - rank + 1)) / iceDenom) : 0;
     if (usdt <= 0 && ice <= 0) continue;
@@ -415,6 +417,12 @@ export async function distributeMiningRewards(): Promise<{
         });
       }
     });
+  }
+
+  // Announce the day's USDT winners to the group/announcement channel.
+  if (usdtWinners.length) {
+    const { alertDailyWinners } = await import('./notify');
+    await alertDailyWinners({ day, totalUsdt: usdtPaid, winners: usdtWinners }).catch(() => {});
   }
 
   return { ran: true, day, usdtPaid, icePaid, winners };

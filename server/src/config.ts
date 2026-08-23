@@ -347,6 +347,9 @@ export const config = {
     // Main announcement channel — the bot reposts an admin's /post here with the
     // Open IceBox button attached. Must have the bot as an admin with post rights.
     main: process.env.MAIN_CHANNEL ?? '@iceboxAi',
+    // Where the daily "top miners rewarded" post goes (defaults to the main
+    // channel). Point REWARDS_CHANNEL at your group/chat id if you prefer.
+    rewards: process.env.REWARDS_CHANNEL ?? process.env.MAIN_CHANNEL ?? '@iceboxAi',
   },
   // Rich-alert styling: an image attached to each alert + an "Open IceBox"
   // button below it. Image must be a public URL Telegram can fetch (host it,
@@ -446,7 +449,7 @@ export const config = {
     // USDT rewards use a FIXED prize per rank (rank 1 = $2, rank 2 = $1, …), not
     // a formula — so the operator controls exactly what each place pays. Override
     // the whole ladder with MINE_USDT_PRIZES="2,1,0.5,0.3,…" (rank 1 first).
-    const usdtPrizesDefault = [2, 1, 0.5, 0.3, 0.25, 0.24, 0.21, 0.18, 0.17, 0.15];
+    const usdtPrizesDefault = [50, 20, 15, 10, 5]; // top 5 share $100/day
     const usdtPrizes = (() => {
       const raw = (process.env.MINE_USDT_PRIZES ?? '').trim();
       if (!raw) return usdtPrizesDefault;

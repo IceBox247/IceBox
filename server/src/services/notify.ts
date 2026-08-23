@@ -100,6 +100,26 @@ export async function alertDeposit(params: {
   await sendChannel(config.channels.deposit, text, config.alerts.depositImage);
 }
 
+/** 🏆 Daily top miners rewarded with USDT → announcement/group channel. */
+export async function alertDailyWinners(params: {
+  day: string;
+  totalUsdt: number;
+  winners: Array<{ rank: number; name: string; usdt: number }>;
+}): Promise<void> {
+  if (!params.winners.length) return;
+  const medals = ['🥇', '🥈', '🥉'];
+  const lines = params.winners
+    .map((w) => `${medals[w.rank - 1] ?? `#${w.rank}`} <b>${w.name}</b> — <b>${money(w.usdt)} USDT</b>`)
+    .join('\n');
+  const text =
+    `🏆 <b>Daily Top Miners</b> · ${params.day}\n\n` +
+    `Today's top miners just got paid in real USDT 💵\n\n` +
+    `${lines}\n\n` +
+    `💰 Total paid out: <b>${money(params.totalUsdt)} USDT</b>\n` +
+    `Mine daily, climb the board, get paid. #IceBox`;
+  await sendChannel(config.channels.rewards, text, config.alerts.payoutImage);
+}
+
 /** ❄️ ICE token withdrawal → Payout Channel. */
 export async function alertIceWithdrawal(params: {
   amount: number;
