@@ -937,8 +937,11 @@ function LeaderboardSheet({ open, onClose }: { open: boolean; onClose: () => voi
               <div className="text-right">
                 {r.rewardUsdt > 0 ? (
                   <>
-                    <div className="text-sm font-extrabold text-usdt">≈ {fmtUsd(r.rewardUsdt)}</div>
-                    <div className="text-[10px] text-usdt/70">USDT / day</div>
+                    <div className="text-sm font-extrabold text-usdt">
+                      ≈ {fmtUsd(r.rewardUsdt)}
+                      <span className="ml-0.5 text-[10px] font-semibold text-usdt/70">/day</span>
+                    </div>
+                    <div className="text-[10px] text-white/45">{fmtUsd(r.totalClaimedUsdt)} USDT claimed</div>
                   </>
                 ) : (
                   <>

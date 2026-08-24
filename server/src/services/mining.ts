@@ -271,7 +271,7 @@ export async function collectMined(userId: number) {
  * lifetime mined for display, and flags the requesting user's own row.
  */
 export async function miningLeaderboard(meId: number, take = 100) {
-  const [miners, refGroups, rewardIceGroups] = await Promise.all([
+  const [miners, refGroups, rewardIceGroups, rewardUsdtGroups] = await Promise.all([
     prisma.miner.findMany({
       where: { OR: [{ hashrate: { gt: 0 } }, { totalMined: { gt: 0 } }, { level: { gt: 0 } }] },
       take: 300,
@@ -294,6 +294,13 @@ export async function miningLeaderboard(meId: number, take = 100) {
       where: { reason: 'mining_reward', meta: { contains: '"type":"ice"' } },
       _sum: { amount: true },
     }),
+    // Total USDT (real) won from the daily mining leaderboard, per user — shown
+    // as "claimed" next to the expected daily USDT on the top ranks.
+    prisma.ledgerEntry.groupBy({
+      by: ['userId'],
+      where: { reason: 'mining_reward', meta: { contains: '"type":"usdt"' } },
+      _sum: { amount: true },
+    }),
   ]);
 
   const refCount = new Map<number, number>();
@@ -302,6 +309,8 @@ export async function miningLeaderboard(meId: number, take = 100) {
   }
   const rewardIce = new Map<number, number>();
   for (const g of rewardIceGroups) rewardIce.set(g.userId, g._sum.amount ?? 0);
+  const rewardUsdt = new Map<number, number>();
+  for (const g of rewardUsdtGroups) rewardUsdt.set(g.userId, g._sum.amount ?? 0);
 
   const levelModel = config.miningLevels.enabled;
   const rows = miners
@@ -321,6 +330,8 @@ export async function miningLeaderboard(meId: number, take = 100) {
         rewardIce: rewards,
         // Total ICE USD this miner has claimed: collected mining + daily ICE rewards.
         totalClaimed: money(mined + rewards),
+        // Total real USDT this miner has actually won from the daily leaderboard.
+        totalClaimedUsdt: money(rewardUsdt.get(m.userId) ?? 0),
       };
     })
     // Level model: rank by level (holding), then by ICE actually claimed so the

@@ -315,6 +315,7 @@ export interface MinerRankRow {
   rewardIce: number;
   totalClaimed: number;
   rewardUsdt: number;
+  totalClaimedUsdt: number;
   isMe: boolean;
 }
 
