@@ -535,8 +535,13 @@ export const config = {
       return Math.max(0, Math.min(count, l));
     };
     const yieldRatio = Math.pow(maxYield / minYield, 1 / (count - 1));
+    // Base ICE/day floor every miner earns — even at Level 0 (FROST), before
+    // they hold any on-chain ICE. This is what makes the airdrop actually mine
+    // for new users: holding higher levels multiplies it. It is a FIXED constant
+    // (not derived from the pool), so it never feeds the level → yield loop.
+    const baseYield = num('MINE_LEVEL_BASE_YIELD', minYield);
     const baseYieldForLevel = (lvl: number) =>
-      lvl < 1 ? 0 : minYield * Math.pow(yieldRatio, Math.min(count, lvl) - 1);
+      lvl < 1 ? baseYield : minYield * Math.pow(yieldRatio, Math.min(count, lvl) - 1);
 
     // Global mining-rate multiplier applied to every level's daily yield, scaled
     // DOWN as the token price rises: `mult` at the base price, halving for every
