@@ -54,6 +54,33 @@ export function createApp(): Express {
     res.json({ ok: true, bot: hasBot, mode: config.botMode, time: new Date().toISOString() });
   });
 
+  // Public mining-rate probe (no Telegram auth) — open in any browser to see the
+  // LIVE per-level ICE/day the running build computes, bypassing the Mini App's
+  // webview cache. Confirms Level 0 (FROST) mines a base rate.
+  app.get('/api/rates', async (_req, res) => {
+    try {
+      const c = config.miningLevels;
+      const { getIcePriceUsd } = await import('./services/chain');
+      const live = await getIcePriceUsd().catch(() => 0);
+      const price = live > 0 ? live : c.price;
+      const levels = [0, 1, 2, 3, 5, 10].map((level) => ({
+        level,
+        requiredUsd: c.requiredUsdFor(level),
+        icePerDay: c.yieldForLevel(level, price),
+      }));
+      res.json({
+        ok: true,
+        model: c.model,
+        price,
+        multiplier: c.yieldMultiplierForPrice(price),
+        levels,
+        time: new Date().toISOString(),
+      });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: (e as Error).message });
+    }
+  });
+
   // Telegram webhook — mounted BEFORE auth (Telegram doesn't send initData).
   if (hasBot && config.botMode === 'webhook') {
     const bot = createBot();
