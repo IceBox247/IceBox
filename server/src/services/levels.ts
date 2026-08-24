@@ -255,6 +255,65 @@ export async function dedupeWallets() {
   return { checked: users.length, unbound };
 }
 
+/**
+ * Buy/raise a level using the user's DEPOSITED USDT. The shortfall (in USD)
+ * between what their holding covers and the target level is charged from their
+ * deposited balance and converted to an ICE holding credit at the live price —
+ * i.e. "spend USDT → hold ICE → level up". Never touches earned ICE. Bounded
+ * (it consumes real balance), so no mining feedback loop.
+ */
+export async function purchaseLevel(userId: number, targetLevel: number) {
+  const price = await getIcePriceUsd();
+  const c = L();
+  const px = price > 0 ? price : c.price;
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+    const miner = await tx.miner.findUniqueOrThrow({ where: { userId } });
+    const level = Math.max(1, Math.min(c.count, Math.floor(targetLevel)));
+    const requiredUsd = c.requiredUsdFor(level);
+    const basisUsd = money(miner.holdingUsd + miner.bonusHoldingUsd);
+    const missingUsd = money(Math.max(0, requiredUsd - basisUsd));
+
+    // Already covered by holding — just (re)compute the level, no charge.
+    if (missingUsd <= 0) {
+      const lvl = c.levelForHolding(basisUsd);
+      const updated = await tx.miner.update({
+        where: { userId },
+        data: { level: lvl, peakLevel: Math.max(miner.peakLevel, lvl) },
+      });
+      return { ok: true as const, level: updated.level, spentUsd: 0, iceBought: 0 };
+    }
+
+    const deposited = money(Math.max(0, user.balance - user.earnedBalance));
+    if (deposited < missingUsd) {
+      return { error: 'insufficient' as const, needUsd: missingUsd, haveUsd: deposited };
+    }
+
+    const iceBought = money(missingUsd / px);
+    // Charge deposited USDT (balance down; earned bucket untouched).
+    await tx.user.update({ where: { id: userId }, data: { balance: { decrement: missingUsd } } });
+    const newBonus = money(miner.bonusHoldingUsd + missingUsd);
+    const newLevel = c.levelForHolding(money(miner.holdingUsd + newBonus));
+    const updated = await tx.miner.update({
+      where: { userId },
+      data: {
+        bonusHoldingUsd: newBonus,
+        level: newLevel,
+        peakLevel: Math.max(miner.peakLevel, newLevel),
+      },
+    });
+    await tx.ledgerEntry.create({
+      data: {
+        userId,
+        amount: -missingUsd,
+        reason: 'level_purchase',
+        meta: JSON.stringify({ level: newLevel, spentUsd: missingUsd, iceBought, price: px }),
+      },
+    });
+    return { ok: true as const, level: updated.level, spentUsd: missingUsd, iceBought };
+  });
+}
+
 /** What it takes to reach a target level, qualified on the user's ASSETS
  * (wallet holding + pool wallet), matching the ATF-style buy sheet. */
 export function buyLevelInfo(targetLevel: number, assetsUsd: number, price: number) {

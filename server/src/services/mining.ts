@@ -331,7 +331,13 @@ export async function miningLeaderboard(meId: number, take = 100) {
         : b.hashrate - a.hashrate || b.totalMined - a.totalMined,
     )
     .slice(0, take)
-    .map((r, i) => ({ rank: i + 1, ...r, isMe: r.userId === meId }));
+    .map((r, i) => ({
+      rank: i + 1,
+      ...r,
+      // What this rank earns in the daily USDT reward (top of the ladder).
+      rewardUsdt: money(config.mining.usdtPrizes[i] ?? 0),
+      isMe: r.userId === meId,
+    }));
 
   return { unit: levelModel ? 'Lvl' : config.mining.unit, leaderboard: rows };
 }

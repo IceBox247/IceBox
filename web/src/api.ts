@@ -159,6 +159,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ level }),
     }),
+  purchaseLevel: (level: number) =>
+    request<{ ok: boolean; level: number; spentUsd: number; iceBought: number; mining: AnyMiningState }>(
+      '/mining/level/purchase',
+      { method: 'POST', body: JSON.stringify({ level }) },
+    ),
   adminStats: () => request<AdminStats>('/admin/stats'),
   notifications: (since = 0) =>
     request<NotificationsResponse>(`/notifications?since=${since}`),

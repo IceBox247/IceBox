@@ -348,7 +348,7 @@ export function MineLevels({ mining, onDeposit }: Props) {
         </button>
       </Sheet>
 
-      <LeaderboardSheet open={boardOpen} onClose={() => setBoardOpen(false)} unit={mining.speedUnit} />
+      <LeaderboardSheet open={boardOpen} onClose={() => setBoardOpen(false)} />
       <Sheet open={connectOpen} onClose={() => setConnectOpen(false)} title="Connect Wallet">
         {mining.wallet.verified ? (
           <div className="space-y-4">
@@ -714,6 +714,25 @@ function StoreSheet({
   const [jump, setJump] = useState('');
   const [buy, setBuy] = useState<BuyLevelInfo | null>(null);
   const [pnl, setPnl] = useState<MinerJourney | null>(null);
+  const [buying, setBuying] = useState(false);
+  const { refreshMining } = useStore();
+
+  /** Spend deposited USDT (converted to ICE at the live price) to buy the level. */
+  async function buyWithBalance() {
+    if (!buy) return;
+    setBuying(true);
+    try {
+      const r = await api.purchaseLevel(buy.level);
+      await refreshMining();
+      haptic('success');
+      toast.show(`⚡ Level ${r.level} unlocked — spent ${fmtUsd(r.spentUsd)}`, 'success');
+      setBuy(null);
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.message : 'Could not buy level', 'error');
+    } finally {
+      setBuying(false);
+    }
+  }
 
   const levels = useMemo(() => {
     const out: number[] = [];
@@ -827,7 +846,7 @@ function StoreSheet({
         {buy && (
           <div className="space-y-4">
             <Row label="Required holding" value={`${ice(buy.requiredTokens)} ICE`} sub={fmtUsd(buy.requiredUsd)} />
-            <Row label="Your assets" value={`${ice(buy.yourTokens)} ICE`} sub={`${fmtUsd(buy.yourUsd)} · wallet + pool`} />
+            <Row label="Your holding" value={`${ice(buy.yourTokens)} ICE`} sub={fmtUsd(buy.yourUsd)} />
             <Row label="Missing to unlock" value={`${ice(buy.missingTokens)} ICE`} sub={fmtUsd(buy.missingUsd)} danger={buy.missingUsd > 0} />
             {buy.missingUsd <= 0 ? (
               <div className="rounded-xl bg-emerald-400/10 p-3 text-center text-sm text-emerald-300">
@@ -835,9 +854,21 @@ function StoreSheet({
               </div>
             ) : (
               <>
+                {/* Seamless: buy the level straight from the IceBox balance. */}
+                <button
+                  onClick={buyWithBalance}
+                  disabled={buying}
+                  className="w-full rounded-2xl bg-gradient-to-b from-emerald-300 to-emerald-500 py-4 text-base font-black text-night-900 shadow-[0_0_28px_-6px_rgba(52,211,153,0.8)] transition active:scale-[0.98] disabled:opacity-50"
+                >
+                  {buying ? 'Buying…' : `⚡ Buy Level ${buy.level} · ${fmtUsd(buy.missingUsd)}`}
+                </button>
+                <p className="text-center text-[11px] text-white/45">
+                  Pays {fmtUsd(buy.missingUsd)} from your IceBox balance (USDT → ICE at the live price).
+                </p>
+                <div className="my-1 text-center text-[10px] uppercase tracking-widest text-white/25">or buy ICE into your own wallet</div>
                 <p className="text-center text-[11px] text-white/40">
-                  Buy {ice(buy.missingTokens)} more ICE into your wallet to unlock. Open the swap
-                  <b> inside your wallet app</b> so it's connected and ready.
+                  Buy {ice(buy.missingTokens)} more ICE into your wallet — open the swap
+                  <b> inside your wallet app</b> so it's connected.
                 </p>
                 <div className="grid grid-cols-3 gap-2">
                   {walletDeepLinks(buy.swapUrl).map((w) => (
@@ -871,7 +902,7 @@ function StoreSheet({
 }
 
 /** Top miners by level/holding then ICE claimed. */
-function LeaderboardSheet({ open, onClose, unit }: { open: boolean; onClose: () => void; unit: string }) {
+function LeaderboardSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [board, setBoard] = useState<MinerRankRow[] | null>(null);
   useEffect(() => {
     if (!open) return;
@@ -904,15 +935,25 @@ function LeaderboardSheet({ open, onClose, unit }: { open: boolean; onClose: () 
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-sm font-extrabold text-ice-300">{ice(r.totalClaimed)} ICE</div>
-                <div className="text-[10px] text-white/40">claimed</div>
+                {r.rewardUsdt > 0 ? (
+                  <>
+                    <div className="text-sm font-extrabold text-usdt">≈ {fmtUsd(r.rewardUsdt)}</div>
+                    <div className="text-[10px] text-usdt/70">USDT / day</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-sm font-extrabold text-ice-300">{ice(r.totalClaimed)} ICE</div>
+                    <div className="text-[10px] text-white/40">claimed</div>
+                  </>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
       <p className="mt-3 text-center text-[11px] text-white/40">
-        Ranked by level, then ICE claimed. Higher {unit} (holding) climbs the board.
+        Top ranks earn real <b className="text-usdt">USDT</b> daily. Ranked by level, then ICE claimed —
+        higher holding climbs the board.
       </p>
     </Sheet>
   );

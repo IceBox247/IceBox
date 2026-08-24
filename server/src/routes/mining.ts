@@ -10,7 +10,7 @@ import {
   miningReferralCount,
   miningLeaderboard,
 } from '../services/mining';
-import { serializeLevelMining, syncMinerLevel, buyLevelInfo, minerJourney } from '../services/levels';
+import { serializeLevelMining, syncMinerLevel, buyLevelInfo, minerJourney, purchaseLevel } from '../services/levels';
 import {
   isEvmAddress,
   verifyWalletSignature,
@@ -172,6 +172,33 @@ miningRouter.post('/level/buy', async (req, res) => {
   const info = buyLevelInfo(target, levelBasisUsd, price);
   const swapUrl = `${config.miningLevels.swapUrlBase}?chain=bsc&outputCurrency=${config.token.address}`;
   res.json({ ok: true, ...info, price, token: config.token.address, swapUrl });
+});
+
+/**
+ * POST /api/mining/level/purchase { level } — buy/raise a level using the
+ * user's deposited USDT (converted to an ICE holding credit at the live price).
+ */
+miningRouter.post('/level/purchase', async (req, res) => {
+  const user = req.user!;
+  if (!levelModel()) {
+    return res.status(403).json({ error: 'not_level_model', message: 'Level mining is off.' });
+  }
+  const target = Number(req.body?.level);
+  if (!Number.isFinite(target) || target < 1) {
+    return res.status(400).json({ error: 'invalid_level', message: 'Choose a valid level.' });
+  }
+  const result = await purchaseLevel(user.id, target);
+  if ('error' in result) {
+    const need = result.needUsd ?? 0;
+    const have = result.haveUsd ?? 0;
+    return res.status(400).json({
+      error: result.error,
+      needUsd: need,
+      haveUsd: have,
+      message: `You need $${need.toFixed(2)} deposited to buy this level — you have $${have.toFixed(2)}. Deposit or buy ICE into your wallet.`,
+    });
+  }
+  res.json({ ...result, mining: await currentState(user.id) });
 });
 
 /** POST /api/mining/buy { amount } — buy hashrate with deposited USD. */
