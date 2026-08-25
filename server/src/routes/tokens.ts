@@ -198,8 +198,10 @@ tokensRouter.get('/verify-status', async (req, res) => {
  */
 tokensRouter.get('/', async (req, res) => {
   const owner = String(req.query.owner ?? '');
-  if (!isAddress(owner)) return res.status(400).json({ error: 'invalid_owner' });
-  const where: { creator: string; chainId?: number } = { creator: owner.toLowerCase() };
+  const ton = isTonAddress(owner);
+  if (!isAddress(owner) && !ton) return res.status(400).json({ error: 'invalid_owner' });
+  // TON addresses are case-sensitive; EVM addresses are matched lowercased.
+  const where: { creator: string; chainId?: number } = { creator: ton ? owner : owner.toLowerCase() };
   const chainId = Number(req.query.chainId);
   if (Number.isInteger(chainId) && chainId > 0) where.chainId = chainId;
 

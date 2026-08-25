@@ -27,8 +27,13 @@ whenever `src/main.js` changes.
   addresses) and sends the jetton side + TON side in one wallet-approved transaction.
   Mainnet only — STON.fi does not run on testnet.
 
+- **My Tokens** (`my-ton-tokens.html`, `window.IceTon.listMyTokens`): lists the connected
+  wallet's IceBox-created Grams across mainnet (607) and testnet (608).
+- **Renounce admin / lock supply** (`window.IceTon.renounceAdmin`): hands the jetton admin
+  to the zero address so supply is fixed forever. Offered after create and per-token in
+  My Tokens. Irreversible.
+
 ## Roadmap (not yet built)
-- "My Tokens" listing for TON, and an optional "renounce admin" (fixed supply).
 - Tax / sell-lock jettons require a **custom** jetton contract (the standard one has no
   transfer tax) — a separate contract-engineering effort, tested on testnet first.
 
