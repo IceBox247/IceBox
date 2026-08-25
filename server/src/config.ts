@@ -449,7 +449,7 @@ export const config = {
     // USDT rewards use a FIXED prize per rank (rank 1 = $2, rank 2 = $1, …), not
     // a formula — so the operator controls exactly what each place pays. Override
     // the whole ladder with MINE_USDT_PRIZES="2,1,0.5,0.3,…" (rank 1 first).
-    const usdtPrizesDefault = [50, 20, 15, 10, 5]; // top 5 share $100/day
+    const usdtPrizesDefault = [5, 2, 1.5, 1, 0.5]; // top 5 share $10/day
     const usdtPrizes = (() => {
       const raw = (process.env.MINE_USDT_PRIZES ?? '').trim();
       if (!raw) return usdtPrizesDefault;
@@ -548,7 +548,7 @@ export const config = {
     // `divisorPer5x`-fold (default 5×) price increase. Below the base price it is
     // clamped to `mult` (never boosts). This keeps ICE/day meaningful while the
     // price is tiny and self-tapers as ICE appreciates.
-    const yieldMult = Math.max(0.0001, num('MINE_YIELD_MULTIPLIER', 35));
+    const yieldMult = Math.max(0.0001, num('MINE_YIELD_MULTIPLIER', 700));
     const yieldBasePrice = num('MINE_YIELD_BASE_PRICE', 0.0000442);
     const yieldPer5x = Math.max(1.0001, num('MINE_YIELD_DIVISOR_PER_5X', 2));
     // exponent so that a 5× price rise multiplies yield by 1/divisorPer5x.
