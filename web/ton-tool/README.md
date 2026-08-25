@@ -21,9 +21,14 @@ The output is a single self-contained IIFE, inlined-style like the BEP-20 tool p
 loaded via `<script src="/ice-ton.js">`. Rebuild and commit `web/public/ice-ton.js`
 whenever `src/main.js` changes.
 
+## Also included
+- **Add liquidity** on STON.fi (`add-ton-liquidity.html`, `window.IceTon.addLiquidity`):
+  resolves a v2.2 constant-product router from the STON.fi API (no hardcoded
+  addresses) and sends the jetton side + TON side in one wallet-approved transaction.
+  Mainnet only — STON.fi does not run on testnet.
+
 ## Roadmap (not yet built)
-- Phase 2: Add liquidity on STON.fi / DeDust.
-- Phase 3: "My Tokens" listing for TON, and an optional "renounce admin" (fixed supply).
+- "My Tokens" listing for TON, and an optional "renounce admin" (fixed supply).
 - Tax / sell-lock jettons require a **custom** jetton contract (the standard one has no
   transfer tax) — a separate contract-engineering effort, tested on testnet first.
 

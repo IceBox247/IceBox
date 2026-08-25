@@ -5,6 +5,18 @@
 import { TonConnectUI } from '@tonconnect/ui';
 import { Address, beginCell, storeStateInit, toNano } from '@ton/core';
 import { AssetsSDK, createApi, NoopStorage } from '@ton-community/assets-sdk';
+import { DEX, pTON } from '@ston-fi/sdk';
+import { StonApiClient } from '@ston-fi/api';
+
+// Turn a @ton/core SenderArguments into a TON Connect message object.
+function toTonConnectMessage(args) {
+  const m = { address: args.to.toString(), amount: args.value.toString() };
+  if (args.body) m.payload = args.body.toBoc().toString('base64');
+  if (args.init) {
+    m.stateInit = beginCell().store(storeStateInit(args.init)).endCell().toBoc().toString('base64');
+  }
+  return m;
+}
 
 // A @ton/core Sender that forwards each outgoing message to the connected wallet
 // through TON Connect. The SDK computes the minter address, its state init, and the
@@ -13,15 +25,9 @@ function tonConnectSender(tonConnectUI, address) {
   return {
     address,
     async send(args) {
-      const message = { address: args.to.toString(), amount: args.value.toString() };
-      if (args.body) message.payload = args.body.toBoc().toString('base64');
-      if (args.init) {
-        const initCell = beginCell().store(storeStateInit(args.init)).endCell();
-        message.stateInit = initCell.toBoc().toString('base64');
-      }
       await tonConnectUI.sendTransaction({
         validUntil: Math.floor(Date.now() / 1000) + 300,
-        messages: [message],
+        messages: [toTonConnectMessage(args)],
       });
     },
   };
@@ -107,6 +113,71 @@ const API = {
       symbol: content.symbol,
       decimals,
       supply: whole.toString(),
+    };
+  },
+
+  /**
+   * Add liquidity for a jetton on STON.fi (mainnet), pairing it with TON. For a
+   * brand-new token this creates the pool. Sends both the jetton side and the TON
+   * side in a single wallet-approved transaction.
+   * @param {{jettonAddress:string, jettonAmount:string|number, decimals:number,
+   *          tonAmount:string|number}} form
+   */
+  async addLiquidity(form) {
+    if (!this.connected()) throw new Error('Connect your TON wallet first.');
+    // STON.fi operates on mainnet; liquidity uses real TON.
+    const owner = Address.parse(this.wallet());
+    const jettonMaster = Address.parse(String(form.jettonAddress).trim());
+    const decimals = Number(form.decimals);
+    if (!Number.isInteger(decimals) || decimals < 0 || decimals > 30) {
+      throw new Error('Decimals must be a whole number between 0 and 30.');
+    }
+    const jettonWhole = BigInt(String(form.jettonAmount).replace(/[^0-9]/g, '') || '0');
+    if (jettonWhole <= 0n) throw new Error('Enter how many tokens to add.');
+    const jettonUnits = jettonWhole * 10n ** BigInt(decimals);
+    const tonNano = toNano(String(form.tonAmount).trim() || '0');
+    if (tonNano <= 0n) throw new Error('Enter how much TON to pair.');
+
+    // Resolve a v2.2 constant-product router that allows creating new pools.
+    const ston = new StonApiClient();
+    const routers = await ston.getRouters();
+    const r = routers.find(
+      (x) => x.majorVersion === 2 && x.minorVersion === 2 &&
+        x.routerType === 'ConstantProduct' && x.poolCreationEnabled,
+    ) || routers.find(
+      (x) => x.majorVersion === 2 && x.routerType === 'ConstantProduct' && x.poolCreationEnabled,
+    );
+    if (!r) throw new Error('No STON.fi router available for pool creation right now.');
+
+    const api = await createApi('mainnet');
+    const router = api.open(DEX.v2_2.Router.create(r.address));
+    const proxyTon = pTON.v2_1.create(r.ptonMasterAddress);
+
+    const jettonParams = await router.getProvideLiquidityJettonTxParams({
+      userWalletAddress: owner,
+      sendTokenAddress: jettonMaster,
+      otherTokenAddress: proxyTon.address,
+      sendAmount: jettonUnits,
+      minLpOut: '1',
+    });
+    const tonParams = await router.getProvideLiquidityTonTxParams({
+      userWalletAddress: owner,
+      proxyTon,
+      otherTokenAddress: jettonMaster,
+      sendAmount: tonNano,
+      minLpOut: '1',
+    });
+
+    await this.ui.sendTransaction({
+      validUntil: Math.floor(Date.now() / 1000) + 300,
+      messages: [toTonConnectMessage(jettonParams), toTonConnectMessage(tonParams)],
+    });
+
+    return {
+      router: r.address,
+      pair: jettonMaster.toString({ bounceable: true }),
+      tonAmount: String(form.tonAmount),
+      jettonAmount: jettonWhole.toString(),
     };
   },
 };

@@ -11,6 +11,8 @@
     "esbuild": "^0.24.0"
   },
   "dependencies": {
+    "@ston-fi/api": "^0.32.0",
+    "@ston-fi/sdk": "^2.7.0",
     "@ton-community/assets-sdk": "^0.0.5",
     "@ton/core": "^0.63.0",
     "@ton/crypto": "^3.3.0",
