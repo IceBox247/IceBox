@@ -1,0 +1,147 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<title>Create Your Gram · IceBox on TON</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}
+body{margin:0;background:#05070d;color:#f4f8ff;font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:520px;margin:0 auto;padding:26px 18px 60px}
+.logo{text-align:center;font-weight:900;font-size:28px}.logo b{color:#33c2ff}
+.sub{text-align:center;color:#7c8aa0;font-size:13px;margin:2px 0 20px}
+.card{background:#101827;border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:16px;margin-bottom:14px;box-shadow:0 8px 30px -12px rgba(0,0,0,.6)}
+label{display:block;font-size:12px;color:#7c8aa0;letter-spacing:.04em;margin:12px 0 6px;text-transform:uppercase}
+input,textarea{width:100%;background:#0a0f1a;border:1px solid rgba(255,255,255,.09);border-radius:12px;color:#f4f8ff;font-size:16px;padding:12px 14px;outline:none}
+input:focus,textarea:focus{border-color:#33c2ff}
+.row{display:flex;gap:10px}.row>div{flex:1}
+.seg{display:flex;background:#0a0f1a;border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:4px;gap:4px}
+.seg button{flex:1;background:transparent;border:0;color:#7c8aa0;font-weight:700;font-size:14px;padding:9px;border-radius:9px}
+.seg button.on{background:rgba(51,194,255,.18);color:#8fdcff}
+#tonconnect-btn{display:flex;justify-content:center;margin:6px 0 4px}
+.cta{width:100%;background:linear-gradient(180deg,#40c9ff,#2b8fff);border:0;color:#04121f;font-weight:900;font-size:17px;padding:15px;border-radius:14px;margin-top:16px}
+.cta:disabled{opacity:.45}
+.warn{background:rgba(255,176,32,.08);border:1px solid rgba(255,176,32,.25);color:#ffd591;border-radius:12px;padding:12px 14px;font-size:12.5px;line-height:1.5;margin-top:14px}
+.ok{background:rgba(40,220,140,.08);border:1px solid rgba(40,220,140,.3);color:#9bf0c4;border-radius:12px;padding:14px;font-size:13px;line-height:1.6;margin-top:14px;word-break:break-all}
+.err{background:rgba(255,80,80,.08);border:1px solid rgba(255,80,80,.3);color:#ffb0b0;border-radius:12px;padding:12px 14px;font-size:13px;margin-top:14px;word-break:break-word}
+.ok a{color:#8fdcff}
+.hint{color:#5f6b80;font-size:11.5px;margin-top:5px}
+.status{text-align:center;color:#7c8aa0;font-size:13px;margin-top:10px;min-height:18px}
+a.back{display:inline-block;color:#7c8aa0;text-decoration:none;font-size:13px;margin-top:18px}
+</style></head><body><div class="wrap">
+<div class="logo">Create Your <b>Gram</b></div>
+<div class="sub">Launch your own Jetton (token) on The Open Network — TON</div>
+
+<div class="card">
+  <label>Network</label>
+  <div class="seg" id="net">
+    <button data-net="testnet" class="on">Testnet (safe test)</button>
+    <button data-net="mainnet">Mainnet (real)</button>
+  </div>
+  <div class="hint">Test on Testnet first — it uses free test TON so you can verify everything before spending real funds.</div>
+
+  <label>Connect TON wallet</label>
+  <div id="tonconnect-btn"></div>
+</div>
+
+<div class="card">
+  <label>Token name</label>
+  <input id="name" placeholder="My Awesome Gram" maxlength="60"/>
+
+  <div class="row">
+    <div><label>Symbol</label><input id="symbol" placeholder="GRAM" maxlength="12"/></div>
+    <div><label>Decimals</label><input id="decimals" type="number" value="9" min="0" max="30"/></div>
+  </div>
+
+  <label>Total supply (whole tokens)</label>
+  <input id="supply" inputmode="numeric" value="1000000000"/>
+
+  <label>Description (optional)</label>
+  <textarea id="description" rows="2" placeholder="What is this token about?"></textarea>
+
+  <label>Logo image URL (optional)</label>
+  <input id="image" placeholder="https://…/logo.png"/>
+  <div class="hint">A direct https link to a square PNG/JPG. Stored on-chain in the token metadata.</div>
+
+  <button class="cta" id="create" disabled>Connect wallet to create</button>
+  <div class="status" id="status"></div>
+  <div id="result"></div>
+
+  <div class="warn">You pay a small TON network fee (~0.25 TON, unused amount is returned). The whole supply is minted to your wallet and you become the token admin. The token has no market value until you add liquidity on a TON DEX (STON.fi / DeDust).</div>
+</div>
+
+<a class="back" href="/tools.html">← Back to all tools</a>
+</div>
+
+<script src="/ice-ton.js"></script>
+<script>
+(function () {
+  var T = window.IceTon;
+  var statusEl = document.getElementById('status');
+  var resultEl = document.getElementById('result');
+  var createBtn = document.getElementById('create');
+  var manifestUrl = location.origin + '/tonconnect-manifest.json';
+
+  function setStatus(t) { statusEl.textContent = t || ''; }
+  function explorer(net, addr) {
+    return (net === 'mainnet' ? 'https://tonviewer.com/' : 'https://testnet.tonviewer.com/') + addr;
+  }
+  function refreshBtn() {
+    if (T.connected()) { createBtn.disabled = false; createBtn.textContent = 'Create Gram token'; }
+    else { createBtn.disabled = true; createBtn.textContent = 'Connect wallet to create'; }
+  }
+
+  T.init(manifestUrl, 'tonconnect-btn');
+  T.onStatusChange(function () { refreshBtn(); });
+
+  // Network toggle
+  var netWrap = document.getElementById('net');
+  netWrap.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    [].forEach.call(netWrap.children, function (c) { c.classList.remove('on'); });
+    b.classList.add('on');
+    T.setNetwork(b.getAttribute('data-net'));
+  });
+
+  createBtn.addEventListener('click', async function () {
+    resultEl.innerHTML = '';
+    var form = {
+      name: document.getElementById('name').value,
+      symbol: document.getElementById('symbol').value,
+      decimals: document.getElementById('decimals').value,
+      supply: document.getElementById('supply').value,
+      description: document.getElementById('description').value,
+      image: document.getElementById('image').value,
+    };
+    if (!form.name.trim() || !form.symbol.trim()) {
+      resultEl.innerHTML = '<div class="err">Enter a token name and symbol.</div>';
+      return;
+    }
+    createBtn.disabled = true;
+    setStatus('Confirm the transaction in your wallet…');
+    try {
+      var res = await T.createJetton(form);
+      setStatus('');
+      resultEl.innerHTML =
+        '<div class="ok"><b>Gram token created 🎉</b><br/>' +
+        res.name + ' (' + res.symbol + ') · ' + res.supply + ' supply<br/><br/>' +
+        '<b>Token address:</b><br/>' + res.addressFriendly + '<br/><br/>' +
+        '<a href="' + explorer(res.network, res.addressFriendly) + '" target="_blank" rel="noopener">View on Tonviewer →</a></div>';
+      // Best-effort record to the IceBox backend (does not block on failure).
+      try {
+        await fetch('/api/tokens', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chainId: res.network === 'mainnet' ? 607 : 608,
+            address: res.addressFriendly, creator: res.owner, name: res.name,
+            symbol: res.symbol, decimals: res.decimals, supply: res.supply,
+            taxed: false, txHash: '',
+          }),
+        });
+      } catch (_) {}
+    } catch (err) {
+      setStatus('');
+      resultEl.innerHTML = '<div class="err">' + (err && err.message ? err.message : 'Something went wrong.') + '</div>';
+    }
+    refreshBtn();
+  });
+})();
+</script>
+</body></html>

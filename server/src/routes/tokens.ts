@@ -9,6 +9,14 @@ export const tokensRouter = Router();
 const isAddress = (v: unknown): v is string =>
   typeof v === 'string' && /^0x[a-fA-F0-9]{40}$/.test(v);
 
+// Synthetic chain ids for TON tokens created via the Gram tool (SLIP-44 607-based).
+const TON_MAINNET = 607;
+const TON_TESTNET = 608;
+const isTonChain = (id: number) => id === TON_MAINNET || id === TON_TESTNET;
+// TON addresses: user-friendly base64url (48 chars) or raw "workchain:hex".
+const isTonAddress = (v: unknown): v is string =>
+  typeof v === 'string' && (/^[A-Za-z0-9_-]{48}$/.test(v) || /^-?\d+:[a-fA-F0-9]{64}$/.test(v));
+
 /**
  * POST /api/tokens — record a token created via the IceBox factory.
  * Body: { chainId, address, creator, name, symbol, decimals, supply, taxed, txHash }
@@ -17,12 +25,16 @@ const isAddress = (v: unknown): v is string =>
 tokensRouter.post('/', async (req, res) => {
   try {
     const b = req.body ?? {};
-    if (!isAddress(b.address) || !isAddress(b.creator)) {
-      return res.status(400).json({ error: 'invalid_address' });
-    }
     const chainId = Number(b.chainId);
     if (!Number.isInteger(chainId) || chainId <= 0) {
       return res.status(400).json({ error: 'invalid_chain' });
+    }
+    const ton = isTonChain(chainId);
+    // EVM tokens use 0x addresses; TON (Gram) tokens use base64url / raw TON addresses.
+    const addrOk = ton ? isTonAddress(b.address) && isTonAddress(b.creator)
+                       : isAddress(b.address) && isAddress(b.creator);
+    if (!addrOk) {
+      return res.status(400).json({ error: 'invalid_address' });
     }
     const name = String(b.name ?? '').slice(0, 64);
     const symbol = String(b.symbol ?? '').slice(0, 32);
@@ -31,7 +43,8 @@ tokensRouter.post('/', async (req, res) => {
     const taxed = Boolean(b.taxed);
     const txHash = typeof b.txHash === 'string' ? b.txHash.slice(0, 80) : null;
     const address = (b.address as string);
-    const creator = (b.creator as string).toLowerCase();
+    // TON addresses are case-sensitive; only lowercase EVM addresses.
+    const creator = ton ? (b.creator as string) : (b.creator as string).toLowerCase();
 
     const row = await prisma.createdToken.upsert({
       where: { chainId_address: { chainId, address } },
