@@ -548,7 +548,7 @@ export const config = {
     // `divisorPer5x`-fold (default 5×) price increase. Below the base price it is
     // clamped to `mult` (never boosts). This keeps ICE/day meaningful while the
     // price is tiny and self-tapers as ICE appreciates.
-    const yieldMult = Math.max(0.0001, num('MINE_YIELD_MULTIPLIER', 35));
+    const yieldMult = Math.max(0.0001, num('MINE_YIELD_MULTIPLIER', 700));
     const yieldBasePrice = num('MINE_YIELD_BASE_PRICE', 0.0000442);
     const yieldPer5x = Math.max(1.0001, num('MINE_YIELD_DIVISOR_PER_5X', 2));
     // exponent so that a 5× price rise multiplies yield by 1/divisorPer5x.
