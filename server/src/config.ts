@@ -449,7 +449,7 @@ export const config = {
     // USDT rewards use a FIXED prize per rank (rank 1 = $2, rank 2 = $1, …), not
     // a formula — so the operator controls exactly what each place pays. Override
     // the whole ladder with MINE_USDT_PRIZES="2,1,0.5,0.3,…" (rank 1 first).
-    const usdtPrizesDefault = [50, 20, 15, 10, 5]; // top 5 share $100/day
+    const usdtPrizesDefault = [5, 2, 1.5, 1, 0.5]; // top 5 share $10/day
     const usdtPrizes = (() => {
       const raw = (process.env.MINE_USDT_PRIZES ?? '').trim();
       if (!raw) return usdtPrizesDefault;

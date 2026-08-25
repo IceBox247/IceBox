@@ -942,6 +942,7 @@ function LeaderboardSheet({ open, onClose }: { open: boolean; onClose: () => voi
                       <span className="ml-0.5 text-[10px] font-semibold text-usdt/70">/day</span>
                     </div>
                     <div className="text-[10px] text-white/45">{fmtUsd(r.totalClaimedUsdt)} USDT claimed</div>
+                    <div className="text-[10px] text-ice-300/70">{ice(r.totalClaimed)} ICE claimed</div>
                   </>
                 ) : (
                   <>
