@@ -1,0 +1,90 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<title>My TON Tokens · IceBox</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}
+body{margin:0;background:#05070d;color:#f4f8ff;font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:520px;margin:0 auto;padding:26px 18px 60px}
+.logo{text-align:center;font-weight:900;font-size:28px}.logo b{color:#33c2ff}
+.sub{text-align:center;color:#7c8aa0;font-size:13px;margin:2px 0 20px}
+.card{background:#101827;border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:16px;margin-bottom:14px;box-shadow:0 8px 30px -12px rgba(0,0,0,.6)}
+label{display:block;font-size:12px;color:#7c8aa0;letter-spacing:.04em;margin:0 0 6px;text-transform:uppercase}
+#tonconnect-btn{display:flex;justify-content:center;margin:6px 0 4px}
+.tok{border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:13px 14px;margin-bottom:10px;background:#0c1320}
+.tok .nm{font-weight:800;font-size:16px}
+.tok .meta{color:#7c8aa0;font-size:12px;margin-top:2px}
+.tok .addr{color:#5f6b80;font-size:11px;margin-top:6px;word-break:break-all}
+.tok .net{display:inline-block;font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px;margin-left:6px;background:rgba(51,194,255,.15);color:#8fdcff;text-transform:uppercase}
+.tok .actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.tok a,.tok button{font-size:12.5px;font-weight:700;text-decoration:none;border-radius:10px;padding:8px 11px;border:0}
+.tok a{background:rgba(255,255,255,.06);color:#cfe4ff}
+.tok button.ren{background:rgba(255,176,32,.14);color:#ffd591}
+.tok button:disabled{opacity:.5}
+.status{text-align:center;color:#7c8aa0;font-size:13px;margin-top:8px}
+a.back{display:inline-block;color:#7c8aa0;text-decoration:none;font-size:13px;margin-top:18px}
+</style></head><body><div class="wrap">
+<div class="logo">My <b>TON</b> Tokens</div>
+<div class="sub">Grams you launched with IceBox</div>
+
+<div class="card">
+  <label>Connect TON wallet</label>
+  <div id="tonconnect-btn"></div>
+</div>
+
+<div id="list"></div>
+<div class="status" id="status">Connect your wallet to see your tokens.</div>
+
+<a class="back" href="/tools.html">← Back to all tools</a>
+</div>
+
+<script src="/ice-ton.js"></script>
+<script>
+(function () {
+  var T = window.IceTon;
+  var listEl = document.getElementById('list');
+  var statusEl = document.getElementById('status');
+  var manifestUrl = location.origin + '/tonconnect-manifest.json';
+
+  function explorer(net, addr) {
+    return (net === 'mainnet' ? 'https://tonviewer.com/' : 'https://testnet.tonviewer.com/') + addr;
+  }
+
+  function render(tokens) {
+    if (!tokens.length) { listEl.innerHTML = ''; statusEl.textContent = 'No IceBox tokens found for this wallet yet.'; return; }
+    statusEl.textContent = '';
+    listEl.innerHTML = tokens.map(function (t, i) {
+      return '<div class="tok" id="tok' + i + '">' +
+        '<div class="nm">' + (t.name || 'Token') + ' <span style="color:#7c8aa0">(' + (t.symbol || '') + ')</span>' +
+        '<span class="net">' + t.network + '</span></div>' +
+        '<div class="meta">Supply: ' + (t.supply || '-') + ' · Decimals: ' + (t.decimals != null ? t.decimals : '-') + '</div>' +
+        '<div class="addr">' + t.address + '</div>' +
+        '<div class="actions">' +
+        '<a href="' + explorer(t.network, t.address) + '" target="_blank" rel="noopener">Explorer</a>' +
+        '<a href="/add-ton-liquidity.html">Add liquidity</a>' +
+        '<button class="ren" data-addr="' + t.address + '" data-net="' + t.network + '" data-i="' + i + '">Lock supply</button>' +
+        '</div></div>';
+    }).join('');
+    [].forEach.call(listEl.querySelectorAll('button.ren'), function (b) {
+      b.addEventListener('click', async function () {
+        b.disabled = true;
+        T.setNetwork(b.getAttribute('data-net'));
+        var prev = b.textContent; b.textContent = 'Confirm in wallet…';
+        try { await T.renounceAdmin(b.getAttribute('data-addr')); b.textContent = '✓ Locked'; }
+        catch (e) { b.disabled = false; b.textContent = prev; alert(e && e.message ? e.message : 'Failed'); }
+      });
+    });
+  }
+
+  async function refresh() {
+    if (!T.connected()) { listEl.innerHTML = ''; statusEl.textContent = 'Connect your wallet to see your tokens.'; return; }
+    statusEl.textContent = 'Loading your tokens…';
+    try { render(await T.listMyTokens()); }
+    catch (e) { statusEl.textContent = e && e.message ? e.message : 'Could not load tokens.'; }
+  }
+
+  T.init(manifestUrl, 'tonconnect-btn');
+  T.onStatusChange(function () { refresh(); });
+  refresh();
+})();
+</script>
+</body></html>

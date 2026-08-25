@@ -5,6 +5,10 @@
 import { TonConnectUI } from '@tonconnect/ui';
 import { Address, beginCell, storeStateInit, toNano } from '@ton/core';
 import { AssetsSDK, createApi, NoopStorage } from '@ton-community/assets-sdk';
+
+// The TON zero address (workchain 0, all-zero hash). Setting a jetton's admin to
+// this permanently removes the admin — supply can never be minted again.
+const ZERO_ADDRESS = new Address(0, Buffer.alloc(32));
 import { DEX, pTON } from '@ston-fi/sdk';
 import { StonApiClient } from '@ston-fi/api';
 
@@ -179,6 +183,47 @@ const API = {
       tonAmount: String(form.tonAmount),
       jettonAmount: jettonWhole.toString(),
     };
+  },
+
+  /**
+   * Renounce the admin of a jetton by handing it to the zero address. After this the
+   * supply is fixed forever — nobody (including the creator) can mint more. Irreversible.
+   * @param {string} jettonAddress
+   */
+  async renounceAdmin(jettonAddress) {
+    if (!this.connected()) throw new Error('Connect your TON wallet first.');
+    const owner = Address.parse(this.wallet());
+    const sender = tonConnectSender(this.ui, owner);
+    const api = await createApi(this.network);
+    const sdk = AssetsSDK.create({ api, storage: new NoopStorage(), sender });
+    const minter = sdk.openJetton(Address.parse(String(jettonAddress).trim()));
+    await minter.sendChangeAdmin(sender, ZERO_ADDRESS, { value: toNano('0.05') });
+    return { address: String(jettonAddress).trim(), network: this.network };
+  },
+
+  /**
+   * List TON tokens the connected wallet created (recorded by the IceBox backend),
+   * across mainnet (chain 607) and testnet (chain 608). Returns [] on any error.
+   */
+  async listMyTokens() {
+    if (!this.connected()) throw new Error('Connect your TON wallet first.');
+    const raw = Address.parse(this.wallet());
+    const out = [];
+    const chains = [[607, false], [608, true]];
+    for (let i = 0; i < chains.length; i++) {
+      const chainId = chains[i][0];
+      const owner = raw.toString({ bounceable: false, testOnly: chains[i][1] });
+      try {
+        const resp = await fetch('/api/tokens?owner=' + encodeURIComponent(owner) + '&chainId=' + chainId);
+        const j = await resp.json();
+        if (j && j.tokens) {
+          j.tokens.forEach((t) => out.push(Object.assign({}, t, {
+            network: chainId === 607 ? 'mainnet' : 'testnet',
+          })));
+        }
+      } catch (_) { /* ignore per-chain failures */ }
+    }
+    return out;
   },
 };
 

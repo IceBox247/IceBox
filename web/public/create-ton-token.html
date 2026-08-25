@@ -123,7 +123,16 @@ a.back{display:inline-block;color:#7c8aa0;text-decoration:none;font-size:13px;ma
         '<div class="ok"><b>Gram token created 🎉</b><br/>' +
         res.name + ' (' + res.symbol + ') · ' + res.supply + ' supply<br/><br/>' +
         '<b>Token address:</b><br/>' + res.addressFriendly + '<br/><br/>' +
-        '<a href="' + explorer(res.network, res.addressFriendly) + '" target="_blank" rel="noopener">View on Tonviewer →</a></div>';
+        '<a href="' + explorer(res.network, res.addressFriendly) + '" target="_blank" rel="noopener">View on Tonviewer →</a></div>' +
+        '<button class="cta" id="renounce" style="margin-top:12px;background:linear-gradient(180deg,#8a94a8,#5a6478)">Renounce admin (lock supply)</button>' +
+        '<div class="hint">Optional: gives up mint rights so the supply can never increase — buyers trust this. Irreversible.</div>';
+      var rb = document.getElementById('renounce');
+      if (rb) rb.addEventListener('click', async function () {
+        rb.disabled = true; setStatus('Confirm in your wallet to lock supply…');
+        try { await T.renounceAdmin(res.addressFriendly); setStatus(''); rb.textContent = '✓ Supply locked forever'; }
+        catch (e) { setStatus(''); rb.disabled = false; rb.textContent = 'Renounce admin (lock supply)';
+          resultEl.insertAdjacentHTML('beforeend', '<div class="err">' + (e && e.message ? e.message : 'Failed') + '</div>'); }
+      });
       // Best-effort record to the IceBox backend (does not block on failure).
       try {
         await fetch('/api/tokens', {
