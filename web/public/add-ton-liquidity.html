@@ -65,8 +65,8 @@ a.back{display:inline-block;color:#7c8aa0;text-decoration:none;font-size:13px;ma
   var manifestUrl = location.origin + '/tonconnect-manifest.json';
 
   function refreshBtn() {
-    if (T.connected()) { addBtn.disabled = false; addBtn.textContent = 'Add liquidity'; }
-    else { addBtn.disabled = true; addBtn.textContent = 'Connect wallet to add liquidity'; }
+    addBtn.disabled = false;
+    addBtn.textContent = T.connected() ? 'Add liquidity' : 'Connect wallet to add liquidity';
   }
 
   T.init(manifestUrl);
@@ -74,6 +74,10 @@ a.back{display:inline-block;color:#7c8aa0;text-decoration:none;font-size:13px;ma
   T.bindConnectButton(document.getElementById('connectw'), function () { refreshBtn(); });
 
   addBtn.addEventListener('click', async function () {
+    if (!T.connected()) {
+      try { await T.connect(); } catch (_) { /* modal closed */ }
+      return;
+    }
     resultEl.innerHTML = '';
     var form = {
       jettonAddress: document.getElementById('jetton').value,

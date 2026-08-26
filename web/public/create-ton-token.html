@@ -84,8 +84,9 @@ a.back{display:inline-block;color:#7c8aa0;text-decoration:none;font-size:13px;ma
     return (net === 'mainnet' ? 'https://tonviewer.com/' : 'https://testnet.tonviewer.com/') + addr;
   }
   function refreshBtn() {
-    if (T.connected()) { createBtn.disabled = false; createBtn.textContent = 'Create Gram token'; }
-    else { createBtn.disabled = true; createBtn.textContent = 'Connect wallet to create'; }
+    // Always tappable: tapping while disconnected opens the wallet chooser.
+    createBtn.disabled = false;
+    createBtn.textContent = T.connected() ? 'Create Gram token' : 'Connect wallet to create';
   }
 
   T.init(manifestUrl);
@@ -101,6 +102,11 @@ a.back{display:inline-block;color:#7c8aa0;text-decoration:none;font-size:13px;ma
   });
 
   createBtn.addEventListener('click', async function () {
+    // Not connected yet → this tap opens the wallet chooser; user taps again to create.
+    if (!T.connected()) {
+      try { await T.connect(); } catch (_) { /* modal closed */ }
+      return;
+    }
     resultEl.innerHTML = '';
     var form = {
       name: document.getElementById('name').value,
