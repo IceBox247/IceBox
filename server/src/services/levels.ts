@@ -285,13 +285,24 @@ export async function purchaseLevel(userId: number, targetLevel: number) {
     }
 
     const deposited = money(Math.max(0, user.balance - user.earnedBalance));
-    if (deposited < missingUsd) {
-      return { error: 'insufficient' as const, needUsd: missingUsd, haveUsd: deposited };
+    const totalAvail = money(user.balance); // deposited USDT + earned pool ICE (both USD-valued)
+    if (totalAvail < missingUsd) {
+      return { error: 'insufficient' as const, needUsd: missingUsd, haveUsd: totalAvail };
     }
+    // Prefer deposited USDT, then cover any shortfall from the earned/pool ICE.
+    // Spending the pool is bounded (it is consumed), so it cannot feed the
+    // level → yield → pool loop that COUNTING the pool toward the level would.
+    const fromEarned = money(Math.max(0, missingUsd - deposited));
 
     const iceBought = money(missingUsd / px);
-    // Charge deposited USDT (balance down; earned bucket untouched).
-    await tx.user.update({ where: { id: userId }, data: { balance: { decrement: missingUsd } } });
+    // Charge total from balance; also draw down the earned bucket by the pool portion.
+    await tx.user.update({
+      where: { id: userId },
+      data: {
+        balance: { decrement: missingUsd },
+        ...(fromEarned > 0 ? { earnedBalance: { decrement: fromEarned } } : {}),
+      },
+    });
     const newBonus = money(miner.bonusHoldingUsd + missingUsd);
     const newLevel = c.levelForHolding(money(miner.holdingUsd + newBonus));
     const updated = await tx.miner.update({
@@ -307,7 +318,10 @@ export async function purchaseLevel(userId: number, targetLevel: number) {
         userId,
         amount: -missingUsd,
         reason: 'level_purchase',
-        meta: JSON.stringify({ level: newLevel, spentUsd: missingUsd, iceBought, price: px }),
+        meta: JSON.stringify({
+          level: newLevel, spentUsd: missingUsd, iceBought, price: px,
+          fromDeposited: money(missingUsd - fromEarned), fromPool: fromEarned,
+        }),
       },
     });
     return { ok: true as const, level: updated.level, spentUsd: missingUsd, iceBought };
