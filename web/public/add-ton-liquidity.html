@@ -28,7 +28,7 @@ a.back{display:inline-block;color:#7c8aa0;text-decoration:none;font-size:13px;ma
 
 <div class="card">
   <label>Connect TON wallet</label>
-  <div id="tonconnect-btn"></div>
+  <button class="cta" id="connectw" style="background:linear-gradient(180deg,#2f7bd6,#1f5fb0)">Connect Wallet</button>
 </div>
 
 <div class="card">
@@ -69,9 +69,9 @@ a.back{display:inline-block;color:#7c8aa0;text-decoration:none;font-size:13px;ma
     else { addBtn.disabled = true; addBtn.textContent = 'Connect wallet to add liquidity'; }
   }
 
-  T.init(manifestUrl, 'tonconnect-btn');
+  T.init(manifestUrl);
   T.setNetwork('mainnet'); // STON.fi is mainnet
-  T.onStatusChange(function () { refreshBtn(); });
+  T.bindConnectButton(document.getElementById('connectw'), function () { refreshBtn(); });
 
   addBtn.addEventListener('click', async function () {
     resultEl.innerHTML = '';

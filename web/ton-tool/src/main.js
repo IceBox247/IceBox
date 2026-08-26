@@ -41,9 +41,32 @@ const API = {
   ui: null,
   network: 'testnet', // 'testnet' | 'mainnet' — set from the page toggle
 
-  init(manifestUrl, buttonRootId) {
-    this.ui = new TonConnectUI({ manifestUrl, buttonRootElementId: buttonRootId });
+  init(manifestUrl) {
+    // Drive the connect flow with our own button via openModal() — the auto-rendered
+    // `buttonRootElementId` widget is unreliable inside the Telegram in-app browser.
+    this.ui = new TonConnectUI({ manifestUrl });
     return this.ui;
+  },
+
+  // Short display form of the connected address, e.g. "EQAb…7TiU".
+  shortAddress() {
+    const a = this.wallet();
+    return a ? a.slice(0, 4) + '…' + a.slice(-4) : '';
+  },
+
+  // Wire an explicit button element to connect/disconnect and keep its label in sync.
+  bindConnectButton(btn, onChange) {
+    if (!btn) return;
+    const sync = () => {
+      btn.textContent = this.connected() ? ('Disconnect ' + this.shortAddress()) : 'Connect Wallet';
+      if (typeof onChange === 'function') onChange(this.connected());
+    };
+    btn.addEventListener('click', async () => {
+      try { if (this.connected()) await this.disconnect(); else await this.connect(); }
+      catch (_) { /* user closed the modal */ }
+    });
+    this.onStatusChange(sync);
+    sync();
   },
 
   setNetwork(n) {

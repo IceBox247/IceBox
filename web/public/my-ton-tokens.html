@@ -28,7 +28,7 @@ a.back{display:inline-block;color:#7c8aa0;text-decoration:none;font-size:13px;ma
 
 <div class="card">
   <label>Connect TON wallet</label>
-  <div id="tonconnect-btn"></div>
+  <button class="cta" id="connectw" style="width:100%;background:linear-gradient(180deg,#2f7bd6,#1f5fb0);border:0;color:#04121f;font-weight:900;font-size:16px;padding:14px;border-radius:14px">Connect Wallet</button>
 </div>
 
 <div id="list"></div>
@@ -82,9 +82,8 @@ a.back{display:inline-block;color:#7c8aa0;text-decoration:none;font-size:13px;ma
     catch (e) { statusEl.textContent = e && e.message ? e.message : 'Could not load tokens.'; }
   }
 
-  T.init(manifestUrl, 'tonconnect-btn');
-  T.onStatusChange(function () { refresh(); });
-  refresh();
+  T.init(manifestUrl);
+  T.bindConnectButton(document.getElementById('connectw'), function () { refresh(); });
 })();
 </script>
 </body></html>
