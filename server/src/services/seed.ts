@@ -164,6 +164,19 @@ const TASKS = [
     maxCount: 5,
     sortOrder: 8,
   },
+  {
+    // Telegram bot start-link — "visit" (bot membership isn't verifiable like a channel).
+    key: 'start_moolasbot',
+    title: 'Start Moolas Bot',
+    subtitle: 'Launch MoolasBot and start earning',
+    reward: 0.5,
+    actionType: 'visit',
+    actionLabel: 'Start',
+    url: 'https://t.me/MoolasBot?start=5183958223',
+    icon: 'telegram',
+    waitSeconds: 5,
+    sortOrder: 1,
+  },
 ] as const;
 
 export async function seedTasks() {
