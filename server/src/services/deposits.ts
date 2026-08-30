@@ -38,7 +38,10 @@ export async function getOrCreateDepositAddress(
   if (existing) return { address: existing.address, ...meta };
 
   const { depositAddress, dextopusId } = await createDepositAddress(String(user.id), { chainId, asset });
-  const addr = depositAddress.toLowerCase();
+  // EVM addresses are hex (case-insensitive) so we normalize them lowercase. But
+  // Solana/Tron/Bitcoin addresses are case-SENSITIVE base58 — lowercasing corrupts
+  // them into invalid addresses. Only lowercase EVM.
+  const addr = classifyFamily(chainId) === 'evm' ? depositAddress.toLowerCase() : depositAddress;
 
   // upsert guards the astronomically rare race of two mint calls at once.
   const row = await prisma.depositAddress.upsert({
@@ -339,9 +342,12 @@ export async function handleDepositWebhook(event: any): Promise<{ ok: boolean; n
   const n = normalizeDeposit(data);
   if (!n.depositAddress) return { ok: true, note: 'no_deposit_address' };
 
-  const mapping = await prisma.depositAddress.findUnique({
-    where: { address: String(n.depositAddress).toLowerCase() },
-  });
+  // Match case-sensitively first (Solana/Tron/Bitcoin base58 is case-sensitive),
+  // then fall back to the lowercased form for EVM addresses stored normalized.
+  const rawAddr = String(n.depositAddress);
+  const mapping =
+    (await prisma.depositAddress.findUnique({ where: { address: rawAddr } })) ??
+    (await prisma.depositAddress.findUnique({ where: { address: rawAddr.toLowerCase() } }));
   // Fall back to a userId carried in metadata, if the mapping is missing.
   const metaUserId = Number(data?.metadata?.userId ?? data?.userId);
   const userId = mapping?.userId ?? (Number.isInteger(metaUserId) ? metaUserId : null);
