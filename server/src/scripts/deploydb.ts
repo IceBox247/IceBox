@@ -85,6 +85,21 @@ async function main() {
   ]);
   console.log('[deploy-db] Deposit-decimals correction applied.');
 
+  // One-time fix: earlier code lowercased every minted deposit address. That's
+  // fine for EVM (hex) but CORRUPTS Solana/Tron base58 addresses into invalid
+  // ones. The lowercased form is unrecoverable, so delete the corrupted rows —
+  // they re-mint with correct casing on the user's next deposit view. Idempotent:
+  // valid base58 addresses contain uppercase, so `address = LOWER(address)` only
+  // ever matches the corrupted rows (Solana=792703809, Tron=728126428; Bitcoin
+  // excluded since bech32 is legitimately all-lowercase).
+  console.log('[deploy-db] Removing corrupted (lowercased) Solana/Tron deposit addresses…');
+  const badAddrs = await prisma.$executeRawUnsafe(
+    `DELETE FROM "DepositAddress"
+       WHERE "chainId" IN (792703809, 728126428)
+       AND "address" = LOWER("address")`,
+  );
+  console.log(`[deploy-db] Removed ${badAddrs} corrupted deposit address(es) for re-mint.`);
+
   // One-time, opt-in cleanup: reverse level purchases that were funded from mined
   // POOL ICE during the window Buy Level briefly allowed it. Gated behind an env
   // flag so it only runs when you deliberately set RUN_POOL_LEVEL_REVERSAL=true;
