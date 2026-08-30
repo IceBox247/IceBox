@@ -85,6 +85,17 @@ async function main() {
   ]);
   console.log('[deploy-db] Deposit-decimals correction applied.');
 
+  // One-time, opt-in cleanup: reverse level purchases that were funded from mined
+  // POOL ICE during the window Buy Level briefly allowed it. Gated behind an env
+  // flag so it only runs when you deliberately set RUN_POOL_LEVEL_REVERSAL=true;
+  // idempotent (per-user ledger marker), so it's safe to leave the flag on.
+  if (process.env.RUN_POOL_LEVEL_REVERSAL === 'true') {
+    console.log('[deploy-db] Reversing pool-funded level purchases…');
+    const { reversePoolLevelPurchases } = await import('../services/levels');
+    const res = await reversePoolLevelPurchases();
+    console.log(`[deploy-db] Reversal done: ${res.corrected} user(s), $${res.reversedUsd} removed.`);
+  }
+
   console.log('[deploy-db] Database ready ✅');
 }
 

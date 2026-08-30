@@ -411,3 +411,76 @@ export function serializeLevelMining(
     },
   };
 }
+
+/**
+ * One-time cleanup for the window where Buy Level briefly accepted mined POOL ICE
+ * (it should only ever take deposited USDT). For each affected user we:
+ *   - refund the pool ICE they spent (balance + earnedBalance += pool USD), and
+ *   - remove the illegitimately-gained holding credit (bonusHoldingUsd -= pool USD),
+ * then recompute their level. The pool-funded amount was recorded per purchase in
+ * the ledger meta (`fromPool`). Idempotent via a per-user 'level_pool_reversal'
+ * marker, so re-running is a no-op.
+ */
+export async function reversePoolLevelPurchases() {
+  const c = L();
+  const purchases = await prisma.ledgerEntry.findMany({
+    where: { reason: 'level_purchase' },
+    select: { userId: true, meta: true },
+  });
+  // Sum the pool-funded USD per user from each purchase's ledger meta.
+  const poolByUser = new Map<number, number>();
+  for (const p of purchases) {
+    if (!p.meta) continue;
+    let fromPool = 0;
+    try {
+      fromPool = Number((JSON.parse(p.meta) as { fromPool?: number }).fromPool ?? 0);
+    } catch {
+      fromPool = 0;
+    }
+    if (Number.isFinite(fromPool) && fromPool > 0) {
+      poolByUser.set(p.userId, (poolByUser.get(p.userId) ?? 0) + fromPool);
+    }
+  }
+
+  let corrected = 0;
+  let reversedUsd = 0;
+  for (const [userId, rawP] of poolByUser) {
+    const P = money(rawP);
+    if (P <= 0) continue;
+    const already = await prisma.ledgerEntry.findFirst({
+      where: { userId, reason: 'level_pool_reversal' },
+      select: { id: true },
+    });
+    if (already) continue; // already reversed for this user
+    await prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({ where: { id: userId } });
+      const miner = await tx.miner.findUnique({ where: { userId } });
+      if (!user || !miner) return;
+      const newBonus = money(Math.max(0, miner.bonusHoldingUsd - P));
+      const newLevel = c.levelForHolding(money(miner.holdingUsd + newBonus));
+      await tx.user.update({
+        where: { id: userId },
+        // Give back the mined ICE they spent; keep the deposited/USDT portion spent.
+        data: { balance: { increment: P }, earnedBalance: { increment: P } },
+      });
+      await tx.miner.update({
+        where: { userId },
+        data: { bonusHoldingUsd: newBonus, level: newLevel, peakLevel: newLevel },
+      });
+      await tx.ledgerEntry.create({
+        data: {
+          userId,
+          amount: P,
+          reason: 'level_pool_reversal',
+          meta: JSON.stringify({ refundedPoolUsd: P, newLevel }),
+        },
+      });
+    });
+    corrected++;
+    reversedUsd += P;
+  }
+  console.log(
+    `[reversal] pool-funded levels reversed for ${corrected} user(s), $${reversedUsd.toFixed(2)} of holding removed and refunded to pool.`,
+  );
+  return { corrected, reversedUsd: money(reversedUsd) };
+}
