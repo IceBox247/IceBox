@@ -380,3 +380,95 @@ export async function listUserDeposits(userId: number, take = 20) {
     createdAt: d.createdAt,
   }));
 }
+
+/**
+ * One-time correction for deposits over-credited by the base-unit decimals bug:
+ * Solana/Tron stablecoins are 6-dp, but the crediter defaulted to 18-dp on a
+ * catalog miss, skipping the divide — so a $0.1 USDC deposit credited 100,000.
+ * For each affected deposit we rescale creditedAmount by 1e6 and claw the
+ * over-credit back from the depositor's balance, plus the over-paid two-level
+ * referral commissions (attributed via the shared dextopusId). Idempotent via a
+ * per-deposit 'deposit_scale_fix' ledger marker. Pass apply=false for a dry run.
+ */
+export async function correctSolanaTronOverCredits(apply: boolean) {
+  const NON_EVM_ORIGINS = [792703809, 728126428]; // Solana, Tron
+  const SCALE = 1_000_000; // 1e6: 6-dp base units credited as whole dollars
+
+  const deposits = await prisma.deposit.findMany({
+    where: { credited: true, originChainId: { in: NON_EVM_ORIGINS } },
+  });
+  // Idempotency: skip deposits already corrected.
+  const markers = await prisma.ledgerEntry.findMany({
+    where: { reason: 'deposit_scale_fix' },
+    select: { meta: true },
+  });
+  const fixed = new Set<number>();
+  for (const m of markers) {
+    try {
+      const id = Number((JSON.parse(m.meta || '{}') as { depositId?: number }).depositId);
+      if (Number.isInteger(id)) fixed.add(id);
+    } catch {
+      /* ignore */
+    }
+  }
+  // Index referral_deposit entries by the deposit's dextopusId for attribution.
+  const refEntries = await prisma.ledgerEntry.findMany({ where: { reason: 'referral_deposit' } });
+  const refByDex = new Map<string, { id: number; userId: number; amount: number }[]>();
+  for (const e of refEntries) {
+    try {
+      const dx = (JSON.parse(e.meta || '{}') as { dextopusId?: string }).dextopusId;
+      if (dx) {
+        const arr = refByDex.get(String(dx)) ?? [];
+        arr.push({ id: e.id, userId: e.userId, amount: e.amount });
+        refByDex.set(String(dx), arr);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  let count = 0;
+  let depDelta = 0;
+  let refDelta = 0;
+  for (const d of deposits) {
+    if (fixed.has(d.id)) continue;
+    const corrected = money(d.creditedAmount / SCALE);
+    const delta = money(d.creditedAmount - corrected);
+    if (delta <= 0) continue;
+    const refs = d.dextopusId ? refByDex.get(String(d.dextopusId)) ?? [] : [];
+    count++;
+    depDelta = money(depDelta + delta);
+    for (const r of refs) refDelta = money(refDelta + (r.amount - money(r.amount / SCALE)));
+
+    if (apply) {
+      await prisma.$transaction(async (tx) => {
+        await tx.deposit.update({ where: { id: d.id }, data: { creditedAmount: corrected } });
+        await tx.user.update({ where: { id: d.userId }, data: { balance: { decrement: delta } } });
+        for (const r of refs) {
+          const rc = money(r.amount / SCALE);
+          const rd = money(r.amount - rc);
+          if (rd > 0) {
+            await tx.user.update({
+              where: { id: r.userId },
+              data: { balance: { decrement: rd }, totalEarned: { decrement: rd } },
+            });
+            await tx.ledgerEntry.update({ where: { id: r.id }, data: { amount: rc } });
+          }
+        }
+        await tx.ledgerEntry.create({
+          data: {
+            userId: d.userId,
+            amount: -delta,
+            reason: 'deposit_scale_fix',
+            meta: JSON.stringify({ depositId: d.id, from: d.creditedAmount, to: corrected }),
+          },
+        });
+      });
+    }
+  }
+  console.log(
+    `[overcredit] ${apply ? 'APPLIED' : 'DRY-RUN'}: ${count} deposit(s); ` +
+      `depositor claw-back $${depDelta.toFixed(2)}, referral claw-back $${refDelta.toFixed(2)}.`,
+  );
+  return { count, depDelta: money(depDelta), refDelta: money(refDelta), applied: apply };
+}
