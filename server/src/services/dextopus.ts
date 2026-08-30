@@ -201,8 +201,15 @@ async function tokenSymbol(chainId: number, asset: string): Promise<string | nul
 }
 
 export async function resolveDecimals(chainId: number, asset: string): Promise<number> {
+  // Safe fallback by chain family when the catalog can't confirm the token:
+  // stablecoins are 6-dp on Solana/Tron, 8-dp on Bitcoin, 18-dp on EVM. Guessing
+  // 18 for a 6-dp token skips the base-unit divide and over-credits by 1e12.
+  const familyDefault = (() => {
+    const fam = classifyFamily(chainId);
+    return fam === 'solana' || fam === 'tron' ? 6 : fam === 'bitcoin' ? 8 : 18;
+  })();
   const val = String(asset || '').trim().toLowerCase();
-  if (!val) return 18;
+  if (!val) return familyDefault;
   try {
     const chains = await cachedCatalog();
     const chain = chains.find((c) => c.chainId === chainId);
@@ -214,9 +221,9 @@ export async function resolveDecimals(chainId: number, asset: string): Promise<n
     );
     if (match && Number.isFinite(match.decimals)) return match.decimals;
   } catch {
-    // Catalog unavailable — fall back to the EVM default.
+    // Catalog unavailable — fall back to the family default below.
   }
-  return 18;
+  return familyDefault;
 }
 
 /**
