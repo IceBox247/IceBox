@@ -195,7 +195,7 @@ miningRouter.post('/level/purchase', async (req, res) => {
       error: result.error,
       needUsd: need,
       haveUsd: have,
-      message: `You need $${need.toFixed(2)} to buy this level — your balance + pool is $${have.toFixed(2)}. Deposit, mine more, or buy ICE into your wallet.`,
+      message: `You need $${need.toFixed(2)} deposited to buy this level — you have $${have.toFixed(2)}. Deposit USDT or buy ICE into your wallet.`,
     });
   }
   res.json({ ...result, mining: await currentState(user.id) });

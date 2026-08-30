@@ -863,7 +863,7 @@ function StoreSheet({
                   {buying ? 'Buying…' : `⚡ Buy Level ${buy.level} · ${fmtUsd(buy.missingUsd)}`}
                 </button>
                 <p className="text-center text-[11px] text-white/45">
-                  Pays {fmtUsd(buy.missingUsd)} from your IceBox balance — deposited USDT first, then your mined pool ICE (at the live price).
+                  Pays {fmtUsd(buy.missingUsd)} from your deposited USDT balance (converted to ICE at the live price). Mined pool ICE can't buy levels.
                 </p>
                 <div className="my-1 text-center text-[10px] uppercase tracking-widest text-white/25">or buy ICE into your own wallet</div>
                 <p className="text-center text-[11px] text-white/40">

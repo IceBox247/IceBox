@@ -284,25 +284,17 @@ export async function purchaseLevel(userId: number, targetLevel: number) {
       return { ok: true as const, level: updated.level, spentUsd: 0, iceBought: 0 };
     }
 
+    // Levels must be bought with REAL deposited USDT only — never the mined pool.
+    // Mined ICE is free, so letting it buy levels would give free upgrades and feed
+    // a level → yield → pool loop, and drain the USDT reward pool for non-depositors.
     const deposited = money(Math.max(0, user.balance - user.earnedBalance));
-    const totalAvail = money(user.balance); // deposited USDT + earned pool ICE (both USD-valued)
-    if (totalAvail < missingUsd) {
-      return { error: 'insufficient' as const, needUsd: missingUsd, haveUsd: totalAvail };
+    if (deposited < missingUsd) {
+      return { error: 'insufficient' as const, needUsd: missingUsd, haveUsd: deposited };
     }
-    // Prefer deposited USDT, then cover any shortfall from the earned/pool ICE.
-    // Spending the pool is bounded (it is consumed), so it cannot feed the
-    // level → yield → pool loop that COUNTING the pool toward the level would.
-    const fromEarned = money(Math.max(0, missingUsd - deposited));
 
     const iceBought = money(missingUsd / px);
-    // Charge total from balance; also draw down the earned bucket by the pool portion.
-    await tx.user.update({
-      where: { id: userId },
-      data: {
-        balance: { decrement: missingUsd },
-        ...(fromEarned > 0 ? { earnedBalance: { decrement: fromEarned } } : {}),
-      },
-    });
+    // Charge deposited USDT (balance down; earned/pool bucket untouched).
+    await tx.user.update({ where: { id: userId }, data: { balance: { decrement: missingUsd } } });
     const newBonus = money(miner.bonusHoldingUsd + missingUsd);
     const newLevel = c.levelForHolding(money(miner.holdingUsd + newBonus));
     const updated = await tx.miner.update({
@@ -318,10 +310,7 @@ export async function purchaseLevel(userId: number, targetLevel: number) {
         userId,
         amount: -missingUsd,
         reason: 'level_purchase',
-        meta: JSON.stringify({
-          level: newLevel, spentUsd: missingUsd, iceBought, price: px,
-          fromDeposited: money(missingUsd - fromEarned), fromPool: fromEarned,
-        }),
+        meta: JSON.stringify({ level: newLevel, spentUsd: missingUsd, iceBought, price: px }),
       },
     });
     return { ok: true as const, level: updated.level, spentUsd: missingUsd, iceBought };
