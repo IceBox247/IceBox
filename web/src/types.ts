@@ -62,6 +62,33 @@ export interface AppConfig {
   };
 }
 
+export interface ReferrerAuditInvitee {
+  id: number;
+  name: string;
+  telegramId: string;
+  joined: string;
+  active: boolean;
+  deposited: boolean;
+  depositUsd: number;
+  minedIce: number;
+  hasPhoto: boolean;
+  totalEarned: number;
+}
+
+export interface ReferrerAudit {
+  found: boolean;
+  referrer?: { id: number; name: string; telegramId: string; referralCode: string };
+  total?: number;
+  active?: number;
+  withDeposit?: number;
+  withPhoto?: number;
+  zeroActivity?: number;
+  signup?: { peakHour: string; peakInOneHour: number; distinctHours: number };
+  signals?: { zeroActivityPct: number; noPhotoPct: number; burstConcentrationPct: number } | null;
+  invited?: ReferrerAuditInvitee[];
+  generatedAt?: string;
+}
+
 export interface AdminStats {
   users: { total: number; newToday: number };
   deposits: { totalUsd: number; count: number };

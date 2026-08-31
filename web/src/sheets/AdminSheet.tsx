@@ -2,7 +2,90 @@ import { useEffect, useState } from 'react';
 import { Sheet } from '../components/Sheet';
 import { api, ApiError } from '../api';
 import { usdt } from '../lib/format';
-import type { AdminStats } from '../types';
+import type { AdminStats, ReferrerAudit } from '../types';
+
+/** Type a referrer's name/code/id and see whether their invitees look real. */
+function ReferrerCheck() {
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [res, setRes] = useState<ReferrerAudit | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function run() {
+    if (!query.trim()) return;
+    setLoading(true);
+    setErr(null);
+    setRes(null);
+    try {
+      setRes(await api.adminReferrer(query.trim()));
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Lookup failed');
+    }
+    setLoading(false);
+  }
+
+  const fake =
+    res?.signals &&
+    res.signals.zeroActivityPct >= 70 &&
+    res.signals.burstConcentrationPct >= 50;
+
+  return (
+    <div className="card space-y-3 p-4">
+      <div className="text-sm font-bold text-white/80">Check a referrer</div>
+      <div className="flex gap-2">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && run()}
+          placeholder="Name, referral code, or user id"
+          className="min-w-0 flex-1 rounded-xl bg-white/5 px-3 py-2 text-sm outline-none"
+        />
+        <button onClick={run} disabled={loading} className="btn-primary px-4 text-sm">
+          {loading ? '…' : 'Check'}
+        </button>
+      </div>
+      {err && <div className="text-[12px] text-red-300">{err}</div>}
+      {res && !res.found && <div className="text-[12px] text-white/50">No referrer matched that.</div>}
+      {res && res.found && res.referrer && (
+        <div className="space-y-2">
+          <div className="text-sm">
+            <b>{res.referrer.name}</b>{' '}
+            <span className="text-white/40">· {res.total} referrals</span>
+          </div>
+          <div
+            className={`rounded-lg px-3 py-2 text-[12px] font-semibold ${
+              fake ? 'bg-red-500/15 text-red-200' : 'bg-emerald-500/12 text-emerald-200'
+            }`}
+          >
+            {fake ? '⚠️ Looks fake (bot-farm pattern)' : '✅ Looks organic'}
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-[12px] text-white/70">
+            <div>Active: <b>{res.active}</b> / {res.total}</div>
+            <div>Deposited: <b>{res.withDeposit}</b></div>
+            <div>Zero activity: <b>{res.zeroActivity}</b> ({res.signals?.zeroActivityPct}%)</div>
+            <div>No photo: <b>{res.signals?.noPhotoPct}%</b></div>
+            <div className="col-span-2">
+              Biggest signup burst: <b>{res.signup?.peakInOneHour}</b> in one hour ({res.signals?.burstConcentrationPct}% of all), across {res.signup?.distinctHours} hour(s)
+            </div>
+          </div>
+          <div className="max-h-64 space-y-1 overflow-y-auto">
+            {(res.invited ?? []).map((u) => (
+              <div key={u.id} className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2 py-1.5 text-[11px]">
+                <div className="min-w-0 truncate">
+                  {u.hasPhoto ? '🖼️' : '👤'} {u.name}
+                  <span className="text-white/35"> · {new Date(u.joined).toLocaleDateString()}</span>
+                </div>
+                <div className={u.active ? 'text-emerald-300' : 'text-white/35'}>
+                  {u.deposited ? `$${usdt(u.depositUsd)}` : u.active ? 'active' : 'idle'}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Stat({ label, value, sub, tint }: { label: string; value: string; sub?: string; tint?: string }) {
   return (
@@ -92,6 +175,9 @@ export function AdminSheet({ open, onClose }: { open: boolean; onClose: () => vo
             <Stat label="Tasks completed" value={stats.tasks.completions.toLocaleString()} />
             <Stat label="Lifetime earned" value={usdt(stats.balances.lifetimeEarned)} sub="all users" />
           </div>
+
+          <p className="text-xs font-bold uppercase tracking-wide text-white/40">Referral fraud check</p>
+          <ReferrerCheck />
 
           <p className="text-center text-[11px] text-white/30">
             Updated {new Date(stats.generatedAt).toLocaleString()}

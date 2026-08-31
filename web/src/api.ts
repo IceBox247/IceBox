@@ -18,6 +18,7 @@ import type {
   MinerJourney,
   NotificationsResponse,
   AdminStats,
+  ReferrerAudit,
 } from './types';
 
 const BASE = import.meta.env.VITE_API_BASE || '';
@@ -165,6 +166,8 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ level }) },
     ),
   adminStats: () => request<AdminStats>('/admin/stats'),
+  adminReferrer: (query: string) =>
+    request<ReferrerAudit>(`/admin/referrer?query=${encodeURIComponent(query)}`),
   notifications: (since = 0) =>
     request<NotificationsResponse>(`/notifications?since=${since}`),
 };
