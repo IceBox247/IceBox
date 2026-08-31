@@ -275,6 +275,16 @@ cronRouter.get('/user', async (req, res) => {
 });
 
 /**
+ * GET /api/cron/referrer?secret=CRON_SECRET&query=<name|code|id> — audit a
+ * referrer's invitees (activity + fraud signals) to verify their count is real.
+ */
+cronRouter.get('/referrer', async (req, res) => {
+  if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
+  const { auditReferrer } = await import('../services/admin');
+  res.json({ ok: true, ...(await auditReferrer(String(req.query.query ?? ''))) });
+});
+
+/**
  * GET /api/cron/task-verify?secret=CRON_SECRET — for each active channel-join
  * task, report whether the bot can verify membership (i.e. it is an admin of
  * that chat). Use it after adding @IceBoxbot_bot as admin to confirm each
