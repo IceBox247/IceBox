@@ -393,6 +393,10 @@ export async function listUserDeposits(userId: number, take = 20) {
 export async function correctSolanaTronOverCredits(apply: boolean) {
   const NON_EVM_ORIGINS = [792703809, 728126428]; // Solana, Tron
   const SCALE = 1_000_000; // 1e6: 6-dp base units credited as whole dollars
+  // A row is only considered over-credited when the credit dwarfs what was
+  // actually sent. Healthy rows sit at ~1x (fees aside); bugged rows at ~1e6x,
+  // so anything above 1000x is unambiguous and leaves a huge safety margin.
+  const RATIO_MIN = 1000;
 
   const deposits = await prisma.deposit.findMany({
     where: { credited: true, originChainId: { in: NON_EVM_ORIGINS } },
@@ -430,8 +434,28 @@ export async function correctSolanaTronOverCredits(apply: boolean) {
   let count = 0;
   let depDelta = 0;
   let refDelta = 0;
+  let skipped = 0;
+  let unknown = 0;
   for (const d of deposits) {
     if (fixed.has(d.id)) continue;
+
+    // Only touch rows actually hit by the 1e6 bug. A correctly credited deposit
+    // has creditedAmount ~= what the user sent; an over-credited one is ~1e6x
+    // larger. Without this test the rescale below would also divide healthy
+    // deposits — a real $0.10 credit would round to $0.00 — so the function
+    // could not safely run on every deploy.
+    const sent = d.originAmount ?? d.settlementAmount ?? 0;
+    if (!(sent > 0)) {
+      // No reference amount to compare against; leave it for manual review
+      // rather than guess.
+      unknown++;
+      continue;
+    }
+    if (d.creditedAmount / sent < RATIO_MIN) {
+      skipped++;
+      continue;
+    }
+
     const corrected = money(d.creditedAmount / SCALE);
     const delta = money(d.creditedAmount - corrected);
     if (delta <= 0) continue;
@@ -468,7 +492,15 @@ export async function correctSolanaTronOverCredits(apply: boolean) {
   }
   console.log(
     `[overcredit] ${apply ? 'APPLIED' : 'DRY-RUN'}: ${count} deposit(s); ` +
-      `depositor claw-back $${depDelta.toFixed(2)}, referral claw-back $${refDelta.toFixed(2)}.`,
+      `depositor claw-back $${depDelta.toFixed(2)}, referral claw-back $${refDelta.toFixed(2)}; ` +
+      `${skipped} healthy deposit(s) left alone, ${unknown} without a reference amount.`,
   );
-  return { count, depDelta: money(depDelta), refDelta: money(refDelta), applied: apply };
+  return {
+    count,
+    depDelta: money(depDelta),
+    refDelta: money(refDelta),
+    skipped,
+    unknown,
+    applied: apply,
+  };
 }
