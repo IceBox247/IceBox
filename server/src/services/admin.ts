@@ -201,3 +201,108 @@ export async function lookupUser(query: string) {
   );
   return { count: rows.length, users: rows };
 }
+
+/**
+ * Audit one referrer's invitees to judge whether their referral count is real.
+ * Lists every account that signed up under them with activity + fraud signals:
+ * how many are active/deposited/have a photo, how many show zero activity, and
+ * the biggest signup burst (many accounts created in the same hour points to a
+ * bot farm). `query` matches id / telegramId / referralCode / username / name.
+ */
+export async function auditReferrer(query: string) {
+  const q = (query ?? '').trim();
+  if (!q) return { found: false as const };
+  const idNum = Number(q);
+  const referrer = await prisma.user.findFirst({
+    where: {
+      OR: [
+        Number.isInteger(idNum) ? { id: idNum } : {},
+        { telegramId: q },
+        { referralCode: q },
+        { username: { contains: q, mode: 'insensitive' } },
+        { firstName: { contains: q, mode: 'insensitive' } },
+      ],
+    },
+    orderBy: { id: 'asc' },
+  });
+  if (!referrer) return { found: false as const };
+
+  const refs = await prisma.user.findMany({
+    where: { referredById: referrer.id },
+    orderBy: { createdAt: 'asc' },
+    include: { miner: true },
+  });
+  const depAgg = refs.length
+    ? await prisma.deposit.groupBy({
+        by: ['userId'],
+        where: { userId: { in: refs.map((r) => r.id) }, credited: true },
+        _sum: { creditedAmount: true },
+        _count: true,
+      })
+    : [];
+  const depByUser = new Map<number, { sum: number; count: number }>();
+  for (const d of depAgg) depByUser.set(d.userId, { sum: money(d._sum.creditedAmount ?? 0), count: d._count });
+
+  let active = 0;
+  let withDeposit = 0;
+  let withPhoto = 0;
+  let zeroActivity = 0;
+  const hourBuckets = new Map<string, number>();
+  const invited = refs.map((u) => {
+    const dep = depByUser.get(u.id);
+    const isActive = u.totalEarned > 0;
+    const hasDep = !!dep && dep.sum > 0;
+    const mined = u.miner ? money(u.miner.totalMined) : 0;
+    const anyActivity = isActive || hasDep || mined > 0;
+    if (isActive) active++;
+    if (hasDep) withDeposit++;
+    if (u.photoUrl) withPhoto++;
+    if (!anyActivity) zeroActivity++;
+    const hourKey = u.createdAt.toISOString().slice(0, 13); // yyyy-mm-ddTHH
+    hourBuckets.set(hourKey, (hourBuckets.get(hourKey) ?? 0) + 1);
+    return {
+      id: u.id,
+      name: u.firstName || u.username || `#${u.id}`,
+      telegramId: u.telegramId,
+      joined: u.createdAt.toISOString(),
+      active: isActive,
+      deposited: hasDep,
+      depositUsd: dep?.sum ?? 0,
+      minedIce: mined,
+      hasPhoto: !!u.photoUrl,
+      totalEarned: money(u.totalEarned),
+    };
+  });
+
+  let peakHour = '';
+  let peakCount = 0;
+  for (const [h, c] of hourBuckets) if (c > peakCount) { peakCount = c; peakHour = h; }
+  const total = refs.length;
+
+  return {
+    found: true as const,
+    referrer: {
+      id: referrer.id,
+      name: referrer.firstName || referrer.username || `#${referrer.id}`,
+      telegramId: referrer.telegramId,
+      referralCode: referrer.referralCode,
+    },
+    total,
+    active,
+    withDeposit,
+    withPhoto,
+    zeroActivity,
+    signup: { peakHour, peakInOneHour: peakCount, distinctHours: hourBuckets.size },
+    // Higher = more suspicious. Lots of zero-activity/no-photo accounts created in
+    // one burst is the classic fake-referral pattern.
+    signals: total
+      ? {
+          zeroActivityPct: Math.round((zeroActivity / total) * 100),
+          noPhotoPct: Math.round(((total - withPhoto) / total) * 100),
+          burstConcentrationPct: Math.round((peakCount / total) * 100),
+        }
+      : null,
+    invited,
+    generatedAt: new Date().toISOString(),
+  };
+}
