@@ -102,8 +102,7 @@ async function main() {
 
   // Correct deposits over-credited 1e6× by the Solana/Tron 6-dp decimals bug.
   // Runs on every deploy so affected accounts are repaired without anyone
-  // setting a flag. Safe to repeat: it only touches rows whose credit is >=1000x
-  // what the user actually sent, and each repair writes a 'deposit_scale_fix'
+  // setting a flag. Safe to repeat: each repair writes a 'deposit_scale_fix'
   // marker, so healthy deposits and already-corrected ones are both skipped.
   // Override with RUN_SOLANA_OVERCREDIT_FIX=dry (preview only) or =off (skip).
   const overFix = String(process.env.RUN_SOLANA_OVERCREDIT_FIX ?? '').toLowerCase();
