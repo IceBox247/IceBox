@@ -100,14 +100,12 @@ async function main() {
   );
   console.log(`[deploy-db] Removed ${badAddrs} corrupted deposit address(es) for re-mint.`);
 
-  // Correct deposits over-credited 1e6× by the Solana/Tron 6-dp decimals bug.
-  // Set RUN_SOLANA_OVERCREDIT_FIX=dry to preview in the logs, =apply to claw back.
-  const overFix = String(process.env.RUN_SOLANA_OVERCREDIT_FIX ?? '').toLowerCase();
-  if (overFix === 'dry' || overFix === 'apply') {
-    console.log(`[deploy-db] Solana/Tron over-credit correction (${overFix})…`);
-    const { correctSolanaTronOverCredits } = await import('../services/deposits');
-    await correctSolanaTronOverCredits(overFix === 'apply');
-  }
+  // Auto-correct any deposit over-credited 1e6× by the Solana/Tron 6-dp decimals
+  // bug. Idempotent (per-deposit 'deposit_scale_fix' marker), so it fixes every
+  // wrong deposit on this deploy and is a no-op for already-corrected ones.
+  console.log('[deploy-db] Correcting Solana/Tron over-credited deposits…');
+  const { correctSolanaTronOverCredits } = await import('../services/deposits');
+  await correctSolanaTronOverCredits(true);
 
   // One-time, opt-in cleanup: reverse level purchases that were funded from mined
   // POOL ICE during the window Buy Level briefly allowed it. Gated behind an env
