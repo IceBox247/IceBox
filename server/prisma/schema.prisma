@@ -110,9 +110,12 @@ model Task {
   subtitle    String
   reward      Float
   // action type drives the UI button + verification flow
-  actionType  String   // "join" | "visit" | "watch"
+  actionType  String   // "join" | "visit" | "watch" | "ad"
   actionLabel String   // "Join" | "Visit" | "Watch"
   url         String?  // channel/website/ad url
+  // Rewarded-ad network for "ad" tasks: "adsgram" | "monetag". The client shows
+  // the ad via the network SDK and only claims once it actually completes.
+  provider    String?
   // Telegram chat to verify membership for "join" tasks, e.g. "@iceboxAi".
   // When set, the reward is only credited if the bot confirms the user joined.
   // Requires the bot to be an admin of that channel.
@@ -120,6 +123,8 @@ model Task {
   icon        String   // "telegram" | "globe" | "play"
   waitSeconds Int      @default(0) // for "visit" tasks
   maxCount    Int      @default(1) // repeatable tasks (e.g. watch ad 5x)
+  // When true, maxCount is a PER-DAY cap that resets each UTC day (ad tasks).
+  daily       Boolean  @default(false)
   sortOrder   Int      @default(0)
   active      Boolean  @default(true)
 

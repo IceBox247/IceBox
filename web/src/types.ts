@@ -133,12 +133,14 @@ export interface Task {
   title: string;
   subtitle: string;
   reward: number;
-  actionType: 'join' | 'visit' | 'watch';
+  actionType: 'join' | 'visit' | 'watch' | 'ad';
   actionLabel: string;
   url: string | null;
+  provider?: 'adsgram' | 'monetag' | null;
   icon: 'telegram' | 'globe' | 'play';
   waitSeconds: number;
   maxCount: number;
+  daily?: boolean;
   count: number;
   completed: boolean;
 }
