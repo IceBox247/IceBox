@@ -177,6 +177,35 @@ const TASKS = [
     waitSeconds: 5,
     sortOrder: 1,
   },
+  {
+    // Rewarded ad — Adsgram. The client shows the ad via the Adsgram SDK and only
+    // claims once it actually completes. Block id comes from VITE_ADSGRAM_BLOCK_ID.
+    key: 'ad_adsgram',
+    title: 'Watch an Ad (Adsgram)',
+    subtitle: 'Watch a short ad to earn ICE',
+    reward: 0.5,
+    actionType: 'ad',
+    actionLabel: 'Watch',
+    provider: 'adsgram',
+    icon: 'play',
+    maxCount: 10, // per-day cap (daily = true)
+    daily: true,
+    sortOrder: 2,
+  },
+  {
+    // Rewarded ad — Monetag. Zone id comes from VITE_MONETAG_ZONE_ID.
+    key: 'ad_monetag',
+    title: 'Watch an Ad (Monetag)',
+    subtitle: 'Watch a short ad to earn ICE',
+    reward: 0.5,
+    actionType: 'ad',
+    actionLabel: 'Watch',
+    provider: 'monetag',
+    icon: 'play',
+    maxCount: 10, // per-day cap (daily = true)
+    daily: true,
+    sortOrder: 2,
+  },
 ] as const;
 
 export async function seedTasks() {
@@ -185,7 +214,8 @@ export async function seedTasks() {
     // chatId if given, otherwise derive @username from its t.me link. Non-join
     // tasks (visit/watch) stay unverified by nature.
     const explicit = 'chatId' in t ? (t.chatId as string | null) : null;
-    const chatId = explicit ?? (t.actionType === 'join' ? chatIdFromUrl(t.url) : null);
+    const url = 'url' in t ? (t.url as string) : null;
+    const chatId = explicit ?? (t.actionType === 'join' ? chatIdFromUrl(url) : null);
     const active = 'active' in t ? (t.active as boolean) : true;
     const fields = {
       title: t.title,
@@ -193,11 +223,13 @@ export async function seedTasks() {
       reward: t.reward,
       actionType: t.actionType,
       actionLabel: t.actionLabel,
-      url: t.url,
+      url,
+      provider: 'provider' in t ? (t.provider as string) : null,
       chatId,
       icon: t.icon,
       waitSeconds: 'waitSeconds' in t ? t.waitSeconds : 0,
       maxCount: 'maxCount' in t ? t.maxCount : 1,
+      daily: 'daily' in t ? (t.daily as boolean) : false,
       sortOrder: t.sortOrder,
       active,
     };

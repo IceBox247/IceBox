@@ -6,6 +6,7 @@ import { useStore } from '../store';
 import { useToast } from './Toast';
 import { usdt } from '../lib/format';
 import { ApiError } from '../api';
+import { showAd, adConfigured, type AdProvider } from '../lib/ads';
 
 const iconFor = { telegram: SendIcon, globe: GlobeIcon, play: PlayIcon } as const;
 const iconTint = {
@@ -27,6 +28,23 @@ export function TaskItem({ task }: { task: Task }) {
 
   const Icon = iconFor[task.icon];
   const done = task.completed;
+  const isAd = task.actionType === 'ad';
+  const adReady = isAd && !!task.provider && adConfigured(task.provider as AdProvider);
+
+  // Ad tasks: show a real rewarded ad, then claim only once it completes.
+  async function startAd() {
+    if (!task.provider) return;
+    haptic('light');
+    setPhase('claiming'); // show a spinner while the ad plays
+    try {
+      await showAd(task.provider as AdProvider);
+      await claim();
+    } catch (e) {
+      haptic('error');
+      toast.show(e instanceof Error ? e.message : 'Ad not completed — no reward.', 'error');
+      setPhase('idle');
+    }
+  }
 
   function startVerification() {
     haptic('light');
@@ -112,9 +130,18 @@ export function TaskItem({ task }: { task: Task }) {
             <CheckIcon width={16} height={16} /> Completed
           </span>
         ) : phase === 'idle' ? (
-          <button onClick={startVerification} className="btn-primary px-6 py-2 text-sm">
-            {task.actionLabel}
-          </button>
+          isAd && !adReady ? (
+            <button disabled className="btn-ghost px-6 py-2 text-sm opacity-60">
+              Soon
+            </button>
+          ) : (
+            <button
+              onClick={isAd ? startAd : startVerification}
+              className="btn-primary px-6 py-2 text-sm"
+            >
+              {task.actionLabel}
+            </button>
+          )
         ) : phase === 'waiting' ? (
           <button disabled className="btn-ghost px-6 py-2 text-sm">
             {remaining}s…

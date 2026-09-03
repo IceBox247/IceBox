@@ -22,11 +22,15 @@ tasksRouter.get('/', async (req, res) => {
   ]);
 
   const byTask = new Map(completions.map((c) => [c.taskId, c]));
+  const startOfDay = new Date();
+  startOfDay.setUTCHours(0, 0, 0, 0);
 
   res.json({
     tasks: tasks.map((t) => {
       const c = byTask.get(t.id);
-      const count = c?.count ?? 0;
+      // Daily tasks (ads) reset each UTC day: yesterday's completions don't count.
+      const stale = t.daily && c ? c.completedAt < startOfDay : false;
+      const count = stale ? 0 : c?.count ?? 0;
       const completed = count >= t.maxCount;
       return {
         id: t.id,
@@ -38,9 +42,11 @@ tasksRouter.get('/', async (req, res) => {
         actionType: t.actionType,
         actionLabel: t.actionLabel,
         url: t.url,
+        provider: t.provider,
         icon: t.icon,
         waitSeconds: t.waitSeconds,
         maxCount: t.maxCount,
+        daily: t.daily,
         count,
         completed,
       };
@@ -91,7 +97,13 @@ tasksRouter.post('/:id/claim', async (req, res) => {
         where: { userId_taskId: { userId: user.id, taskId: task.id } },
       });
 
-      const currentCount = existing?.count ?? 0;
+      // Daily tasks (ads) reset each UTC day, so a completion from a prior day
+      // starts today's count fresh at 0 instead of blocking on the lifetime cap.
+      const now = new Date();
+      const startOfDay = new Date(now);
+      startOfDay.setUTCHours(0, 0, 0, 0);
+      const isReset = task.daily && !!existing && existing.completedAt < startOfDay;
+      const currentCount = isReset ? 0 : existing?.count ?? 0;
       if (currentCount >= task.maxCount) {
         return { alreadyDone: true as const };
       }
@@ -102,7 +114,11 @@ tasksRouter.post('/:id/claim', async (req, res) => {
       const completion = existing
         ? await tx.taskCompletion.update({
             where: { id: existing.id },
-            data: { count: { increment: 1 }, rewarded: { increment: reward } },
+            data: {
+              count: isReset ? 1 : { increment: 1 },
+              rewarded: isReset ? reward : { increment: reward },
+              completedAt: now,
+            },
           })
         : await tx.taskCompletion.create({
             data: { userId: user.id, taskId: task.id, count: 1, rewarded: reward },
