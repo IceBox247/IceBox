@@ -152,7 +152,8 @@ export const config = {
   withdraw: {
     // One free withdrawal per this rolling window; each additional one inside the
     // window costs `extraFee` (charged on top of the amount, kept by the treasury).
-    freeWindowHours: num('WITHDRAW_FREE_WINDOW_HOURS', 2),
+    // 24h = one free withdrawal a day, which is the intended policy.
+    freeWindowHours: num('WITHDRAW_FREE_WINDOW_HOURS', 24),
     extraFee: num('WITHDRAW_EXTRA_FEE', 0.5),
     // Lock each account to a single payout address (first one used sticks).
     lockAddress: process.env.WITHDRAW_LOCK_ADDRESS !== 'false',
