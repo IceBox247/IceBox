@@ -54,11 +54,13 @@ export function createBot(): Bot | null {
    * Usage: send the bot `/post <your text>`, or a photo whose caption starts
    * with `/post <text>`. Only admins of the main channel may use it.
    */
-  bot.on('message', async (ctx) => {
+  bot.on('message', async (ctx, next) => {
     const text = ctx.message?.text ?? '';
     const caption = ctx.message?.caption ?? '';
     const isPost = text.startsWith('/post') || caption.startsWith('/post');
-    if (!isPost) return; // ignore everything that isn't a /post
+    // Not a /post: hand the update on. Returning without calling next() would
+    // halt the middleware chain and swallow every command registered below.
+    if (!isPost) return next();
 
     const channel = config.channels.main;
     if (!channel) {
