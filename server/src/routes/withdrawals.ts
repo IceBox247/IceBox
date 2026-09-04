@@ -3,6 +3,7 @@ import { prisma, money } from '../db';
 import { config, dextopusWithdrawReady, payoutReady } from '../config';
 import { processWithdrawalInstant, pollDextopusWithdrawals } from '../services/dextopusPayout';
 import { processIceWithdrawalInstant } from '../services/payout';
+import { missingChannels, withdrawGateChannels, channelLink } from '../services/gate';
 
 export const withdrawalsRouter = Router();
 
@@ -90,29 +91,99 @@ withdrawalsRouter.post('/', async (req, res) => {
     });
   }
 
+  // ── Anti-bot / anti-abuse gates ──────────────────────────────────────────
+  const W = config.withdraw;
+  const acct = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+
+  // Must be a member of ALL required Telegram channels to withdraw.
+  const gateChs = withdrawGateChannels();
+  if (gateChs.length) {
+    const missing = await missingChannels(acct.telegramId, gateChs);
+    if (missing.length) {
+      return res.status(403).json({
+        error: 'join_required',
+        channels: missing.map(channelLink),
+        message: 'Join all our Telegram channels to withdraw.',
+      });
+    }
+  }
+
+  // New accounts must age before withdrawing (0 disables).
+  if (W.minAccountAgeHours > 0) {
+    const ageHours = (Date.now() - acct.createdAt.getTime()) / 3_600_000;
+    if (ageHours < W.minAccountAgeHours) {
+      return res.status(403).json({
+        error: 'account_too_new',
+        message: `New accounts can withdraw ${W.minAccountAgeHours}h after signup. Please try again later.`,
+      });
+    }
+  }
+
+  // Optionally require a signature-verified wallet (hard for bots at scale).
+  if (W.requireWallet && !acct.walletVerifiedAt) {
+    return res.status(403).json({
+      error: 'wallet_required',
+      message: 'Connect and verify your wallet before withdrawing.',
+    });
+  }
+
+  // One payout address per account: once set, every withdrawal goes there.
+  if (W.lockAddress && acct.withdrawAddress && acct.withdrawAddress.toLowerCase() !== address.toLowerCase()) {
+    return res.status(403).json({
+      error: 'address_locked',
+      lockedAddress: acct.withdrawAddress,
+      message: `Withdrawals are locked to your first address (${acct.withdrawAddress}). Contact support to change it.`,
+    });
+  }
+
+  // A payout address can belong to only one account (anti multi-account).
+  if (W.uniqueAddress) {
+    const taken = await prisma.user.findFirst({
+      where: { withdrawAddress: { equals: address, mode: 'insensitive' }, NOT: { id: user.id } },
+      select: { id: true },
+    });
+    if (taken) {
+      return res.status(409).json({
+        error: 'address_taken',
+        message: 'This payout address is already linked to another account.',
+      });
+    }
+  }
+
   try {
     const result = await prisma.$transaction(async (tx) => {
       const fresh = await tx.user.findUniqueOrThrow({ where: { id: user.id } });
       const deposited = money(Math.max(0, fresh.balance - fresh.earnedBalance));
 
+      // One free withdrawal per rolling window; each extra one in the window costs
+      // a fee (charged on top of the amount, kept by the treasury). Rate-limits bots.
+      const windowStart = new Date(Date.now() - W.freeWindowHours * 3_600_000);
+      const recent = await tx.withdrawal.count({
+        where: { userId: user.id, status: { not: 'rejected' }, createdAt: { gte: windowStart } },
+      });
+      const fee = recent >= 1 ? money(W.extraFee) : 0;
+      const need = money(amount + fee); // must cover payout + fee
+
       if (token === 'ice') {
         // ICE token rail draws from the earned bucket.
-        if (fresh.earnedBalance < amount) {
-          return { insufficient: 'earned' as const, available: money(fresh.earnedBalance) };
+        if (fresh.earnedBalance < need) {
+          return { insufficient: 'earned' as const, available: money(fresh.earnedBalance), fee };
         }
       } else {
         // USDT rail draws from the deposited/staked bucket.
-        if (deposited < amount) {
-          return { insufficient: 'deposited' as const, available: deposited };
+        if (deposited < need) {
+          return { insufficient: 'deposited' as const, available: deposited, fee };
         }
       }
 
       const updated = await tx.user.update({
         where: { id: user.id },
         data: {
-          balance: { decrement: amount },
+          balance: { decrement: need },
           // ICE withdrawal also draws down the earned bucket; USDT leaves it.
-          ...(token === 'ice' ? { earnedBalance: { decrement: amount } } : {}),
+          ...(token === 'ice' ? { earnedBalance: { decrement: need } } : {}),
+          // Bind the account's single payout address on first withdrawal.
+          ...(fresh.withdrawAddress ? {} : { withdrawAddress: address }),
         },
       });
 
@@ -139,23 +210,37 @@ withdrawalsRouter.post('/', async (req, res) => {
         },
       });
 
+      if (fee > 0) {
+        await tx.ledgerEntry.create({
+          data: {
+            userId: user.id,
+            amount: -fee,
+            reason: 'withdrawal_fee',
+            meta: JSON.stringify({ withdrawalId: withdrawal.id, windowHours: W.freeWindowHours }),
+          },
+        });
+      }
+
       return {
         insufficient: false as const,
         withdrawal,
+        fee,
         balance: money(updated.balance),
         earnedBalance: money(updated.earnedBalance),
       };
     });
 
     if ('insufficient' in result && result.insufficient) {
+      const feeNote = result.fee > 0 ? ` (includes a $${result.fee.toFixed(2)} extra-withdrawal fee)` : '';
       return res.status(400).json({
         error: 'insufficient_balance',
         bucket: result.insufficient,
         available: result.available,
+        fee: result.fee,
         message:
           result.insufficient === 'earned'
-            ? 'Not enough earned ICE USD for an ICE-token withdrawal.'
-            : 'Not enough USDT-withdrawable balance. Only deposited or staked ICE USD can be withdrawn as USDT.',
+            ? `Not enough earned ICE USD for this withdrawal${feeNote}.`
+            : `Not enough USDT-withdrawable balance${feeNote}. Only deposited or staked ICE USD can be withdrawn as USDT.`,
       });
     }
 
@@ -194,6 +279,7 @@ withdrawalsRouter.post('/', async (req, res) => {
       ok: true,
       balance,
       earnedBalance: result.earnedBalance,
+      fee: result.fee,
       instant: ready,
       withdrawal: {
         id: result.withdrawal.id,

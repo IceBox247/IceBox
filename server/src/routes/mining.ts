@@ -11,6 +11,7 @@ import {
   miningLeaderboard,
 } from '../services/mining';
 import { serializeLevelMining, syncMinerLevel, buyLevelInfo, minerJourney, purchaseLevel } from '../services/levels';
+import { missingChannels, miningGateChannels, channelLink } from '../services/gate';
 import {
   isEvmAddress,
   verifyWalletSignature,
@@ -257,6 +258,18 @@ miningRouter.post('/buy', async (req, res) => {
 /** POST /api/mining/collect — sweep mined ICE into the earned balance. */
 miningRouter.post('/collect', async (req, res) => {
   const user = req.user!;
+  // Gate: must be a member of the required Telegram channel to collect mined ICE.
+  const gateChs = miningGateChannels();
+  if (gateChs.length) {
+    const missing = await missingChannels(user.telegramId, gateChs);
+    if (missing.length) {
+      return res.status(403).json({
+        error: 'join_required',
+        channels: missing.map(channelLink),
+        message: 'Join our Telegram channel to mine and collect ICE.',
+      });
+    }
+  }
   const result = await collectMined(user.id);
   if (!result.ok) {
     return res.status(400).json({ error: 'nothing_to_collect', message: 'Nothing to collect yet.' });
