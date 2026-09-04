@@ -618,3 +618,227 @@ export async function depositReport(limit = 20) {
     };
   });
 }
+
+/**
+ * Phantom balance = USDT-withdrawable funds an account never actually paid for.
+ *
+ * "Really deposited" means what arrived on chain (originAmount), NOT what was
+ * credited — the whole point is that the credited figure was wrong. An account
+ * that sent $0.10 and was credited $100,000 holds $99,999.90 of phantom money,
+ * and its referrers hold 7%/3% of that having sent nothing at all.
+ *
+ * A deposit carrying neither an origin nor a settlement amount cannot be
+ * judged, so that account is reported as `unknown` and never purged.
+ */
+export async function phantomScan() {
+  const users = await prisma.user.findMany({
+    where: { OR: [{ balance: { gt: 0 } }, { earnedBalance: { gt: 0 } }] },
+  });
+  const deposits = await prisma.deposit.findMany({ where: { credited: true } });
+
+  const realByUser = new Map<number, number>();
+  const unknownUsers = new Set<number>();
+  for (const d of deposits) {
+    const sent = d.originAmount ?? d.settlementAmount ?? null;
+    if (sent === null) {
+      unknownUsers.add(d.userId);
+      continue;
+    }
+    realByUser.set(d.userId, (realByUser.get(d.userId) ?? 0) + sent);
+  }
+
+  const targets: Array<{
+    userId: number;
+    username: string | null;
+    firstName: string | null;
+    telegramId: string;
+    balance: number;
+    withdrawable: number;
+    realDeposited: number;
+    phantom: number;
+    neverDeposited: boolean;
+    frozen: boolean;
+    createdAt: Date;
+  }> = [];
+  const unknown: Array<{ userId: number; username: string | null }> = [];
+
+  for (const u of users) {
+    if (unknownUsers.has(u.id)) {
+      unknown.push({ userId: u.id, username: u.username });
+      continue;
+    }
+    const withdrawable = money(Math.max(0, u.balance - u.earnedBalance));
+    const real = money(realByUser.get(u.id) ?? 0);
+    const phantom = money(withdrawable - real);
+    if (phantom <= 0.01) continue;
+    targets.push({
+      userId: u.id,
+      username: u.username,
+      firstName: u.firstName,
+      telegramId: u.telegramId,
+      balance: money(u.balance),
+      withdrawable,
+      realDeposited: real,
+      phantom,
+      neverDeposited: real === 0,
+      frozen: Boolean(u.frozenAt),
+      createdAt: u.createdAt,
+    });
+  }
+  targets.sort((a, b) => b.phantom - a.phantom);
+
+  return {
+    accounts: targets.length,
+    totalPhantom: money(targets.reduce((s, t) => s + t.phantom, 0)),
+    neverDeposited: targets.filter((t) => t.neverDeposited).length,
+    unknown,
+    targets,
+  };
+}
+
+/**
+ * Remove phantom balance in one pass. Each account keeps whatever it genuinely
+ * deposited and only the excess is taken back, so a real depositor is not
+ * penalised. Accounts that never deposited anything are frozen too, since
+ * their entire withdrawable balance was phantom.
+ *
+ * Every adjustment writes a ledger entry, so the sweep is auditable.
+ */
+export async function phantomPurge() {
+  const scan = await phantomScan();
+  let cleared = 0;
+  let frozen = 0;
+  let removed = 0;
+
+  for (const t of scan.targets) {
+    await prisma.$transaction(async (tx) => {
+      const fresh = await tx.user.findUniqueOrThrow({ where: { id: t.userId } });
+      // Recomputed inside the transaction so a concurrent change cannot make
+      // this deduct more than is actually phantom right now.
+      const withdrawable = money(Math.max(0, fresh.balance - fresh.earnedBalance));
+      const take = money(Math.min(withdrawable - t.realDeposited, fresh.balance));
+      if (take <= 0.01) return;
+
+      await tx.user.update({
+        where: { id: t.userId },
+        data: {
+          balance: { decrement: take },
+          ...(t.neverDeposited
+            ? { frozenAt: new Date(), frozenReason: 'phantom balance purge' }
+            : {}),
+        },
+      });
+      await tx.ledgerEntry.create({
+        data: {
+          userId: t.userId,
+          amount: -take,
+          reason: 'phantom_purge',
+          meta: JSON.stringify({ admin: true, realDeposited: t.realDeposited, before: t.balance }),
+        },
+      });
+      cleared++;
+      removed = money(removed + take);
+      if (t.neverDeposited) frozen++;
+    });
+  }
+
+  return { cleared, frozen, removed, scanned: scan.accounts, unknown: scan.unknown.length };
+}
+
+/**
+ * Follow the phantom money, including where it has already been spent.
+ *
+ * A balance sweep alone misses the worst cases: buying a mining level, buying
+ * hashrate, staking and withdrawing all draw down the same deposited bucket, so
+ * an account that converted its phantom credit into ICE or a level now shows a
+ * small balance and looks innocent. This reports what each account was given
+ * against what it did with it.
+ *
+ * `phantomIn` is the over-credit on its own deposits plus any referral
+ * commission paid out of someone else's over-credited deposit.
+ */
+export async function phantomTrace() {
+  const SPEND = ['stake', 'level_purchase', 'mining_buy', 'withdrawal'] as const;
+
+  const deposits = await prisma.deposit.findMany({ where: { credited: true } });
+  const bad = deposits.filter((d) => {
+    const sent = d.originAmount ?? d.settlementAmount ?? 0;
+    return sent > 0 && d.creditedAmount / sent >= 1000;
+  });
+
+  // Over-credit each depositor received.
+  const phantomIn = new Map<number, number>();
+  const badDexIds = new Set<string>();
+  for (const d of bad) {
+    const sent = d.originAmount ?? d.settlementAmount ?? 0;
+    phantomIn.set(d.userId, money((phantomIn.get(d.userId) ?? 0) + (d.creditedAmount - sent)));
+    if (d.dextopusId) badDexIds.add(String(d.dextopusId));
+  }
+
+  // Commission paid out of those same deposits.
+  const commission = new Map<number, number>();
+  const refEntries = await prisma.ledgerEntry.findMany({ where: { reason: 'referral_deposit' } });
+  for (const e of refEntries) {
+    try {
+      const m = JSON.parse(e.meta || '{}') as { dextopusId?: string };
+      if (!m.dextopusId || !badDexIds.has(String(m.dextopusId))) continue;
+      commission.set(e.userId, money((commission.get(e.userId) ?? 0) + e.amount));
+      phantomIn.set(e.userId, money((phantomIn.get(e.userId) ?? 0) + e.amount));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const ids = [...phantomIn.keys()];
+  if (ids.length === 0) {
+    return { accounts: 0, totalIn: 0, totalSpent: 0, totalLeft: 0, totalWithdrawn: 0, rows: [] };
+  }
+
+  // What those accounts have spent, by category.
+  const spends = await prisma.ledgerEntry.groupBy({
+    by: ['userId', 'reason'],
+    where: { userId: { in: ids }, reason: { in: [...SPEND] }, amount: { lt: 0 } },
+    _sum: { amount: true },
+  });
+  const spentBy = new Map<number, Record<string, number>>();
+  for (const s of spends) {
+    const rec = spentBy.get(s.userId) ?? {};
+    rec[s.reason] = money(Math.abs(s._sum.amount ?? 0));
+    spentBy.set(s.userId, rec);
+  }
+
+  const users = await prisma.user.findMany({ where: { id: { in: ids } } });
+  const rows = users
+    .map((u) => {
+      const spent = spentBy.get(u.id) ?? {};
+      const staked = spent['stake'] ?? 0;
+      const levels = money((spent['level_purchase'] ?? 0) + (spent['mining_buy'] ?? 0));
+      const withdrawn = spent['withdrawal'] ?? 0;
+      return {
+        userId: u.id,
+        username: u.username,
+        firstName: u.firstName,
+        telegramId: u.telegramId,
+        frozen: Boolean(u.frozenAt),
+        phantomIn: money(phantomIn.get(u.id) ?? 0),
+        fromCommission: money(commission.get(u.id) ?? 0),
+        balanceNow: money(u.balance),
+        withdrawable: money(Math.max(0, u.balance - u.earnedBalance)),
+        staked,
+        spentOnIce: levels, // levels + hashrate both convert USD into ICE mining
+        withdrawn,
+        // What actually left the treasury and cannot be swept from a balance.
+        unrecoverable: money(withdrawn),
+      };
+    })
+    .sort((a, b) => b.phantomIn - a.phantomIn);
+
+  return {
+    accounts: rows.length,
+    totalIn: money(rows.reduce((s, r) => s + r.phantomIn, 0)),
+    totalSpent: money(rows.reduce((s, r) => s + r.staked + r.spentOnIce + r.withdrawn, 0)),
+    totalLeft: money(rows.reduce((s, r) => s + r.withdrawable, 0)),
+    totalWithdrawn: money(rows.reduce((s, r) => s + r.withdrawn, 0)),
+    rows,
+  };
+}

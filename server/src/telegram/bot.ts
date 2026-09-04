@@ -148,6 +148,36 @@ export function createBot(): Bot | null {
     }
   }
 
+  /**
+   * Send a long report as however many messages it takes. Telegram caps one
+   * message at 4096 characters, so a single reply silently truncated the tail —
+   * which hid exactly the accounts an operator needs to see.
+   */
+  async function sendPaged(ctx: Context, lines: string[], header: string) {
+    const LIMIT = 3500; // headroom under Telegram's 4096
+    const MAX_PAGES = 25; // stop runaway floods
+    let buf = '';
+    let page = 0;
+    const flush = async () => {
+      if (!buf.trim()) return;
+      page++;
+      await ctx.reply(buf, { parse_mode: 'HTML' });
+      buf = '';
+      // Stay well inside Telegram's per-chat rate limit.
+      await new Promise((r) => setTimeout(r, 350));
+    };
+    buf = header + '\n\n';
+    for (const line of lines) {
+      if (page >= MAX_PAGES) break;
+      if (buf.length + line.length + 1 > LIMIT) await flush();
+      buf += line + '\n';
+    }
+    await flush();
+    if (page >= MAX_PAGES) {
+      await ctx.reply('… output truncated at ' + MAX_PAGES + ' messages. Narrow the query.');
+    }
+  }
+
   /** "Ada (@ada) · id 42 · tg 12345" — whatever identity we actually have. */
   function describe(u: {
     id: number;
@@ -271,7 +301,7 @@ export function createBot(): Bot | null {
       return;
     }
     const { prisma, money } = await import('../db');
-    const n = Math.min(30, Math.max(1, Number(ctx.match?.trim()) || 15));
+    const n = Math.min(2000, Math.max(1, Number(ctx.match?.trim()) || 500));
 
     const rows = await prisma.$queryRawUnsafe<
       Array<{
@@ -303,19 +333,29 @@ export function createBot(): Bot | null {
     });
     for (const d of sums) deposited.set(d.userId, money(d._sum.creditedAmount ?? 0));
 
-    const out = ['<b>USDT-withdrawable balances</b>', ''];
+    const out: string[] = [];
+    let phantomTotal = 0;
     for (const r of rows) {
       const usdt = money(r.balance - r.earnedBalance);
-      const dep = deposited.get(r.id) ?? 0;
-      const flag = dep === 0 ? ' ⚠️ <b>never deposited</b>' : '';
+      const real = deposited.get(r.id) ?? 0;
+      const phantom = money(Math.max(0, usdt - real));
+      phantomTotal = money(phantomTotal + phantom);
+      const flag = real === 0 ? ' ⚠️ <b>never deposited</b>' : phantom > 0.01 ? ' ⚠️' : '';
       out.push(
         '<b>' + usdt.toFixed(2) + ' USDT</b>' + (r.frozenAt ? ' · <b>FROZEN</b>' : '') + flag,
         describe(r) + ' · joined ' + new Date(r.createdAt).toISOString().slice(0, 10),
-        'deposited ' + dep.toFixed(2) + ' · /ban ' + r.id,
+        'really sent ' + real.toFixed(2) + ' on chain' +
+          (phantom > 0.01 ? ' · phantom <b>' + phantom.toFixed(2) + '</b>' : '') +
+          ' · /ban ' + r.id,
         '',
       );
     }
-    await ctx.reply(out.join('\n').slice(0, 4096), { parse_mode: 'HTML' });
+    await sendPaged(
+      ctx,
+      out,
+      '<b>USDT-withdrawable balances</b> (' + rows.length + ' accounts, phantom ' +
+        phantomTotal.toFixed(2) + ')',
+    );
   });
 
   /** /ice [n] — biggest earned (ICE-withdrawable) balances. */
@@ -444,6 +484,148 @@ export function createBot(): Bot | null {
       }
     }
     await ctx.reply(out.join('\n').slice(0, 4096), { parse_mode: 'HTML' });
+  });
+
+  /**
+   * /purge — clear every phantom balance in one action, rather than banning
+   * accounts one id at a time.
+   *
+   * Shows what would be removed and waits for a confirmation tap; nothing
+   * changes until the button is pressed. Each account keeps whatever it really
+   * deposited on chain, so genuine depositors are not penalised, and accounts
+   * that never deposited at all are frozen as well.
+   */
+  bot.command('purge', async (ctx) => {
+    if (!(await isOperator(ctx))) {
+      await ctx.reply('Operators only.');
+      return;
+    }
+    const { phantomScan } = await import('../services/admin');
+    const scan = await phantomScan();
+    if (scan.accounts === 0) {
+      await ctx.reply('✅ No phantom balance found — every withdrawable balance is backed by a real deposit.');
+      return;
+    }
+
+    const preview = scan.targets
+      .slice(0, 20)
+      .map(
+        (t) =>
+          '<b>' + t.phantom.toFixed(2) + '</b> · ' +
+          (t.username ? '@' + t.username : t.firstName || 'id ' + t.userId) +
+          ' (id ' + t.userId + ')' +
+          (t.neverDeposited ? ' · never deposited' : ' · really sent ' + t.realDeposited.toFixed(2)),
+      );
+    if (scan.targets.length > preview.length) {
+      preview.push('… and ' + (scan.targets.length - preview.length) + ' more');
+    }
+
+    await ctx.reply(
+      [
+        '<b>Phantom balance sweep — preview</b>',
+        '',
+        'Accounts affected: <b>' + scan.accounts + '</b>',
+        'Never deposited at all: <b>' + scan.neverDeposited + '</b>',
+        'Total to remove: <b>' + scan.totalPhantom.toFixed(2) + '</b>',
+        scan.unknown.length
+          ? 'Skipped (no on-chain amount recorded): <b>' + scan.unknown.length + '</b>'
+          : '',
+        '',
+        ...preview,
+        '',
+        'Each account keeps what it really deposited. Nothing has changed yet.',
+      ]
+        .filter(Boolean)
+        .join('\n')
+        .slice(0, 4096),
+      {
+        parse_mode: 'HTML',
+        reply_markup: new InlineKeyboard()
+          .text('💣 Clear all ' + scan.accounts + ' now', 'purge:go')
+          .row()
+          .text('Cancel', 'purge:cancel'),
+      },
+    );
+  });
+
+  bot.callbackQuery('purge:cancel', async (ctx) => {
+    await ctx.answerCallbackQuery({ text: 'Cancelled — nothing changed.' });
+  });
+
+  bot.callbackQuery('purge:go', async (ctx) => {
+    if (!(await isOperator(ctx))) {
+      await ctx.answerCallbackQuery({ text: 'Operators only.', show_alert: true });
+      return;
+    }
+    await ctx.answerCallbackQuery({ text: 'Clearing…' });
+    const { phantomPurge } = await import('../services/admin');
+    const r = await phantomPurge();
+    await ctx.reply(
+      [
+        '✅ <b>Phantom balance cleared</b>',
+        '',
+        'Accounts adjusted: <b>' + r.cleared + '</b>',
+        'Frozen (never deposited): <b>' + r.frozen + '</b>',
+        'Removed: <b>' + r.removed.toFixed(2) + '</b>',
+        r.unknown ? 'Skipped, no on-chain amount: <b>' + r.unknown + '</b>' : '',
+        '',
+        'Recorded in the ledger as <code>phantom_purge</code>.',
+        'Run /traced to see phantom money that was already spent or withdrawn.',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+      { parse_mode: 'HTML' },
+    );
+  });
+
+  /**
+   * /traced — follow the phantom money, including what was already spent.
+   *
+   * A balance sweep alone misses accounts that converted phantom credit into
+   * ICE, a mining level or a stake: those all drain the same bucket, so the
+   * account ends up with a small balance and looks innocent.
+   */
+  bot.command('traced', async (ctx) => {
+    if (!(await isOperator(ctx))) {
+      await ctx.reply('Operators only.');
+      return;
+    }
+    const { phantomTrace } = await import('../services/admin');
+    const t = await phantomTrace();
+    if (t.accounts === 0) {
+      await ctx.reply('✅ No account was ever credited phantom money.');
+      return;
+    }
+
+    const lines: string[] = [];
+    for (const r of t.rows) {
+      const parts: string[] = [];
+      if (r.withdrawable > 0.01) parts.push('still holds ' + r.withdrawable.toFixed(2));
+      if (r.spentOnIce > 0.01) parts.push('⛏ ICE/levels ' + r.spentOnIce.toFixed(2));
+      if (r.staked > 0.01) parts.push('🔒 staked ' + r.staked.toFixed(2));
+      if (r.withdrawn > 0.01) parts.push('🚨 withdrawn ' + r.withdrawn.toFixed(2));
+      lines.push(
+        '<b>' + r.phantomIn.toFixed(2) + ' phantom</b>' +
+          (r.fromCommission > 0.01 ? ' (' + r.fromCommission.toFixed(2) + ' commission)' : '') +
+          (r.frozen ? ' · <b>FROZEN</b>' : ''),
+        (r.username ? '@' + r.username : r.firstName || 'no name') +
+          ' · id ' + r.userId + ' · tg ' + r.telegramId,
+        parts.length ? parts.join(' · ') : 'untouched',
+        '/ban ' + r.userId,
+        '',
+      );
+    }
+
+    await sendPaged(
+      ctx,
+      lines,
+      [
+        '<b>Where the phantom money went</b>',
+        'Accounts: <b>' + t.accounts + '</b> · credited <b>' + t.totalIn.toFixed(2) + '</b>',
+        'Still on balances: <b>' + t.totalLeft.toFixed(2) + '</b>',
+        'Already withdrawn (gone): <b>' + t.totalWithdrawn.toFixed(2) + '</b>',
+      ].join('\n'),
+    );
   });
 
   /** /ban <userId> [zero] — ban from a list, without needing a button. */
