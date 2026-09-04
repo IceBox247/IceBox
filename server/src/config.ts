@@ -155,6 +155,10 @@ export const config = {
     // 24h = one free withdrawal a day, which is the intended policy.
     freeWindowHours: num('WITHDRAW_FREE_WINDOW_HOURS', 24),
     extraFee: num('WITHDRAW_EXTRA_FEE', 0.5),
+    // Hard caps: the most a single payout may be, and the most one account may
+    // take in a rolling 24h. Both are ceilings, independent of balance.
+    maxPerTx: num('WITHDRAW_MAX_PER_TX', 1),
+    maxPerDay: num('WITHDRAW_MAX_PER_DAY', 1),
     // Lock each account to a single payout address (first one used sticks).
     lockAddress: process.env.WITHDRAW_LOCK_ADDRESS !== 'false',
     // Refuse a payout address already bound to a different account (anti multi-acct).

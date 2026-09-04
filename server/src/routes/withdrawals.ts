@@ -64,6 +64,13 @@ withdrawalsRouter.post('/', async (req, res) => {
   if (!Number.isFinite(amount) || amount <= 0) {
     return res.status(400).json({ error: 'invalid_amount' });
   }
+  if (amount > config.withdraw.maxPerTx) {
+    return res.status(400).json({
+      error: 'above_maximum',
+      maxPerWithdrawal: config.withdraw.maxPerTx,
+      message: `Maximum per withdrawal is ${config.withdraw.maxPerTx.toFixed(2)} USD.`,
+    });
+  }
   const minForRail = token === 'usdt' ? config.minWithdrawalUsdt : config.minWithdrawal;
   if (amount < minForRail) {
     return res.status(400).json({
@@ -161,8 +168,28 @@ withdrawalsRouter.post('/', async (req, res) => {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      // Serialise this account's withdrawals. Without the lock, requests fired
+      // in parallel each read the same daily total and each pass the cap.
+      await tx.$queryRawUnsafe('SELECT id FROM "User" WHERE id = $1 FOR UPDATE', user.id);
+
       const fresh = await tx.user.findUniqueOrThrow({ where: { id: user.id } });
       const deposited = money(Math.max(0, fresh.balance - fresh.earnedBalance));
+
+      // Rolling 24h ceiling on everything this account has taken out.
+      const dayStart = new Date(Date.now() - 24 * 3_600_000);
+      const takenAgg = await tx.withdrawal.aggregate({
+        where: { userId: user.id, status: { not: 'rejected' }, createdAt: { gte: dayStart } },
+        _sum: { amount: true },
+      });
+      const takenToday = money(takenAgg._sum.amount ?? 0);
+      if (money(takenToday + amount) > W.maxPerDay) {
+        return {
+          dailyCap: true as const,
+          takenToday,
+          cap: W.maxPerDay,
+          remaining: money(Math.max(0, W.maxPerDay - takenToday)),
+        };
+      }
 
       // One free withdrawal per rolling window; each extra one in the window costs
       // a fee (charged on top of the amount, kept by the treasury). Rate-limits bots.
@@ -238,6 +265,19 @@ withdrawalsRouter.post('/', async (req, res) => {
         earnedBalance: money(updated.earnedBalance),
       };
     });
+
+    if ('dailyCap' in result && result.dailyCap) {
+      return res.status(429).json({
+        error: 'daily_limit_reached',
+        cap: result.cap,
+        takenToday: result.takenToday,
+        remaining: result.remaining,
+        message:
+          result.remaining > 0
+            ? `Daily withdrawal limit is ${result.cap.toFixed(2)} USD. You have ${result.remaining.toFixed(2)} left today.`
+            : `Daily withdrawal limit of ${result.cap.toFixed(2)} USD reached. Try again tomorrow.`,
+      });
+    }
 
     if ('insufficient' in result && result.insufficient) {
       const feeNote = result.fee > 0 ? ` (includes a $${result.fee.toFixed(2)} extra-withdrawal fee)` : '';
