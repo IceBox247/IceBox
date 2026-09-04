@@ -704,13 +704,21 @@ export async function phantomScan() {
  *
  * Every adjustment writes a ledger entry, so the sweep is auditable.
  */
-export async function phantomPurge() {
+export async function phantomPurge(limit = 200) {
   const scan = await phantomScan();
   let cleared = 0;
   let frozen = 0;
   let removed = 0;
 
-  for (const t of scan.targets) {
+  // Process at most `limit` accounts per call. On a serverless function with a
+  // ~15s budget, clearing every account in one pass would time out mid-run when
+  // there are hundreds — which is why the confirm button looked like it did
+  // nothing. Batching keeps each call short; the operation is idempotent (an
+  // already-cleared account has no phantom left), so running it again clears the
+  // next batch. `remaining` tells the caller whether another pass is needed.
+  const batch = scan.targets.slice(0, limit);
+
+  for (const t of batch) {
     await prisma.$transaction(async (tx) => {
       const fresh = await tx.user.findUniqueOrThrow({ where: { id: t.userId } });
       // Recomputed inside the transaction so a concurrent change cannot make
@@ -742,7 +750,14 @@ export async function phantomPurge() {
     });
   }
 
-  return { cleared, frozen, removed, scanned: scan.accounts, unknown: scan.unknown.length };
+  return {
+    cleared,
+    frozen,
+    removed,
+    scanned: scan.accounts,
+    remaining: Math.max(0, scan.accounts - batch.length),
+    unknown: scan.unknown.length,
+  };
 }
 
 /**

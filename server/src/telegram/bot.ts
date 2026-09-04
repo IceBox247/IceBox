@@ -568,9 +568,63 @@ export function createBot(): Bot | null {
         'Frozen (never deposited): <b>' + r.frozen + '</b>',
         'Removed: <b>' + r.removed.toFixed(2) + '</b>',
         r.unknown ? 'Skipped, no on-chain amount: <b>' + r.unknown + '</b>' : '',
+        r.remaining ? '⏳ <b>' + r.remaining + '</b> more remain — run /purgeall to finish.' : '',
         '',
         'Recorded in the ledger as <code>phantom_purge</code>.',
         'Run /traced to see phantom money that was already spent or withdrawn.',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+      { parse_mode: 'HTML' },
+    );
+  });
+
+  /**
+   * /purgeall — clear ALL phantom balance in one command, no button.
+   *
+   * Runs the batched purge repeatedly until nothing remains, so a large cleanup
+   * finishes in a single command even though each batch is kept short enough to
+   * survive the serverless time limit. Idempotent and safe to re-run.
+   */
+  bot.command('purgeall', async (ctx) => {
+    if (!(await isOperator(ctx))) {
+      await ctx.reply('Operators only.');
+      return;
+    }
+    const { phantomPurge } = await import('../services/admin');
+    await ctx.reply('⏳ Clearing all phantom balances…');
+
+    let cleared = 0;
+    let frozen = 0;
+    let removed = 0;
+    let unknown = 0;
+    let passes = 0;
+    // Each pass clears a batch; loop until the scan reports nothing left, with a
+    // hard ceiling so a bug can never spin forever.
+    for (;;) {
+      const r = await phantomPurge(100);
+      cleared += r.cleared;
+      frozen += r.frozen;
+      removed = Math.round((removed + r.removed) * 100) / 100;
+      unknown = r.unknown;
+      passes++;
+      // Stop when a pass changes nothing (all remaining are unrecoverable/spent)
+      // or the queue is empty.
+      if (r.cleared === 0 || r.remaining === 0 || passes >= 50) break;
+    }
+
+    await ctx.reply(
+      [
+        '✅ <b>Phantom purge complete</b>',
+        '',
+        'Accounts adjusted: <b>' + cleared + '</b>',
+        'Frozen (never deposited): <b>' + frozen + '</b>',
+        'Total removed: <b>' + removed.toFixed(2) + '</b>',
+        unknown ? 'Skipped, no on-chain amount: <b>' + unknown + '</b>' : '',
+        'Passes: ' + passes,
+        '',
+        'Recorded in the ledger as <code>phantom_purge</code>.',
+        'Run /usdt to confirm what is left, /traced for money already spent.',
       ]
         .filter(Boolean)
         .join('\n'),
