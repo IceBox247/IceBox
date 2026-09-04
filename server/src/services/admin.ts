@@ -704,60 +704,91 @@ export async function phantomScan() {
  *
  * Every adjustment writes a ledger entry, so the sweep is auditable.
  */
-export async function phantomPurge(limit = 200) {
-  const scan = await phantomScan();
-  let cleared = 0;
-  let frozen = 0;
-  let removed = 0;
+export async function phantomPurge() {
+  // Clear EVERY phantom balance in one bulk SQL transaction, regardless of how
+  // many accounts are affected. The earlier row-by-row loop timed out on the
+  // serverless budget once there were hundreds; set-based SQL does the whole
+  // job in milliseconds.
+  //
+  // Phantom = withdrawable (balance - earnedBalance) beyond what the account
+  // actually sent ON CHAIN (originAmount, else settlementAmount). Deposits with
+  // neither amount recorded can't be judged, so those accounts are excluded and
+  // reported as `unknown`. Never-deposited accounts are frozen. take = phantom
+  // is always <= balance, so a balance can never go negative.
+  //
+  // The three statements run in one transaction and all read the pre-update
+  // balance (the UPDATE is last), so the ledger and the deduction agree.
+  const CTE = `
+    WITH real AS (
+      SELECT "userId", SUM(COALESCE("originAmount", "settlementAmount")) AS r
+      FROM "Deposit"
+      WHERE credited = true AND COALESCE("originAmount", "settlementAmount") IS NOT NULL
+      GROUP BY "userId"
+    ),
+    unknown AS (
+      SELECT DISTINCT "userId" FROM "Deposit"
+      WHERE credited = true AND "originAmount" IS NULL AND "settlementAmount" IS NULL
+    ),
+    purge AS (
+      SELECT u.id,
+             ROUND((GREATEST(0, u.balance - u."earnedBalance") - COALESCE(r.r, 0))::numeric, 2) AS phantom,
+             (COALESCE(r.r, 0) = 0) AS never_dep
+      FROM "User" u
+      LEFT JOIN real r ON r."userId" = u.id
+      WHERE (u.balance > 0 OR u."earnedBalance" > 0)
+        AND NOT EXISTS (SELECT 1 FROM unknown k WHERE k."userId" = u.id)
+    ),
+    hit AS (SELECT id, phantom, never_dep FROM purge WHERE phantom > 0.01)`;
 
-  // Process at most `limit` accounts per call. On a serverless function with a
-  // ~15s budget, clearing every account in one pass would time out mid-run when
-  // there are hundreds — which is why the confirm button looked like it did
-  // nothing. Batching keeps each call short; the operation is idempotent (an
-  // already-cleared account has no phantom left), so running it again clears the
-  // next batch. `remaining` tells the caller whether another pass is needed.
-  const batch = scan.targets.slice(0, limit);
+  const result = await prisma.$transaction(async (tx) => {
+    // Stats first, from the pre-update state.
+    const stats = await tx.$queryRawUnsafe<
+      Array<{ accounts: bigint; frozen: bigint; removed: number | null }>
+    >(
+      `${CTE}
+       SELECT COUNT(*)::bigint AS accounts,
+              COUNT(*) FILTER (WHERE never_dep)::bigint AS frozen,
+              COALESCE(SUM(phantom), 0)::float8 AS removed
+       FROM hit`,
+    );
 
-  for (const t of batch) {
-    await prisma.$transaction(async (tx) => {
-      const fresh = await tx.user.findUniqueOrThrow({ where: { id: t.userId } });
-      // Recomputed inside the transaction so a concurrent change cannot make
-      // this deduct more than is actually phantom right now.
-      const withdrawable = money(Math.max(0, fresh.balance - fresh.earnedBalance));
-      const take = money(Math.min(withdrawable - t.realDeposited, fresh.balance));
-      if (take <= 0.01) return;
+    // Ledger entries for every affected account (reads pre-update balances).
+    await tx.$executeRawUnsafe(
+      `${CTE}
+       INSERT INTO "LedgerEntry" ("userId", "amount", "reason", "meta", "createdAt")
+       SELECT id, -phantom, 'phantom_purge', '{"admin":true,"bulk":true}', NOW()
+       FROM hit`,
+    );
 
-      await tx.user.update({
-        where: { id: t.userId },
-        data: {
-          balance: { decrement: take },
-          ...(t.neverDeposited
-            ? { frozenAt: new Date(), frozenReason: 'phantom balance purge' }
-            : {}),
-        },
-      });
-      await tx.ledgerEntry.create({
-        data: {
-          userId: t.userId,
-          amount: -take,
-          reason: 'phantom_purge',
-          meta: JSON.stringify({ admin: true, realDeposited: t.realDeposited, before: t.balance }),
-        },
-      });
-      cleared++;
-      removed = money(removed + take);
-      if (t.neverDeposited) frozen++;
-    });
-  }
+    // Deduct the phantom and freeze never-deposited accounts.
+    await tx.$executeRawUnsafe(
+      `${CTE}
+       UPDATE "User" u
+       SET balance = ROUND((u.balance - h.phantom)::numeric, 2),
+           "frozenAt" = CASE WHEN h.never_dep THEN NOW() ELSE u."frozenAt" END,
+           "frozenReason" = CASE WHEN h.never_dep THEN 'phantom balance purge' ELSE u."frozenReason" END
+       FROM hit h
+       WHERE u.id = h.id`,
+    );
 
-  return {
-    cleared,
-    frozen,
-    removed,
-    scanned: scan.accounts,
-    remaining: Math.max(0, scan.accounts - batch.length),
-    unknown: scan.unknown.length,
-  };
+    const unknownCount = await tx.$queryRawUnsafe<Array<{ n: bigint }>>(
+      `SELECT COUNT(DISTINCT d."userId")::bigint AS n
+       FROM "Deposit" d
+       JOIN "User" u ON u.id = d."userId"
+       WHERE d.credited = true AND d."originAmount" IS NULL AND d."settlementAmount" IS NULL
+         AND (u.balance > 0 OR u."earnedBalance" > 0)`,
+    );
+
+    const s = stats[0];
+    return {
+      cleared: Number(s?.accounts ?? 0),
+      frozen: Number(s?.frozen ?? 0),
+      removed: money(Number(s?.removed ?? 0)),
+      unknown: Number(unknownCount[0]?.n ?? 0),
+    };
+  });
+
+  return { ...result, scanned: result.cleared, remaining: 0 };
 }
 
 /**

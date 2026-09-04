@@ -593,35 +593,15 @@ export function createBot(): Bot | null {
     }
     const { phantomPurge } = await import('../services/admin');
     await ctx.reply('⏳ Clearing all phantom balances…');
-
-    let cleared = 0;
-    let frozen = 0;
-    let removed = 0;
-    let unknown = 0;
-    let passes = 0;
-    // Each pass clears a batch; loop until the scan reports nothing left, with a
-    // hard ceiling so a bug can never spin forever.
-    for (;;) {
-      const r = await phantomPurge(100);
-      cleared += r.cleared;
-      frozen += r.frozen;
-      removed = Math.round((removed + r.removed) * 100) / 100;
-      unknown = r.unknown;
-      passes++;
-      // Stop when a pass changes nothing (all remaining are unrecoverable/spent)
-      // or the queue is empty.
-      if (r.cleared === 0 || r.remaining === 0 || passes >= 50) break;
-    }
-
+    const r = await phantomPurge();
     await ctx.reply(
       [
         '✅ <b>Phantom purge complete</b>',
         '',
-        'Accounts adjusted: <b>' + cleared + '</b>',
-        'Frozen (never deposited): <b>' + frozen + '</b>',
-        'Total removed: <b>' + removed.toFixed(2) + '</b>',
-        unknown ? 'Skipped, no on-chain amount: <b>' + unknown + '</b>' : '',
-        'Passes: ' + passes,
+        'Accounts adjusted: <b>' + r.cleared + '</b>',
+        'Frozen (never deposited): <b>' + r.frozen + '</b>',
+        'Total removed: <b>' + r.removed.toFixed(2) + '</b>',
+        r.unknown ? 'Skipped, no on-chain amount: <b>' + r.unknown + '</b>' : '',
         '',
         'Recorded in the ledger as <code>phantom_purge</code>.',
         'Run /usdt to confirm what is left, /traced for money already spent.',
