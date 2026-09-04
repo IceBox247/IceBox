@@ -258,6 +258,146 @@ export function createBot(): Bot | null {
     );
   });
 
+  /**
+   * /usdt [n] — accounts holding USDT-withdrawable balance, biggest first.
+   *
+   * That bucket is `balance - earnedBalance`, and it is what the USDT rail pays
+   * out as real money. Each row also shows what the account actually deposited,
+   * so funds that arrived without a deposit behind them stand out.
+   */
+  bot.command('usdt', async (ctx) => {
+    if (!(await isOperator(ctx))) {
+      await ctx.reply('Operators only.');
+      return;
+    }
+    const { prisma, money } = await import('../db');
+    const n = Math.min(30, Math.max(1, Number(ctx.match?.trim()) || 15));
+
+    const rows = await prisma.$queryRawUnsafe<
+      Array<{
+        id: number;
+        username: string | null;
+        firstName: string | null;
+        telegramId: string;
+        balance: number;
+        earnedBalance: number;
+        frozenAt: Date | null;
+        createdAt: Date;
+      }>
+    >(
+      'SELECT id, username, "firstName", "telegramId", balance, "earnedBalance", "frozenAt", "createdAt" ' +
+        'FROM "User" WHERE (balance - "earnedBalance") > 0.005 ' +
+        'ORDER BY (balance - "earnedBalance") DESC LIMIT ' + n,
+    );
+    if (rows.length === 0) {
+      await ctx.reply('No account is holding USDT-withdrawable balance.');
+      return;
+    }
+
+    // What each of them actually deposited, so phantom funds are obvious.
+    const deposited = new Map<number, number>();
+    const sums = await prisma.deposit.groupBy({
+      by: ['userId'],
+      where: { userId: { in: rows.map((r) => r.id) }, credited: true },
+      _sum: { creditedAmount: true },
+    });
+    for (const d of sums) deposited.set(d.userId, money(d._sum.creditedAmount ?? 0));
+
+    const out = ['<b>USDT-withdrawable balances</b>', ''];
+    for (const r of rows) {
+      const usdt = money(r.balance - r.earnedBalance);
+      const dep = deposited.get(r.id) ?? 0;
+      const flag = dep === 0 ? ' ⚠️ <b>never deposited</b>' : '';
+      out.push(
+        '<b>' + usdt.toFixed(2) + ' USDT</b>' + (r.frozenAt ? ' · <b>FROZEN</b>' : '') + flag,
+        describe(r) + ' · joined ' + new Date(r.createdAt).toISOString().slice(0, 10),
+        'deposited ' + dep.toFixed(2) + ' · /ban ' + r.id,
+        '',
+      );
+    }
+    await ctx.reply(out.join('\n').slice(0, 4096), { parse_mode: 'HTML' });
+  });
+
+  /** /ice [n] — biggest earned (ICE-withdrawable) balances. */
+  bot.command('ice', async (ctx) => {
+    if (!(await isOperator(ctx))) {
+      await ctx.reply('Operators only.');
+      return;
+    }
+    const { prisma, money } = await import('../db');
+    const n = Math.min(30, Math.max(1, Number(ctx.match?.trim()) || 15));
+
+    const rows = await prisma.user.findMany({
+      where: { earnedBalance: { gt: 0.005 } },
+      orderBy: { earnedBalance: 'desc' },
+      take: n,
+    });
+    if (rows.length === 0) {
+      await ctx.reply('No account is holding earned ICE.');
+      return;
+    }
+
+    const out = ['<b>Largest ICE (earned) balances</b>', ''];
+    for (const r of rows) {
+      out.push(
+        '<b>' + money(r.earnedBalance).toFixed(2) + ' ICE</b>' +
+          (r.frozenAt ? ' · <b>FROZEN</b>' : ''),
+        describe(r) + ' · joined ' + new Date(r.createdAt).toISOString().slice(0, 10),
+        'total balance ' + money(r.balance).toFixed(2) + ' · /ban ' + r.id,
+        '',
+      );
+    }
+    await ctx.reply(out.join('\n').slice(0, 4096), { parse_mode: 'HTML' });
+  });
+
+  /** /ban <userId> [zero] — ban from a list, without needing a button. */
+  bot.command('ban', async (ctx) => {
+    if (!(await isOperator(ctx))) {
+      await ctx.reply('Operators only.');
+      return;
+    }
+    const parts = (ctx.match?.trim() ?? '').split(/\s+/);
+    const userId = Number(parts[0]);
+    const zero = parts[1]?.toLowerCase() === 'zero';
+    if (!Number.isInteger(userId) || userId <= 0) {
+      await ctx.reply('Usage: /ban <userId> [zero]');
+      return;
+    }
+    const { prisma, money } = await import('../db');
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      await ctx.reply('User not found.');
+      return;
+    }
+    const zeroed = zero ? money(user.balance) : 0;
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          frozenAt: new Date(),
+          frozenReason: 'banned from Telegram by ' + (ctx.from?.id ?? 'operator'),
+          ...(zero ? { balance: 0, earnedBalance: 0 } : {}),
+        },
+      });
+      if (zero && zeroed > 0) {
+        await tx.ledgerEntry.create({
+          data: {
+            userId,
+            amount: -zeroed,
+            reason: 'operator_freeze_zero',
+            meta: JSON.stringify({ admin: true, via: 'telegram' }),
+          },
+        });
+      }
+    });
+    await ctx.reply(
+      '🚫 <b>Banned</b> ' + describe(user) +
+        (zero ? '\nBalance cleared: <b>' + zeroed.toFixed(2) + '</b>' : '') +
+        '\n\nUndo with <code>/unban ' + userId + '</code>.',
+      { parse_mode: 'HTML' },
+    );
+  });
+
   bot.command('unban', async (ctx) => {
     if (!(await isOperator(ctx))) {
       await ctx.reply('Operators only.');
