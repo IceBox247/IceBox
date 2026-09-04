@@ -306,3 +306,171 @@ export async function auditReferrer(query: string) {
     generatedAt: new Date().toISOString(),
   };
 }
+
+/**
+ * Incident tooling: trace every account that has withdrawn to a given payout
+ * address, and show where each one's balance actually came from.
+ *
+ * `lookupUser` only searches names and ids, so when an on-chain payout address
+ * is all you have there is no way to reach the account behind it. This closes
+ * that gap: pass the address seen in the treasury's transaction history and get
+ * back the users, what they withdrew, and the deposits that funded it.
+ *
+ * Deposits are flagged `suspicious` when the credit dwarfs what was actually
+ * sent (>=1000x) — the signature of the 1e6 decimals over-credit, which is the
+ * usual way a balance appears without real money behind it.
+ */
+export async function investigateAddress(address: string) {
+  const addr = (address ?? '').trim();
+  if (!addr) return { error: 'pass ?address=0x…' };
+
+  const withdrawals = await prisma.withdrawal.findMany({
+    where: { address: { equals: addr, mode: 'insensitive' } },
+    orderBy: { createdAt: 'desc' },
+    take: 200,
+  });
+  if (withdrawals.length === 0) {
+    return { address: addr, found: false, note: 'No withdrawal in this database used that address.' };
+  }
+
+  const userIds = [...new Set(withdrawals.map((w) => w.userId))];
+  const users = await prisma.user.findMany({ where: { id: { in: userIds } } });
+
+  const accounts = await Promise.all(
+    users.map(async (u) => {
+      const mine = withdrawals.filter((w) => w.userId === u.id);
+      const paidOut = money(
+        mine.filter((w) => w.status === 'paid' || w.status === 'processing')
+          .reduce((s, w) => s + w.amount, 0),
+      );
+
+      const deposits = await prisma.deposit.findMany({
+        where: { userId: u.id, credited: true },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      });
+      const depositRows = deposits.map((d) => {
+        const sent = d.originAmount ?? d.settlementAmount ?? 0;
+        const ratio = sent > 0 ? d.creditedAmount / sent : null;
+        return {
+          id: d.id,
+          chainId: d.originChainId,
+          asset: d.originAsset,
+          sent,
+          credited: money(d.creditedAmount),
+          ratio: ratio === null ? null : Math.round(ratio),
+          suspicious: ratio !== null && ratio >= 1000,
+          txHash: d.originTxHash,
+          createdAt: d.createdAt,
+        };
+      });
+
+      // Where the balance came from, by ledger reason.
+      const byReason = await prisma.ledgerEntry.groupBy({
+        by: ['reason'],
+        where: { userId: u.id },
+        _sum: { amount: true },
+        _count: true,
+      });
+
+      const realMoneyIn = money(
+        depositRows.filter((d) => !d.suspicious).reduce((s, d) => s + d.credited, 0),
+      );
+      const phantomIn = money(
+        depositRows.filter((d) => d.suspicious).reduce((s, d) => s + d.credited, 0),
+      );
+
+      return {
+        userId: u.id,
+        username: u.username,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        telegramId: u.telegramId,
+        telegramLink: u.username ? `https://t.me/${u.username}` : null,
+        joined: u.createdAt,
+        referredById: u.referredById,
+        balanceNow: money(u.balance),
+        earnedBalance: money(u.earnedBalance),
+        withdrawnToThisAddress: paidOut,
+        // The headline number: paid out beyond what they ever really funded.
+        netLossToUs: money(paidOut - realMoneyIn),
+        realDepositsCredited: realMoneyIn,
+        overCreditedDeposits: phantomIn,
+        withdrawals: mine.map((w) => ({
+          id: w.id,
+          amount: money(w.amount),
+          token: w.token,
+          status: w.status,
+          txHash: w.txHash,
+          createdAt: w.createdAt,
+        })),
+        deposits: depositRows,
+        ledgerByReason: byReason.map((r) => ({
+          reason: r.reason,
+          total: money(r._sum.amount ?? 0),
+          entries: r._count,
+        })),
+      };
+    }),
+  );
+
+  return {
+    address: addr,
+    found: true,
+    accounts: accounts.length,
+    totalWithdrawnToAddress: money(accounts.reduce((s, a) => s + a.withdrawnToThisAddress, 0)),
+    totalNetLoss: money(accounts.reduce((s, a) => s + a.netLossToUs, 0)),
+    users: accounts,
+  };
+}
+
+/**
+ * Incident tooling: every account holding balance that was never really funded.
+ *
+ * Finds deposits credited at >=1000x what the user actually sent (the 1e6
+ * decimals over-credit), then reports what each of those accounts has already
+ * withdrawn. Answers "how big is this, and is it one person or many?".
+ */
+export async function exposureReport() {
+  const deposits = await prisma.deposit.findMany({ where: { credited: true } });
+  const suspicious = deposits.filter((d) => {
+    const sent = d.originAmount ?? d.settlementAmount ?? 0;
+    return sent > 0 && d.creditedAmount / sent >= 1000;
+  });
+
+  const userIds = [...new Set(suspicious.map((d) => d.userId))];
+  if (userIds.length === 0) {
+    return { affectedAccounts: 0, phantomCredited: 0, withdrawnByThem: 0, users: [] };
+  }
+
+  const users = await prisma.user.findMany({ where: { id: { in: userIds } } });
+  const rows = await Promise.all(
+    users.map(async (u) => {
+      const mine = suspicious.filter((d) => d.userId === u.id);
+      const phantom = money(mine.reduce((s, d) => s + d.creditedAmount, 0));
+      const ws = await prisma.withdrawal.findMany({
+        where: { userId: u.id, status: { in: ['paid', 'processing'] } },
+      });
+      return {
+        userId: u.id,
+        username: u.username,
+        firstName: u.firstName,
+        telegramId: u.telegramId,
+        telegramLink: u.username ? `https://t.me/${u.username}` : null,
+        balanceNow: money(u.balance),
+        phantomCredited: phantom,
+        withdrawn: money(ws.reduce((s, w) => s + w.amount, 0)),
+        payoutAddresses: [...new Set(ws.map((w) => w.address))],
+        overCreditedDeposits: mine.length,
+      };
+    }),
+  );
+  rows.sort((a, b) => b.withdrawn - a.withdrawn);
+
+  return {
+    affectedAccounts: rows.length,
+    phantomCredited: money(rows.reduce((s, r) => s + r.phantomCredited, 0)),
+    withdrawnByThem: money(rows.reduce((s, r) => s + r.withdrawn, 0)),
+    users: rows,
+  };
+}

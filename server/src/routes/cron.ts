@@ -285,6 +285,29 @@ cronRouter.get('/referrer', async (req, res) => {
 });
 
 /**
+ * GET /api/cron/investigate?secret=CRON_SECRET&address=0x… — incident tooling.
+ * Given a payout address seen in the treasury's transaction history, return the
+ * account(s) behind it, what they withdrew, and the deposits that funded it
+ * (flagging any credited at >=1000x what was actually sent).
+ */
+cronRouter.get('/investigate', async (req, res) => {
+  if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
+  const { investigateAddress } = await import('../services/admin');
+  res.json({ ok: true, ...(await investigateAddress(String(req.query.address ?? ''))) });
+});
+
+/**
+ * GET /api/cron/exposure?secret=CRON_SECRET — every account credited far more
+ * than it deposited, and what each has already withdrawn. Use it to size an
+ * incident and see whether it is one account or many.
+ */
+cronRouter.get('/exposure', async (req, res) => {
+  if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
+  const { exposureReport } = await import('../services/admin');
+  res.json({ ok: true, ...(await exposureReport()) });
+});
+
+/**
  * GET /api/cron/task-verify?secret=CRON_SECRET — for each active channel-join
  * task, report whether the bot can verify membership (i.e. it is an admin of
  * that chat). Use it after adding @IceBoxbot_bot as admin to confirm each
