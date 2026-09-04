@@ -350,6 +350,102 @@ export function createBot(): Bot | null {
     await ctx.reply(out.join('\n').slice(0, 4096), { parse_mode: 'HTML' });
   });
 
+  /**
+   * /deposits [n] — every credited deposit: what actually arrived on chain
+   * against what was credited to the account, with a ban shortcut per row.
+   * A healthy row sits at ~1x; the 1e6 over-credit shows as a huge ratio.
+   */
+  bot.command('deposits', async (ctx) => {
+    if (!(await isOperator(ctx))) {
+      await ctx.reply('Operators only.');
+      return;
+    }
+    const { depositReport } = await import('../services/admin');
+    const n = Math.min(30, Math.max(1, Number(ctx.match?.trim()) || 15));
+    const rows = await depositReport(n);
+    if (rows.length === 0) {
+      await ctx.reply('No credited deposits yet.');
+      return;
+    }
+
+    const out = ['<b>Deposits — on-chain vs credited</b>', ''];
+    for (const d of rows) {
+      out.push(
+        (d.suspicious ? '⚠️ ' : '') +
+          'sent <b>' + d.sent.toFixed(2) + '</b> → credited <b>' + d.credited.toFixed(2) + '</b>' +
+          (d.ratio !== null && d.ratio > 1 ? ' (' + d.ratio + 'x)' : '') +
+          (d.frozen ? ' · <b>FROZEN</b>' : ''),
+        (d.username ? '@' + d.username : d.firstName || 'no name') +
+          ' · id ' + d.userId + ' · tg ' + d.telegramId,
+        'bal ' + d.balanceNow.toFixed(2) + ' · ' +
+          new Date(d.createdAt).toISOString().slice(0, 16).replace('T', ' ') +
+          ' · /ban ' + d.userId,
+        '',
+      );
+    }
+    await ctx.reply(out.join('\n').slice(0, 4096), { parse_mode: 'HTML' });
+  });
+
+  /**
+   * /affected — every account touched by the 1e6 deposit over-credit: the
+   * inflated deposits AND the referrers paid a commission out of them.
+   */
+  bot.command('affected', async (ctx) => {
+    if (!(await isOperator(ctx))) {
+      await ctx.reply('Operators only.');
+      return;
+    }
+    const { affectedReport } = await import('../services/admin');
+    const r = await affectedReport(25);
+    if (r.deposits === 0) {
+      await ctx.reply('✅ No over-credited deposits found.');
+      return;
+    }
+
+    const out = [
+      '<b>Accounts affected by the deposit over-credit</b>',
+      '',
+      'Bad deposits: <b>' + r.deposits + '</b>',
+      'Over-credited: <b>' + r.overCredited.toFixed(2) + '</b>',
+      'Commission paid out of it: <b>' + r.commissionPaid.toFixed(2) + '</b>',
+      '',
+      '<b>— Deposits —</b>',
+      '',
+    ];
+    for (const d of r.rows) {
+      const who = d.depositor;
+      out.push(
+        'sent <b>' + d.sent.toFixed(2) + '</b> → credited <b>' + d.credited.toFixed(2) + '</b>' +
+          (who?.frozen ? ' · <b>FROZEN</b>' : ''),
+        who
+          ? (who.username ? '@' + who.username : who.firstName || 'no name') +
+            ' · id ' + who.userId + ' · bal ' + who.balanceNow.toFixed(2) + ' · /ban ' + who.userId
+          : 'unknown account',
+      );
+      for (const c of d.commissions) {
+        out.push(
+          '   ↳ L' + c.level + ' commission <b>' + c.amount.toFixed(2) + '</b> → ' +
+            (c.username ? '@' + c.username : c.firstName || 'id ' + c.userId) +
+            ' · /ban ' + c.userId,
+        );
+      }
+      out.push('');
+    }
+    if (r.referrers.length) {
+      out.push('<b>— Referrers who earned from it —</b>', '');
+      for (const f of r.referrers) {
+        out.push(
+          '<b>' + f.commissionEarned.toFixed(2) + '</b> from ' + f.fromDeposits + ' deposit(s)' +
+            (f.frozen ? ' · <b>FROZEN</b>' : ''),
+          (f.username ? '@' + f.username : f.firstName || 'no name') +
+            ' · id ' + f.userId + ' · bal ' + f.balanceNow.toFixed(2) + ' · /ban ' + f.userId,
+          '',
+        );
+      }
+    }
+    await ctx.reply(out.join('\n').slice(0, 4096), { parse_mode: 'HTML' });
+  });
+
   /** /ban <userId> [zero] — ban from a list, without needing a button. */
   bot.command('ban', async (ctx) => {
     if (!(await isOperator(ctx))) {

@@ -474,3 +474,147 @@ export async function exposureReport() {
     users: rows,
   };
 }
+
+/**
+ * Everything the 1e6 deposit over-credit touched: the deposits themselves and,
+ * crucially, the referrers who were paid a commission out of the inflated
+ * amount. A referrer never deposited anything, so their share is pure phantom
+ * balance — and it lands in the USDT-withdrawable bucket.
+ *
+ * Commissions are tied back to a deposit through the `dextopusId` recorded in
+ * each `referral_deposit` ledger entry.
+ */
+export async function affectedReport(limit = 50) {
+  const deposits = await prisma.deposit.findMany({
+    where: { credited: true },
+    orderBy: { createdAt: 'desc' },
+  });
+  const bad = deposits.filter((d) => {
+    const sent = d.originAmount ?? d.settlementAmount ?? 0;
+    return sent > 0 && d.creditedAmount / sent >= 1000;
+  });
+  if (bad.length === 0) {
+    return { deposits: 0, overCredited: 0, commissionPaid: 0, rows: [], referrers: [] };
+  }
+
+  // Index referral commissions by the deposit that generated them.
+  const refEntries = await prisma.ledgerEntry.findMany({ where: { reason: 'referral_deposit' } });
+  const byDex = new Map<string, Array<{ userId: number; amount: number; level: number }>>();
+  for (const e of refEntries) {
+    try {
+      const m = JSON.parse(e.meta || '{}') as { dextopusId?: string; level?: number };
+      if (!m.dextopusId) continue;
+      const arr = byDex.get(String(m.dextopusId)) ?? [];
+      arr.push({ userId: e.userId, amount: e.amount, level: Number(m.level ?? 0) });
+      byDex.set(String(m.dextopusId), arr);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const userIds = new Set<number>(bad.map((d) => d.userId));
+  for (const d of bad) for (const r of byDex.get(String(d.dextopusId)) ?? []) userIds.add(r.userId);
+  const users = await prisma.user.findMany({ where: { id: { in: [...userIds] } } });
+  const uById = new Map(users.map((u) => [u.id, u]));
+
+  // Per-referrer totals, so the biggest phantom earners surface first.
+  const refTotals = new Map<number, { amount: number; fromDeposits: number }>();
+
+  const rows = bad.slice(0, limit).map((d) => {
+    const sent = money(d.originAmount ?? d.settlementAmount ?? 0);
+    const u = uById.get(d.userId);
+    const commissions = (byDex.get(String(d.dextopusId)) ?? []).map((r) => {
+      const cur = refTotals.get(r.userId) ?? { amount: 0, fromDeposits: 0 };
+      refTotals.set(r.userId, {
+        amount: money(cur.amount + r.amount),
+        fromDeposits: cur.fromDeposits + 1,
+      });
+      const ru = uById.get(r.userId);
+      return {
+        level: r.level,
+        amount: money(r.amount),
+        userId: r.userId,
+        username: ru?.username ?? null,
+        firstName: ru?.firstName ?? null,
+        telegramId: ru?.telegramId ?? null,
+      };
+    });
+    return {
+      depositId: d.id,
+      createdAt: d.createdAt,
+      chainId: d.originChainId,
+      asset: d.originAsset,
+      sent,
+      credited: money(d.creditedAmount),
+      overCredited: money(d.creditedAmount - sent),
+      txHash: d.originTxHash,
+      depositor: u
+        ? {
+            userId: u.id,
+            username: u.username,
+            firstName: u.firstName,
+            telegramId: u.telegramId,
+            balanceNow: money(u.balance),
+            frozen: Boolean(u.frozenAt),
+          }
+        : null,
+      commissions,
+    };
+  });
+
+  const referrers = [...refTotals.entries()]
+    .map(([userId, t]) => {
+      const u = uById.get(userId);
+      return {
+        userId,
+        username: u?.username ?? null,
+        firstName: u?.firstName ?? null,
+        telegramId: u?.telegramId ?? null,
+        balanceNow: u ? money(u.balance) : 0,
+        frozen: Boolean(u?.frozenAt),
+        commissionEarned: t.amount,
+        fromDeposits: t.fromDeposits,
+      };
+    })
+    .sort((a, b) => b.commissionEarned - a.commissionEarned);
+
+  return {
+    deposits: bad.length,
+    overCredited: money(bad.reduce((s, d) => s + (d.creditedAmount - (d.originAmount ?? d.settlementAmount ?? 0)), 0)),
+    commissionPaid: money(referrers.reduce((s, r) => s + r.commissionEarned, 0)),
+    rows,
+    referrers,
+  };
+}
+
+/** Recent deposits with what actually arrived on chain vs what was credited. */
+export async function depositReport(limit = 20) {
+  const deposits = await prisma.deposit.findMany({
+    where: { credited: true },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    include: { user: true },
+  });
+  return deposits.map((d) => {
+    const sent = money(d.originAmount ?? d.settlementAmount ?? 0);
+    const credited = money(d.creditedAmount);
+    const ratio = sent > 0 ? credited / sent : null;
+    return {
+      depositId: d.id,
+      createdAt: d.createdAt,
+      asset: d.originAsset,
+      chainId: d.originChainId,
+      sent,
+      credited,
+      ratio: ratio === null ? null : Math.round(ratio),
+      suspicious: ratio !== null && ratio >= 1000,
+      txHash: d.originTxHash,
+      userId: d.userId,
+      username: d.user.username,
+      firstName: d.user.firstName,
+      telegramId: d.user.telegramId,
+      balanceNow: money(d.user.balance),
+      frozen: Boolean(d.user.frozenAt),
+    };
+  });
+}
