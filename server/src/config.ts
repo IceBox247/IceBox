@@ -150,6 +150,9 @@ export const config = {
 
   // Anti-bot / anti-abuse withdrawal controls.
   withdraw: {
+    // Global kill-switch: set WITHDRAW_ENABLED=false to instantly pause ALL
+    // withdrawals (e.g. while investigating an exploit). Default on.
+    enabled: process.env.WITHDRAW_ENABLED !== 'false',
     // One free withdrawal per this rolling window; each additional one inside the
     // window costs `extraFee` (charged on top of the amount, kept by the treasury).
     // 24h = one free withdrawal a day, which is the intended policy.
