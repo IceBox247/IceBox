@@ -349,6 +349,12 @@ export const config = {
     minDeposit: num('DEXTOPUS_MIN_DEPOSIT', 0.2),
     // 1 USDT = this many ICE USD. Keep at 1 for a 1:1 peg.
     rate: num('DEXTOPUS_RATE', 1),
+    // Hard ceiling on a single auto-credited deposit (USD). A larger computed
+    // credit is almost always a decimals bug, so it is NOT credited — the
+    // deposit is left uncredited for manual review instead of minting phantom
+    // money. Raise it (or set 0 to disable) only if you take genuine deposits
+    // above this size.
+    maxAutoCredit: num('DEPOSIT_MAX_AUTO_CREDIT', 10000),
 
     // Refund addresses per ORIGIN chain family — Dextopus requires a `refundTo`
     // when minting a deposit address (funds return here if a swap fails). EVM

@@ -144,19 +144,45 @@ export async function depositCatalog(): Promise<{
  * already-human and passed through unchanged.
  */
 async function creditAmountFor(n: NormalizedDeposit): Promise<number> {
-  const useSettlement = n.settlementAmount != null;
-  const raw = Number(useSettlement ? n.settlementAmount : n.originAmount) || 0;
+  // Credit from what the user actually SENT on chain (origin), using that
+  // token's real decimals. The old code preferred the settlement amount and
+  // used the settlement asset's decimals (18 for BSC USDT), but Dextopus
+  // reports that amount in the ORIGIN token's decimals (6 for Solana/Tron
+  // USDC/USDT). A 0.20 USDC deposit (200000 in 6-dp base units) was therefore
+  // scaled as if 18-dp — the old "already human" guard then passed the raw
+  // 200000 straight through, crediting 200,000. Origin amount + origin decimals
+  // is unambiguous for stablecoin deposits and cannot produce that.
+  let raw = Number(n.originAmount) || 0;
+  let decimals = await resolveDecimals(
+    n.originChainId ?? config.dextopus.originChainId,
+    n.originAsset ?? config.dextopus.originAsset,
+  );
+  // Only fall back to the settlement figure when there is no origin amount.
+  if (raw <= 0 && n.settlementAmount != null) {
+    raw = Number(n.settlementAmount) || 0;
+    decimals = await resolveDecimals(
+      config.dextopus.settlementChainId,
+      config.dextopus.settlementAsset,
+    );
+  }
   if (raw <= 0) return 0;
-  const decimals = useSettlement
-    ? await resolveDecimals(config.dextopus.settlementChainId, config.dextopus.settlementAsset)
-    : await resolveDecimals(
-        n.originChainId ?? config.dextopus.originChainId,
-        n.originAsset ?? config.dextopus.originAsset,
-      );
-  // Guard against a value that is already human (e.g. "5"): only scale down a
-  // genuine base-unit integer, which for any real deposit is a large number.
-  const scaled = raw >= 10 ** (decimals - 6) ? raw / 10 ** decimals : raw;
-  return money(scaled * config.dextopus.rate);
+
+  // Always divide by the token's decimals. Never pass a base-unit value through
+  // unscaled — that was the over-credit path. If decimals are wrong this now
+  // UNDER-credits (safe) instead of minting money.
+  const credit = money((raw / 10 ** decimals) * config.dextopus.rate);
+
+  // Final safety net: an absurdly large single credit is a bug, not a deposit.
+  // Refuse to auto-credit it; the deposit stays uncredited for manual review.
+  const cap = config.dextopus.maxAutoCredit;
+  if (cap > 0 && credit > cap) {
+    console.error(
+      `[deposit] refusing to auto-credit ${credit} (> cap ${cap}) for ` +
+        `${n.dextopusId ?? n.originTxHash ?? 'unknown'} — held for manual review`,
+    );
+    return 0;
+  }
+  return credit;
 }
 
 /**
