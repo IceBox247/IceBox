@@ -117,6 +117,35 @@ cronRouter.get('/dedupe-wallets', async (req, res) => {
 });
 
 /**
+ * GET /api/cron/purge?secret=CRON_SECRET — clear ALL phantom balance in one
+ * bulk SQL pass, straight from a browser. Independent of the Telegram bot, so
+ * it works even while a bot deploy is lagging. `?dry=true` reports what would be
+ * removed without changing anything.
+ */
+cronRouter.get('/purge', async (req, res) => {
+  if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
+  try {
+    if (String(req.query.dry ?? '') === 'true') {
+      const { phantomScan } = await import('../services/admin');
+      const scan = await phantomScan();
+      return res.json({
+        ok: true,
+        dryRun: true,
+        wouldClear: scan.accounts,
+        neverDeposited: scan.neverDeposited,
+        totalPhantom: scan.totalPhantom,
+        unknownSkipped: scan.unknown.length,
+      });
+    }
+    const { phantomPurge } = await import('../services/admin');
+    res.json({ ok: true, ...(await phantomPurge()) });
+  } catch (e) {
+    console.error('[cron] purge failed', e);
+    res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+/**
  * GET /api/cron/adjust-balance — operator balance correction (self-serve).
  * Params: secret, (username=@name OR userId=123), amount (e.g. -8 to deduct,
  * 8 to add), optional bucket=deposited|earned (default deposited), reason.
