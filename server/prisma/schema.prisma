@@ -48,6 +48,10 @@ model User {
   walletVerifiedAt DateTime?
   walletNonce     String?
 
+  // Locked payout address (anti-abuse): once an account makes its first
+  // withdrawal, all later payouts must go to this same address.
+  withdrawAddress String?
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

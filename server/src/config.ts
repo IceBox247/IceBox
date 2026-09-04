@@ -148,6 +148,39 @@ export const config = {
   minWithdrawalUsdt: num('MIN_WITHDRAWAL_USDT', 0.5), // USDT rail minimum
   signupBonus: num('SIGNUP_BONUS', 0.3),
 
+  // Anti-bot / anti-abuse withdrawal controls.
+  withdraw: {
+    // One free withdrawal per this rolling window; each additional one inside the
+    // window costs `extraFee` (charged on top of the amount, kept by the treasury).
+    freeWindowHours: num('WITHDRAW_FREE_WINDOW_HOURS', 2),
+    extraFee: num('WITHDRAW_EXTRA_FEE', 0.5),
+    // Lock each account to a single payout address (first one used sticks).
+    lockAddress: process.env.WITHDRAW_LOCK_ADDRESS !== 'false',
+    // Refuse a payout address already bound to a different account (anti multi-acct).
+    uniqueAddress: process.env.WITHDRAW_UNIQUE_ADDRESS !== 'false',
+    // Minimum account age (hours) before the first withdrawal — 0 disables.
+    minAccountAgeHours: num('WITHDRAW_MIN_ACCOUNT_AGE_HOURS', 0),
+    // Require a signature-verified connected wallet before withdrawing (strong
+    // anti-bot; off by default so it doesn't block existing earners).
+    requireWallet: process.env.WITHDRAW_REQUIRE_WALLET === 'true',
+  },
+
+  // Telegram-channel gates: users must be a member to mine / withdraw. Gates turn
+  // on automatically once the channel(s) are configured. The bot must be an admin
+  // of each channel to verify membership. GATE_STRICT=true blocks when the bot
+  // can't verify (default: allow through, so a misconfig doesn't brick the app).
+  gate: {
+    enabled: process.env.GATE_ENABLED !== 'false',
+    strict: process.env.GATE_STRICT === 'true',
+    // Single channel required to collect mined ICE, e.g. "@iceboxAi".
+    miningChannel: str('GATE_MINING_CHANNEL', ''),
+    // Channels (comma-separated, e.g. the 3) required before withdrawing.
+    withdrawChannels: (process.env.GATE_WITHDRAW_CHANNELS ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  },
+
   // Two-level referral commission paid on every DEPOSIT, as a % of the deposit.
   // These land in the referrers' deposited (USDT-withdrawable) bucket, so they
   // can be withdrawn instantly as USDT. Level 1 = direct referrer, level 2 =
