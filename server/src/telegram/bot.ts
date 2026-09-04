@@ -149,33 +149,28 @@ export function createBot(): Bot | null {
   }
 
   /**
-   * Send a long report as however many messages it takes. Telegram caps one
-   * message at 4096 characters, so a single reply silently truncated the tail —
-   * which hid exactly the accounts an operator needs to see.
+   * Send a report as ONE message, truncated to Telegram's limit.
+   *
+   * The previous version sent up to 25 messages with 350ms sleeps between them —
+   * ~9s of blocking per command. On the serverless function's ~15s budget the
+   * webhook handler timed out before returning 200, so Telegram treated delivery
+   * as failed and RE-DELIVERED the same command, re-running it forever. That
+   * loop sent thousands of messages over hours. A single fast reply returns
+   * immediately, so Telegram gets its 200 and never retries.
    */
   async function sendPaged(ctx: Context, lines: string[], header: string) {
-    const LIMIT = 3500; // headroom under Telegram's 4096
-    const MAX_PAGES = 25; // stop runaway floods
-    let buf = '';
-    let page = 0;
-    const flush = async () => {
-      if (!buf.trim()) return;
-      page++;
-      await ctx.reply(buf, { parse_mode: 'HTML' });
-      buf = '';
-      // Stay well inside Telegram's per-chat rate limit.
-      await new Promise((r) => setTimeout(r, 350));
-    };
-    buf = header + '\n\n';
+    const LIMIT = 3900; // headroom under Telegram's 4096
+    let body = header + '\n\n';
+    let shown = 0;
     for (const line of lines) {
-      if (page >= MAX_PAGES) break;
-      if (buf.length + line.length + 1 > LIMIT) await flush();
-      buf += line + '\n';
+      if (body.length + line.length + 1 > LIMIT) break;
+      body += line + '\n';
+      shown++;
     }
-    await flush();
-    if (page >= MAX_PAGES) {
-      await ctx.reply('… output truncated at ' + MAX_PAGES + ' messages. Narrow the query.');
+    if (shown < lines.length) {
+      body += '\n… ' + (lines.length - shown) + ' more not shown. Use a smaller count, e.g. /usdt 20.';
     }
+    await ctx.reply(body, { parse_mode: 'HTML' });
   }
 
   /** "Ada (@ada) · id 42 · tg 12345" — whatever identity we actually have. */
