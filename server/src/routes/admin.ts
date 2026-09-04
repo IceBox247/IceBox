@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { adminStats, lookupUser, auditReferrer, isAdminTelegramId } from '../services/admin';
+import { adminStats, lookupUser, auditReferrer, investigateAddress, isAdminTelegramId } from '../services/admin';
 
 export const adminRouter = Router();
 
@@ -28,4 +28,13 @@ adminRouter.get('/referrer', async (req, res) => {
     return res.status(403).json({ error: 'forbidden', message: 'Admins only.' });
   }
   res.json(await auditReferrer(String(req.query.query ?? '')));
+});
+
+/** GET /api/admin/investigate?address=0x… — trace a payout address. Admins only. */
+adminRouter.get('/investigate', async (req, res) => {
+  const user = req.user!;
+  if (!isAdminTelegramId(user.telegramId)) {
+    return res.status(403).json({ error: 'forbidden', message: 'Admins only.' });
+  }
+  res.json(await investigateAddress(String(req.query.address ?? '')));
 });

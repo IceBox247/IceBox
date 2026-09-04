@@ -56,6 +56,15 @@ withdrawalsRouter.get('/', async (req, res) => {
  */
 withdrawalsRouter.post('/', async (req, res) => {
   const user = req.user!;
+
+  // Global kill-switch — instantly halt all withdrawals during an incident.
+  if (!config.withdraw.enabled) {
+    return res.status(503).json({
+      error: 'withdrawals_paused',
+      message: 'Withdrawals are temporarily paused for maintenance. Please try again later.',
+    });
+  }
+
   const amount = money(Number(req.body?.amount));
   const address = String(req.body?.address ?? '').trim();
   const network = String(req.body?.network ?? 'BEP20').trim() || 'BEP20';

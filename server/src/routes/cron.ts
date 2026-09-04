@@ -285,6 +285,17 @@ cronRouter.get('/referrer', async (req, res) => {
 });
 
 /**
+ * GET /api/cron/investigate?secret=CRON_SECRET&address=0x… — trace a payout
+ * address to the account(s) behind it: Telegram username/id + how the balance
+ * was built (per-reason ledger breakdown). For incident response.
+ */
+cronRouter.get('/investigate', async (req, res) => {
+  if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
+  const { investigateAddress } = await import('../services/admin');
+  res.json({ ok: true, ...(await investigateAddress(String(req.query.address ?? ''))) });
+});
+
+/**
  * GET /api/cron/task-verify?secret=CRON_SECRET — for each active channel-join
  * task, report whether the bot can verify membership (i.e. it is an admin of
  * that chat). Use it after adding @IceBoxbot_bot as admin to confirm each

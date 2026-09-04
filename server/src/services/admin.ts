@@ -306,3 +306,89 @@ export async function auditReferrer(query: string) {
     generatedAt: new Date().toISOString(),
   };
 }
+
+/**
+ * Incident investigation: trace a payout address to the account(s) behind it and
+ * show WHO they are (Telegram username/id) and HOW their balance was built — a
+ * per-reason ledger breakdown (deposit, task, referral, mining_reward, the
+ * over-credit exploit's deposit/deposit_scale_fix, withdrawals, etc.). `address`
+ * matches Withdrawal.address or the account's locked withdrawAddress.
+ */
+export async function investigateAddress(address: string) {
+  const addr = (address ?? '').trim();
+  if (!addr) return { found: false as const };
+
+  const withdrawals = await prisma.withdrawal.findMany({
+    where: { address: { equals: addr, mode: 'insensitive' } },
+    orderBy: { createdAt: 'asc' },
+  });
+  const bound = await prisma.user.findMany({
+    where: { withdrawAddress: { equals: addr, mode: 'insensitive' } },
+    select: { id: true },
+  });
+  const userIds = Array.from(new Set([...withdrawals.map((w) => w.userId), ...bound.map((u) => u.id)]));
+  if (userIds.length === 0) return { found: false as const, address: addr };
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+    include: {
+      miner: true,
+      referredBy: { select: { id: true, username: true, firstName: true, telegramId: true } },
+    },
+  });
+
+  const paid = (w: { status: string; amount: number }) => w.status !== 'rejected';
+  const totalToAddress = money(withdrawals.filter(paid).reduce((s, w) => s + w.amount, 0));
+
+  const accounts = await Promise.all(
+    users.map(async (u) => {
+      const [ledger, deposits] = await Promise.all([
+        prisma.ledgerEntry.groupBy({ by: ['reason'], where: { userId: u.id }, _sum: { amount: true }, _count: true }),
+        prisma.deposit.aggregate({ where: { userId: u.id, credited: true }, _sum: { creditedAmount: true }, _count: true }),
+      ]);
+      const byReason: Record<string, { sum: number; count: number }> = {};
+      for (const g of ledger) byReason[g.reason] = { sum: money(g._sum.amount ?? 0), count: g._count };
+      const mine = withdrawals.filter((w) => w.userId === u.id);
+      return {
+        id: u.id,
+        name: u.firstName || u.username || `#${u.id}`,
+        username: u.username, // <- the Telegram @username
+        telegramId: u.telegramId,
+        joined: u.createdAt.toISOString(),
+        balance: money(u.balance),
+        deposited: money(Math.max(0, u.balance - u.earnedBalance)),
+        earnedBalance: money(u.earnedBalance),
+        totalEarned: money(u.totalEarned),
+        creditedDeposits: money(deposits._sum.creditedAmount ?? 0),
+        depositCount: deposits._count,
+        withdrawnToThisAddress: money(mine.filter(paid).reduce((s, w) => s + w.amount, 0)),
+        withdrawalCount: mine.length,
+        walletAddress: u.walletAddress,
+        withdrawAddress: u.withdrawAddress,
+        referredBy: u.referredBy
+          ? { id: u.referredBy.id, username: u.referredBy.username, telegramId: u.referredBy.telegramId }
+          : null,
+        // HOW the money was obtained, grouped by ledger reason.
+        fundingByReason: byReason,
+      };
+    }),
+  );
+
+  return {
+    found: true as const,
+    address: addr,
+    totalWithdrawnToAddress: totalToAddress,
+    withdrawalCount: withdrawals.length,
+    accounts,
+    withdrawals: withdrawals.map((w) => ({
+      id: w.id,
+      userId: w.userId,
+      amount: money(w.amount),
+      token: w.token,
+      status: w.status,
+      txHash: w.txHash,
+      at: w.createdAt.toISOString(),
+    })),
+    generatedAt: new Date().toISOString(),
+  };
+}
