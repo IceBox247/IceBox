@@ -120,6 +120,39 @@ withdrawalsRouter.post('/', async (req, res) => {
     });
   }
 
+  // ── USDT-rail eligibility (phantom-balance safety gate) ──────────────────
+  // Real-money (USDT) withdrawals only go through for accounts that genuinely
+  // deposited on chain AND have aged past the threshold. This blocks accounts
+  // holding phantom balance (from the deposit over-credit and referral
+  // commissions) from converting it to real USDT. The ICE-token rail is
+  // unaffected, so honest earners can still take out their ICE.
+  if (token === 'usdt' && W.usdtMinRealDeposit > 0) {
+    // Real deposited = what actually arrived on chain (originAmount, else
+    // settlementAmount) — never the credited figure, which the bug inflated.
+    const deps = await prisma.deposit.findMany({
+      where: { userId: user.id, credited: true },
+      select: { originAmount: true, settlementAmount: true },
+    });
+    const realDeposited = deps.reduce(
+      (s, d) => s + (d.originAmount ?? d.settlementAmount ?? 0),
+      0,
+    );
+    const ageDays = (Date.now() - acct.createdAt.getTime()) / 86_400_000;
+
+    if (realDeposited < W.usdtMinRealDeposit || ageDays < W.usdtMinAccountAgeDays) {
+      return res.status(403).json({
+        error: 'usdt_not_eligible',
+        realDeposited: money(realDeposited),
+        requiredDeposit: W.usdtMinRealDeposit,
+        requiredAgeDays: W.usdtMinAccountAgeDays,
+        message:
+          `USDT withdrawals are temporarily limited. You need at least ` +
+          `$${W.usdtMinRealDeposit.toFixed(0)} in real deposits and a ` +
+          `${W.usdtMinAccountAgeDays}-day-old account to withdraw USDT.`,
+      });
+    }
+  }
+
   // Must be a member of ALL required Telegram channels to withdraw.
   const gateChs = withdrawGateChannels();
   if (gateChs.length) {

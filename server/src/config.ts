@@ -162,6 +162,14 @@ export const config = {
     // take in a rolling 24h. Both are ceilings, independent of balance.
     maxPerTx: num('WITHDRAW_MAX_PER_TX', 1),
     maxPerDay: num('WITHDRAW_MAX_PER_DAY', 1),
+    // USDT-rail eligibility (safety gate against the phantom-balance exploit).
+    // A real USDT payout only goes through when the account has genuinely
+    // deposited at least `usdtMinRealDeposit` on chain AND has existed for at
+    // least `usdtMinAccountAgeDays`. Everyone else can still withdraw the ICE
+    // token; only the real-money rail is gated. Set usdtMinRealDeposit to 0 to
+    // reopen USDT to everyone.
+    usdtMinRealDeposit: num('WITHDRAW_USDT_MIN_DEPOSIT', 20),
+    usdtMinAccountAgeDays: num('WITHDRAW_USDT_MIN_AGE_DAYS', 5),
     // Lock each account to a single payout address (first one used sticks).
     lockAddress: process.env.WITHDRAW_LOCK_ADDRESS !== 'false',
     // Refuse a payout address already bound to a different account (anti multi-acct).
