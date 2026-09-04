@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard } from 'grammy';
+import { Bot, InlineKeyboard, type Context } from 'grammy';
 import { config, hasBot } from '../config';
 
 /**
@@ -123,6 +123,160 @@ export function createBot(): Bot | null {
         `Couldn't post: ${e instanceof Error ? e.message : String(e)}. Make sure I'm an admin of ${channel} with post rights.`,
       );
     }
+  });
+
+  /**
+   * Operator tools. `/withdrawals [n]` lists the most recent payouts with the
+   * account behind each one and a ban button, so an abusive account can be
+   * identified and stopped from Telegram during an incident — without needing
+   * the database or the cron endpoints.
+   *
+   * Access: an id in ADMIN_TELEGRAM_IDS, or an admin/creator of MAIN_CHANNEL.
+   */
+  async function isOperator(ctx: Context): Promise<boolean> {
+    const { isAdminTelegramId } = await import('../services/admin');
+    if (isAdminTelegramId(ctx.from?.id)) return true;
+    const channel = config.channels.main;
+    if (!channel || !ctx.from) return false;
+    try {
+      const m = await ctx.api.getChatMember(channel, ctx.from.id);
+      return m.status === 'administrator' || m.status === 'creator';
+    } catch {
+      return false;
+    }
+  }
+
+  /** "Ada (@ada) · id 42 · tg 12345" — whatever identity we actually have. */
+  function describe(u: {
+    id: number;
+    username: string | null;
+    firstName: string | null;
+    telegramId: string;
+  }): string {
+    const name = [u.firstName].filter(Boolean).join(' ') || 'no name';
+    const handle = u.username ? `@${u.username}` : 'no username';
+    return `${name} (${handle}) · id ${u.id} · tg ${u.telegramId}`;
+  }
+
+  bot.command('withdrawals', async (ctx) => {
+    if (!(await isOperator(ctx))) {
+      await ctx.reply('Operators only.');
+      return;
+    }
+    const { prisma, money } = await import('../db');
+    const n = Math.min(20, Math.max(1, Number(ctx.match?.trim()) || 10));
+
+    const rows = await prisma.withdrawal.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: n,
+      include: { user: true },
+    });
+    if (rows.length === 0) {
+      await ctx.reply('No withdrawals yet.');
+      return;
+    }
+
+    const lines: string[] = [`<b>Last ${rows.length} withdrawals</b>`, ''];
+    const seen = new Map<number, string>();
+    for (const w of rows) {
+      const u = w.user;
+      if (!seen.has(u.id)) seen.set(u.id, u.username ? `@${u.username}` : `id ${u.id}`);
+      const when = new Date(w.createdAt).toISOString().replace('T', ' ').slice(5, 16);
+      lines.push(
+        `<b>${money(w.amount).toFixed(2)} ${w.token.toUpperCase()}</b> · ${w.status}` +
+          `${u.frozenAt ? ' · <b>FROZEN</b>' : ''}\n` +
+          `${describe(u)}\n` +
+          `bal ${money(u.balance).toFixed(2)} · ${when} UTC\n` +
+          `<code>${w.address}</code>`,
+        '',
+      );
+    }
+
+    // One ban row per distinct account in the list.
+    const keyboard = new InlineKeyboard();
+    for (const [userId, label] of seen) {
+      keyboard.text(`🚫 Ban ${label}`, `ban:${userId}`).row();
+      keyboard.text(`💣 Ban + zero ${label}`, `banzero:${userId}`).row();
+    }
+
+    await ctx.reply(lines.join('\n').slice(0, 4096), {
+      parse_mode: 'HTML',
+      reply_markup: keyboard,
+    });
+  });
+
+  /** Ban (freeze withdrawals), optionally zeroing the balance too. */
+  bot.callbackQuery(/^ban(zero)?:(\d+)$/, async (ctx) => {
+    if (!(await isOperator(ctx))) {
+      await ctx.answerCallbackQuery({ text: 'Operators only.', show_alert: true });
+      return;
+    }
+    const zero = Boolean(ctx.match?.[1]);
+    const userId = Number(ctx.match?.[2]);
+    const { prisma, money } = await import('../db');
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      await ctx.answerCallbackQuery({ text: 'User not found.', show_alert: true });
+      return;
+    }
+
+    const reason = `banned from Telegram by ${ctx.from?.id ?? 'operator'}`;
+    const zeroed = zero ? money(user.balance) : 0;
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          frozenAt: new Date(),
+          frozenReason: reason,
+          ...(zero ? { balance: 0, earnedBalance: 0 } : {}),
+        },
+      });
+      if (zero && zeroed > 0) {
+        await tx.ledgerEntry.create({
+          data: {
+            userId,
+            amount: -zeroed,
+            reason: 'operator_freeze_zero',
+            meta: JSON.stringify({ admin: true, via: 'telegram' }),
+          },
+        });
+      }
+    });
+
+    await ctx.answerCallbackQuery({
+      text: zero ? `Banned. Balance ${zeroed.toFixed(2)} cleared.` : 'Banned — withdrawals blocked.',
+      show_alert: true,
+    });
+    await ctx.reply(
+      `🚫 <b>Banned</b> ${describe(user)}` +
+        (zero ? `\nBalance cleared: <b>${zeroed.toFixed(2)}</b>` : '') +
+        `\n\nWithdrawals are now blocked for this account. Undo with <code>/unban ${userId}</code>.`,
+      { parse_mode: 'HTML' },
+    );
+  });
+
+  bot.command('unban', async (ctx) => {
+    if (!(await isOperator(ctx))) {
+      await ctx.reply('Operators only.');
+      return;
+    }
+    const userId = Number(ctx.match?.trim());
+    if (!Number.isInteger(userId) || userId <= 0) {
+      await ctx.reply('Usage: /unban <userId>');
+      return;
+    }
+    const { prisma } = await import('../db');
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      await ctx.reply('User not found.');
+      return;
+    }
+    await prisma.user.update({
+      where: { id: userId },
+      data: { frozenAt: null, frozenReason: null },
+    });
+    await ctx.reply(`✅ Unbanned ${describe(user)}. Balance is unchanged.`);
   });
 
   bot.catch((err) => {

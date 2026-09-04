@@ -52,6 +52,11 @@ model User {
   // withdrawal, all later payouts must go to this same address.
   withdrawAddress String?
 
+  // Operator freeze. When set, the account cannot withdraw. Used to stop an
+  // account mid-incident without taking the whole withdrawal rail down.
+  frozenAt     DateTime?
+  frozenReason String?
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

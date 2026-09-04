@@ -95,6 +95,15 @@ withdrawalsRouter.post('/', async (req, res) => {
   const W = config.withdraw;
   const acct = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
 
+  // Operator freeze — checked first so a frozen account is stopped before any
+  // other gate, balance read or payout path runs.
+  if (acct.frozenAt) {
+    return res.status(403).json({
+      error: 'account_frozen',
+      message: 'Withdrawals are suspended on this account. Contact support.',
+    });
+  }
+
   // Must be a member of ALL required Telegram channels to withdraw.
   const gateChs = withdrawGateChannels();
   if (gateChs.length) {

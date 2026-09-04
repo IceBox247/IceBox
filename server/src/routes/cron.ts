@@ -285,6 +285,68 @@ cronRouter.get('/referrer', async (req, res) => {
 });
 
 /**
+ * GET /api/cron/freeze?secret=CRON_SECRET&(userId=123|username=@name)
+ *   [&reason=…][&unfreeze=true][&zero=true]
+ *
+ * Suspend one account's withdrawals immediately, without taking the whole
+ * withdrawal rail down for honest users. `zero=true` also moves the balance to
+ * 0 (with a ledger entry) so there is nothing left to pay out even if the
+ * freeze were lifted. `unfreeze=true` reverses the suspension.
+ */
+cronRouter.get('/freeze', async (req, res) => {
+  if (!authorized(req as never)) return res.status(401).json({ error: 'unauthorized' });
+  const { prisma, money } = await import('../db');
+  const username = String(req.query.username ?? '').replace(/^@/, '').trim();
+  const userId = Number(req.query.userId);
+  const unfreeze = String(req.query.unfreeze ?? '') === 'true';
+  const zero = String(req.query.zero ?? '') === 'true';
+  const reason = String(req.query.reason ?? 'operator_freeze').slice(0, 200);
+
+  const user = Number.isInteger(userId) && userId > 0
+    ? await prisma.user.findUnique({ where: { id: userId } })
+    : username
+      ? await prisma.user.findFirst({ where: { username: { equals: username, mode: 'insensitive' } } })
+      : null;
+  if (!user) return res.status(404).json({ error: 'user_not_found' });
+
+  const result = await prisma.$transaction(async (tx) => {
+    const u = await tx.user.update({
+      where: { id: user.id },
+      data: unfreeze
+        ? { frozenAt: null, frozenReason: null }
+        : { frozenAt: new Date(), frozenReason: reason },
+    });
+    let zeroed = 0;
+    if (!unfreeze && zero && u.balance > 0) {
+      zeroed = money(u.balance);
+      await tx.user.update({
+        where: { id: user.id },
+        data: { balance: 0, earnedBalance: 0 },
+      });
+      await tx.ledgerEntry.create({
+        data: {
+          userId: user.id,
+          amount: -zeroed,
+          reason: 'operator_freeze_zero',
+          meta: JSON.stringify({ admin: true, reason }),
+        },
+      });
+    }
+    return { u, zeroed };
+  });
+
+  res.json({
+    ok: true,
+    userId: user.id,
+    username: user.username,
+    frozen: !unfreeze,
+    reason: unfreeze ? null : reason,
+    balanceZeroed: result.zeroed,
+    balanceNow: unfreeze ? money(result.u.balance) : result.zeroed ? 0 : money(result.u.balance),
+  });
+});
+
+/**
  * GET /api/cron/investigate?secret=CRON_SECRET&address=0x… — incident tooling.
  * Given a payout address seen in the treasury's transaction history, return the
  * account(s) behind it, what they withdrew, and the deposits that funded it
